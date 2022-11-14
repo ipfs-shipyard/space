@@ -4,13 +4,13 @@
 
 This document sketches out a roadmap of proof of concept and minimum viable product milestones on the road of content addressable data in space 🚀. 
 
-### PoC - Iroh-based CAR utility
+### PoC - CAR utility
 
-Create a command line utility which can pack any file into a CAR file and unpack/reconstruct the contents of a CAR file.
+Create a command line utility based on [Iroh](https://github.com/n0-computer/iroh) components which can pack any file into a CAR file and unpack/reconstruct the contents of a CAR file.
 
 ### PoC - Generate & transmit CAR
 
-On the raspberry pi use the  CAR utility to generate a CAR file from a known payload. Transmit using an existing file transfer protocol over ethernet connection to laptop and reassemble original payload using CAR utility.
+Run the CAR utility on the raspberry pi to generate a CAR file from a known payload. Transmit using an existing file transfer protocol over ethernet connection to laptop and reassemble original payload using CAR utility.
 
 ### PoC - Bring up radio communications
 

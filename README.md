@@ -25,7 +25,16 @@ The first experimental setup addresses space-to-ground communications and consis
 
 The second experimental setup addresses space-to-space communications and consists of N satellites and one ground station. All satellites are assumed to be in contact with each other via radio. Only one satellite is assumed to be in contactd with the ground station at any given time. These requirements are in place to simulate the situation where one or more satellites are used to pass data along from the ground to a satellite which cannot contact a ground station. Each experiment run will consist of the ground station transmitting a payload of known size to the one satellite it can contact, and then that satellite will trasmit the data to a different satellite for reassembly and verification.
 
-The development/lab hardware setup for these experiments will consist of one or more [Raspberry Pi 4s](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/) as the “satellites” and a desktop/laptop as the “ground station” with a [RFM69-based packet radio interface](https://www.adafruit.com/product/3076) acting as the communications medium.
+The development/lab hardware setup for these experiments will consist of one or more Raspberry Pi 4s as the “satellites” and a desktop/laptop as the “ground station”, with a packet radio interface acting as the communications medium. The purpose of the development hardware is to provide an approximation of the target hardware platforms so that this project can develop helpful abstractions, particularly around the radio/communications interface.
+
+Here is a list of the exact hardware pieces used for local development:
+- "Satellite"
+    - [Raspberry Pi 4](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
+    - [RFM69-based packet radio for raspberry pi](https://www.adafruit.com/product/4072)
+
+- "Ground Station"
+    - Laptop or Desktop running Linux or MacOS
+    - [RFM69-based packet radio with USB interface](https://www.adafruit.com/product/3076)
 
 ### Tunable parameters under study:
 - Number of ground stations
