@@ -4,18 +4,18 @@
 
 This document sketches out a roadmap of proof of concept and minimum viable product milestones on the road of content addressable data in space 🚀. 
 
-### PoC - CAR utility
+### [PoC - CAR utility](https://github.com/ipfs-shipyard/space/issues/2)
 
 Create a command line utility based on [Iroh](https://github.com/n0-computer/iroh) components which can pack any file into a CAR file and unpack/reconstruct the contents of a CAR file.
 
-### PoC - Generate & transmit CAR
+### [PoC - Generate & transmit CAR](https://github.com/ipfs-shipyard/space/issues/3)
 
 Run the CAR utility on the raspberry pi to generate a CAR file from a known payload. Transmit using an existing file transfer protocol over ethernet connection to laptop and reassemble original payload using CAR utility.
 
-### PoC - Bring up radio communications
+### [PoC - Bring up radio communications](https://github.com/ipfs-shipyard/space/issues/4)
 
 Create radio drivers on raspberry pi and desktop ends which provide a programmable interface into the radio. Create a communications service on both radio ends which provides a generic way to send and receive data over the radio. Demonstrate sending ping back and forth over radio between raspberry pi and desktop.
 
-### MVP v0.1 - Generate & transmit CAR over radio
+### [MVP v0.1 - Generate & transmit CAR over radio](https://github.com/ipfs-shipyard/space/issues/5)
 
 Generate CAR file using utility on raspberry pi. Use known file transfer protocol to transmit over radio interface to ground station. Ground station should receive, reassemble, and verify payload. Radio connection should be persistent and reliable.
