@@ -1,0 +1,18 @@
+[package]
+name = "car-utility"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1"
+iroh-resolver = { git = "https://github.com/n0-computer/iroh", tag = "v0.1.0" }
+iroh-car = { git = "https://github.com/n0-computer/iroh", tag = "v0.1.0" }
+tokio = { version = "1", features = ["fs", "io-util"] }
+cid = "0.8"
+futures = "0.3.21"
+clap = { version = "4.0.15", features = ["derive"] }
+
+[patch.crates-io]
+libp2p = { git = "https://github.com/dignifiedquire/rust-libp2p", branch = "iroh-0-50" }
