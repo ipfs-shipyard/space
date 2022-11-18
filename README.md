@@ -59,3 +59,12 @@ These are assumptions we are establishing to 1) limit scope and 2) establish rea
 - Satellites already have an established communications path to their ground stations. 
 - Security or encryption is the responsibility of the satellite and already baked into their communications protocols, which we will operate under.
 - Memory will be a more scarce resource than storage, and likely order(s) of magnitude less than in typical desktop/cloud computing systems.
+
+
+### MVPs
+
+- [ ] [v0.1 - Generate & transmit CAR over radio](https://github.com/ipfs-shipyard/space/issues/5)
+- [ ] v0.2 - Generate DAG & transmit via stream
+- [ ] v0.3 - CID request/response via DAG-stream
+- [ ] v0.4 - CID request/response via tbd-protocol
+- [ ] v0.5 - Basic application API and CID advertisements
