@@ -68,3 +68,7 @@ These are assumptions we are establishing to 1) limit scope and 2) establish rea
 - [ ] v0.3 - CID request/response via DAG-stream
 - [ ] v0.4 - CID request/response via tbd-protocol
 - [ ] v0.5 - Basic application API and CID advertisements
+
+## Meeting Notes
+
+[11/14/2022](meetings/11-14-2022.md)
