@@ -9,13 +9,13 @@ This is documenting the pieces and steps necessary for the basic CAR transmissio
 The raspberry pi must be configured with an ethernet connection and static IP in order to communicate with the desktop computer.
 
 1. Connect raspberry pi via ethernet to an ethernet switch or hub.
-1. Open `/etc/dhcpcd.conf` on the raspberry pi, comment out any existing network configuration, and add the following lines:
-
-    interface eth0
-    static ip_address=10.11.44.123
-    static routers = 10.11.44.1
-
-1. Either restart the pi or run `/etc/init.d/dhcpcd restart` to reconfigure the network.
+2. Open `/etc/dhcpcd.conf` on the raspberry pi, comment out any existing network configuration, and add the following lines:
+```
+interface eth0
+static ip_address=10.11.44.123
+static routers = 10.11.44.1
+```
+3. Either restart the pi or run `/etc/init.d/dhcpcd restart` to reconfigure the network.
 
 ## Configure desktop
 
@@ -39,14 +39,15 @@ This service will be run on the raspberry pi, so it will need to be cross-compil
 1. Build with `cross build --target armv7-unknown-linux-gnueabihf`.
 1. Transfer the binary `kubos/target/armv7-unknown-linux-gnueabihf/debug/file-service` to `/home/pi/file-service` on the raspberry pi.
 1. On the raspberry pi, create a file name `config.toml` in `/home/pi/` with the following contents:
+```
+[file-transfer-service]
+downlink_ip = "10.11.44.124"
+downlink_port = 8080
 
-    [file-transfer-service]
-    downlink_ip = "10.11.44.124"
-    downlink_port = 8080
-
-    [file-transfer-service.addr]
-    ip = "10.11.44.123"
-    port = 8040
+[file-transfer-service.addr]
+ip = "10.11.44.123"
+port = 8040
+```
 
 ### Kubos File Client
 
@@ -91,17 +92,17 @@ On the raspberry pi:
 
 On the desktop computer:
 1. Navigate to the `poc-car-utility` directory.
-1. Run `./kubos-file-client -h 10.11.44.124 -P 8080 -r 10.11.44.123 -p 8040 download config.car`, it should output something like the following:
-
-    16:58:55 [INFO] Starting file transfer client
-    16:58:55 [INFO] Downloading remote: Cargo.car to local: Cargo.car
-    16:58:55 [INFO] -> { import, Cargo.car }
-    16:58:55 [INFO] <- { 116885, true, 59ef596b0585681ca63adf49da13edd2, 1, 33188 }
-    16:58:55 [INFO] -> { 116885, 59ef596b0585681ca63adf49da13edd2, false, [0, 1] }
-    16:58:55 [INFO] <- { 116885, 59ef596b0585681ca63adf49da13edd2, 0, chunk_data }
-    16:58:57 [INFO] -> { 116885, 59ef596b0585681ca63adf49da13edd2, true, None }
-    16:58:57 [INFO] -> { 116885, true, 59ef596b0585681ca63adf49da13edd2 }
-    16:58:57 [INFO] Operation successful
-
-1. Run `./car-utility unpack Cargo.car Cargo.toml`
-1. Verify the contents of `Cargo.toml` matches the contents of `space/car-utility/Cargo.toml`
+2. Run `./kubos-file-client -h 10.11.44.124 -P 8080 -r 10.11.44.123 -p 8040 download config.car`, it should output something like the following:
+```
+16:58:55 [INFO] Starting file transfer client
+16:58:55 [INFO] Downloading remote: Cargo.car to local: Cargo.car
+16:58:55 [INFO] -> { import, Cargo.car }
+16:58:55 [INFO] <- { 116885, true, 59ef596b0585681ca63adf49da13edd2, 1, 33188 }
+16:58:55 [INFO] -> { 116885, 59ef596b0585681ca63adf49da13edd2, false, [0, 1] }
+16:58:55 [INFO] <- { 116885, 59ef596b0585681ca63adf49da13edd2, 0, chunk_data }
+16:58:57 [INFO] -> { 116885, 59ef596b0585681ca63adf49da13edd2, true, None }
+16:58:57 [INFO] -> { 116885, true, 59ef596b0585681ca63adf49da13edd2 }
+16:58:57 [INFO] Operation successful
+```
+3. Run `./car-utility unpack Cargo.car Cargo.toml`
+4. Verify the contents of `Cargo.toml` matches the contents of `space/car-utility/Cargo.toml`
