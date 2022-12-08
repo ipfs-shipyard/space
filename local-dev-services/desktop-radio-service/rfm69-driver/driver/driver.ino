@@ -51,7 +51,7 @@ void setup()
 
 
 void loop() {  
-  delay(50);  // Wait 50ms between read cycles
+  delay(10);  // Wait 10ms between cycles
 
   uint8_t buf[RH_RF69_MAX_MESSAGE_LEN];
   uint8_t len = sizeof(buf);
@@ -65,7 +65,7 @@ void loop() {
     Blink(LED, 30, 2);
   }
 
-  if (rf69.waitAvailableTimeout(500))  { 
+  if (rf69.waitAvailableTimeout(10))  { 
     // Should be a reply message for us now 
     if (rf69.recv(buf, &len)) {
       buf[len] = 0;
