@@ -20,18 +20,40 @@ Create radio drivers on raspberry pi and desktop ends which provide a programmab
 
 Generate CAR file using utility on raspberry pi. Use known file transfer protocol to transmit over radio interface to ground station. Ground station should receive, reassemble, and verify payload. Radio connection should be persistent and reliable.
 
-### MVP v0.2 Generate DAG & transmit via stream
+### PoC - Establish one way block-ship stream
 
-Generate an in-memory DAG representation of a file on the raspberry pi. Transmit DAG as a stream over radio interface to the ground station. Ground station runs a server which receives the DAG stream, reassembles, and verifies the payload. The radio connection will be persistent and reliable, and the DAG stream will be tuned to work within the radio connection.
+Create a rough implementation of a transmitter and receiver of a stream of DAG blocks. This will provide the two ends necessary to develop and iterate on a block-ship protocol in the future. This implementation will be based on iroh, one way, no retransmissions or feedback, but it should have a tunable packet size. The file under transmission will be streamed into DAG blocks once per transmission and the blocks will not be persisted.
 
-### MVP v0.3 CID request/response via DAG-stream
+### MVP v0.2 Generate DAG, transmit & receive over Radio
 
-The raspberry pi will run a service which generates an in-memory DAG representation of a file, and can respond to a CID request for that DAG. The ground station sends a CID request over the radio to the raspberry pi, and the raspberry pi responds with the corresponding DAG stream. The ground station receives the DAG stream, reassembles, and verifies the payload.
+The block-ship pieces from previous proof-of-concept will be deployed on the raspberry pi and computer and used to demonstrate sending a one-way stream of DAG blocks over the radio link. The transmitter will be tuned as appropriate to work under the dev environment's transmission limitations and slowed down to ensure successful transmission in one go.
 
-### MVP v0.4 CID request/response via tbd-protocol
+### PoC - Investigate DAG encoding flexibility
+
+The previous proof-of-concept and mvp should raise questions about IPFS performance and areas saturating the link budget (such as CID length). This poc is a spike beginning investigations into those questions and spinning out future work tasks around optimizing IPFS pieces for small link budgets.
+
+### PoC - Define and implement block-ship re-transmissions
+
+The initial implementation of the block-ship protocol is a very simple one-way stream of DAG blocks. Define a mechanism for detecting missing blocks, requesting transmission of specific blocks, and responding to those requests. Implement in block-ship transmitter and receiver.
+
+### MVP v0.3 - Demonstrate block-ship retransmit over radio
+
+Establish a block-ship session over the dev radio link at a speed which ensures minor packet loss and tune the re-transmission mechanism to overcome the packet loss.
+
+### PoC - Define and implement block-ship storage mechanism
+
+### PoC - Define and implement block-ship CID advertisements
+
+### PoC - Define and implement block-ship CID request
+
+### MVP v0.3 - Demonstrate block-ship request by CID
+
+The raspberry pi will run a service which generates an in-memory DAG representation of a file, and can respond to a CID request for that file. The ground station sends a CID request over the radio to the raspberry pi, and the raspberry pi responds with the corresponding block-ship stream. The ground station receives the block-ship stream, reassembles, and verifies the payload. Radio transmission should be tuned for minor packet loss and protocol should reasonably overcome it.
+
+### MVP v0.3 CID request/response via tbd-protocol
 
 A protocol (like bitswap) is defined and implemented which allows for the request, response, and negotiation of the transfer of a DAG by CID. This protocol is implemented in the services created by MVP v0.3, and used to demonstrate the request of a CID by the ground, and the sucessful transmission by the raspberry pi.
 
-### MVP v0.5 Basic application API and CID advertisements
+### MVP v0.4 Basic application API and CID advertisements
 
 An application API is defined and implemented for the raspberry pi which allows on-board applications to request that a file is stored in local IPFS. This includes the ability to mantain a list of CIDs stored on-board and to advertise that list to the ground. The ground station uses this advertised list to request a CID it does not currently have, and the raspberry pi transmits.
