@@ -1,5 +1,4 @@
 use anyhow::Result;
-use cid::Cid;
 use futures::TryStreamExt;
 use iroh_resolver::unixfs_builder::{File, FileBuilder};
 use std::net::SocketAddr;
@@ -10,13 +9,16 @@ use tokio::net::UdpSocket;
 // use rand::thread_rng;
 
 async fn chunk(path: &PathBuf) -> Result<Vec<Vec<u8>>> {
+    // TODO: This clearly chunks up the file and
+    // produces CIDs for each chunk, but this doesn't actually
+    // create a DAG representing that file. I think I'm missing
+    // a root block with the links to the sub blocks....which
+    // might be the last non-raw block that I'm throwing out...or maybe not??
     let file: File = FileBuilder::new()
         .path(path)
         .fixed_chunker(24)
         .build()
         .await?;
-
-    let _root: Option<Cid> = None;
     let parts: Vec<_> = file.encode().await?.try_collect().await?;
 
     let mut payloads = vec![];
@@ -28,8 +30,13 @@ async fn chunk(path: &PathBuf) -> Result<Vec<Vec<u8>>> {
         payloads.push(payload);
     }
 
+    // TODO: This randomly shuffles the order of parts in the payload vec.
+    // Once we have verification and reassembly working correctly on the receiver side,
+    // we should be able to shuffle the payload and still get the correct file on the other side.
     // payloads.shuffle(&mut thread_rng());
 
+    // TODO: The last part is always too big and contains what looks like a bunch of
+    // garbage when I write it to the file...the current fix doesn't seem right haha
     payloads.pop();
 
     Ok(payloads)

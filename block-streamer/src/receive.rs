@@ -43,6 +43,8 @@ pub async fn receive(path: &PathBuf, listen_addr: &String) -> Result<()> {
     loop {
         if let Ok(len) = socket.try_recv(&mut buf) {
             if len > 0 {
+                // In try_parse we verify we received a valid CID...that is probably
+                // good enough verification for here
                 if let Ok(blob) = DataBlob::try_parse(&buf[..len]) {
                     println!("Received CID {} with {} bytes", &blob.cid, len);
                     data.push(blob);
@@ -57,6 +59,10 @@ pub async fn receive(path: &PathBuf, listen_addr: &String) -> Result<()> {
 
     println!("Received {} packets, writing file", data.len());
 
+    // TODO: This is pretty dumb and provides no verification that these blocks belong together
+    // or are in the correct order. First we probably need to transmit something closer to an
+    // actual DAG structure with links, and then we can use that structure for verification
+    // and reassembly here.
     let mut output_file = File::create(path).await?;
     for packet in data {
         output_file.write_all(&packet.data).await?;
