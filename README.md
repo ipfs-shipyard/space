@@ -60,13 +60,51 @@ These are assumptions we are establishing to 1) limit scope and 2) establish rea
 - Security or encryption is the responsibility of the satellite and already baked into their communications protocols, which we will operate under.
 - Memory will be a more scarce resource than storage, and likely order(s) of magnitude less than in typical desktop/cloud computing systems.
 
+## Architecture Overview
+
+```mermaid
+flowchart TD
+    subgraph Spacecraft
+        A[Application] -- ApplicationAPI --> B[IPFS]
+        B <-- CommsAPI --> C[Comms]
+    end
+
+    subgraph Radio
+        Z[Data Transfer Protocol]
+    end
+
+    subgraph Ground
+        F[Service] -- ApplicationAPI --> E[IPFS]
+        E <-- CommsAPI --> G[Comms]
+    end
+
+    C <--> Z
+    G <--> Z
+```
+
+This is an overview of the different pieces of software which will be built and which are assumed to exist in the target environments:
+
+* Interfaces
+    * Application API - An API provided by the IPFS processes to allow it to be commanded by local processes either onboard spacecraft or in a ground station.
+    * Communications API - An API provided by the IPFS process for integration with communications links either onboard spacecraft or in a ground station.
+    * Data Transfer Protocol - A protocol used by IPFS processes on spacecraft and ground to handle the transfer of files in DAG blocks form. This will logically do what BitSwap does, but BitSwap will not be used.
+
+* Spacecraft
+    * IPFS - A modified IPFS instance tailored for the spacecraft environment with the functionality required to facilitate content-addressable data exchanges.
+    * Application - Each spacecraft is expected to have onboard applications or services which will interact with the IPFS process via the `Application API` to perform functions such as _"store a file in IPFS"_ or _"transmit a CID to ground"_.
+    * Comms - Each spacecraft is expected to have a communications link with an existing interface, which IPFS will communicate over using the `Communications API`.
+
+* Ground
+    * IPFS - A modified IPFS instance tailored for the ground station environment, which is able to communicate with the space-bound IPFS instance, and possibly also bridge with other public/private IPFS networks.
+    * Service - Ground stations are expected to have services or applications which will command the IPFS process via the `Application API` to perform functions such as _"store and upload a file"_ or _"request a CID from space"_.
+    * Comms - Each ground station is expected to have a communication link with an existing interface, which IPFS will communicate over using the `Communications API`.
 
 ### MVPs
 
 - [ ] [v0.1 - Generate & transmit CAR over radio](https://github.com/ipfs-shipyard/space/issues/5)
-- [ ] v0.2 - Generate DAG & transmit via stream
-- [ ] v0.3 - CID request/response via DAG-stream
-- [ ] v0.4 - CID request/response via tbd-protocol
+- [ ] v0.2 - Generate DAG, transmit & receive over Radio
+- [ ] v0.3 - Demonstrate block-ship retransmit over radio
+- [ ] v0.4 - Demonstrate block-ship request by CID
 - [ ] v0.5 - Basic application API and CID advertisements
 
 ## Meeting Notes

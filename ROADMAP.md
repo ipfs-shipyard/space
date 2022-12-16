@@ -28,7 +28,7 @@ Create a rough implementation of a transmitter and receiver of a stream of DAG b
 
 Implement a baseline set of metrics, perhaps [this list](https://github.com/n0-computer/test-plans/tree/main/movethebytes/data-transfer#metrics) suggested by move the bytes, and build into logging of block-ship transmitter and receiver.
 
-### MVP v0.2 Generate DAG, transmit & receive over Radio
+### MVP v0.2 - Generate DAG, transmit & receive over Radio
 
 The block-ship pieces from previous proof-of-concept will be deployed on the raspberry pi and computer and used to demonstrate sending a one-way stream of DAG blocks over the radio link. The transmitter will be tuned as appropriate to work under the dev environment's transmission limitations and slowed down to ensure successful transmission in one go. Metrics should be recorded and parsed out of logs.
 
@@ -64,7 +64,7 @@ Define and implement a mechanism for block-ship to advertise which CIDs are avai
 
 Define an interface and API by which other spacecraft applications/services can interact with the on-board IPFS instance to perform actions such as storing/chunking a file and requesting transmission of a file.
 
-### MVP v0.5 Basic application API and CID advertisements
+### MVP v0.5 - Basic application API and CID advertisements
 
 An application API is defined and implemented for the raspberry pi which allows on-board applications to request that a file is stored in local IPFS. This includes the ability to mantain a list of CIDs stored on-board and to advertise that list to the ground. The ground station uses this advertised list to request a CID it does not currently have, and the raspberry pi transmits.
 
