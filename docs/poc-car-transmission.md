@@ -92,7 +92,7 @@ On the raspberry pi:
 
 On the desktop computer:
 1. Navigate to the `poc-car-utility` directory.
-2. Run `./kubos-file-client -h 10.11.44.124 -P 8080 -r 10.11.44.123 -p 8040 download config.car`, it should output something like the following:
+2. Run `./kubos-file-client -h 10.11.44.124 -P 8080 -r 10.11.44.123 -p 8040 download Cargo.car`, it should output something like the following:
 ```
 16:58:55 [INFO] Starting file transfer client
 16:58:55 [INFO] Downloading remote: Cargo.car to local: Cargo.car
