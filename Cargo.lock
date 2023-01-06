@@ -262,11 +262,14 @@ name = "block-streamer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "cid 0.9.0",
  "clap",
  "futures",
  "iroh-resolver 0.1.3",
  "rand 0.8.5",
+ "serde",
+ "serde_cbor_2",
  "tokio",
 ]
 
@@ -1024,6 +1027,12 @@ dependencies = [
  "tokio-util",
  "tracing",
 ]
+
+[[package]]
+name = "half"
+version = "1.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
 
 [[package]]
 name = "hashbrown"
@@ -3263,6 +3272,16 @@ version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd31f59f6fe2b0c055371bb2f16d7f0aa7d8881676c04a55b1596d1a17cd10a4"
 dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "serde_cbor_2"
+version = "0.12.0-dev"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b46d75f449e01f1eddbe9b00f432d616fbbd899b809c837d0fbc380496a0dd55"
+dependencies = [
+ "half",
  "serde",
 ]
 
