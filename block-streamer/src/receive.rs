@@ -1,6 +1,8 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use cid::Cid;
-use serde_cbor_2::Deserializer;
+use iroh_resolver::resolver::Block;
+
+use crate::types::DataBlob;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -10,68 +12,19 @@ use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::net::UdpSocket;
 
-#[derive(Clone)]
-struct DataBlob {
-    pub cid: Cid,
-    pub data: Vec<u8>,
-    pub links: Vec<Cid>,
-}
-
-impl DataBlob {
-    pub fn try_parse(packet: &[u8]) -> Result<Self> {
-        if packet.len() > 36 {
-            let mut deser = Deserializer::from_slice(&packet);
-            let datamap: BTreeMap<&str, Vec<Vec<u8>>> =
-                serde::de::Deserialize::deserialize(&mut deser)?;
-            let cid = datamap
-                .get("c")
-                .ok_or(anyhow!("Failed to find cid"))?
-                .clone()
-                .pop()
-                .ok_or(anyhow!("Found malformed cid"))?;
-            let mut data = datamap
-                .get("d")
-                .ok_or(anyhow!("Failed to find data"))?
-                .clone();
-            let data = data.pop().ok_or(anyhow!("Found malformed data"))?;
-            let raw_links = datamap
-                .get("l")
-                .ok_or(anyhow!("Failed to find links"))?
-                .clone();
-
-            let mut links = vec![];
-            for link in raw_links {
-                links.push(Cid::try_from(link)?);
-            }
-
-            Ok(DataBlob {
-                cid: Cid::try_from(cid)?,
-                data,
-                links,
-            })
-        } else {
-            Err(anyhow!("Not enough data"))
-        }
-    }
-}
-
-async fn assemble(
-    path: &PathBuf,
-    root: &DataBlob,
-    blocks: &BTreeMap<Cid, DataBlob>,
-) -> Result<bool> {
+async fn assemble(path: &PathBuf, root: &Block, blocks: &BTreeMap<Cid, Block>) -> Result<bool> {
     // First check if all cids exist
-    for c in &root.links {
-        if !blocks.contains_key(&c) {
+    for c in root.links().iter() {
+        if !blocks.contains_key(c) {
             println!("Missing cid {}, wait for more data", c);
             return Ok(false);
         }
     }
 
     let mut output_file = File::create(path).await?;
-    for cid in &root.links {
-        if let Some(data) = blocks.get(&cid) {
-            output_file.write_all(&data.data).await?;
+    for cid in root.links().iter() {
+        if let Some(data) = blocks.get(cid) {
+            output_file.write_all(data.data()).await?;
         } else {
             // missing a cid...not ready yet
             return Ok(false);
@@ -79,7 +32,7 @@ async fn assemble(
     }
     output_file.flush().await?;
 
-    return Ok(true);
+    Ok(true)
 }
 
 pub async fn receive(path: &PathBuf, listen_addr: &String) -> Result<()> {
@@ -93,8 +46,8 @@ pub async fn receive(path: &PathBuf, listen_addr: &String) -> Result<()> {
 
     let mut buf = vec![0; 10240];
 
-    let mut root: Option<DataBlob> = None;
-    let mut blocks: BTreeMap<Cid, DataBlob> = BTreeMap::new();
+    let mut root: Option<Block> = None;
+    let mut blocks: BTreeMap<Cid, Block> = BTreeMap::new();
 
     loop {
         println!(
@@ -115,13 +68,14 @@ pub async fn receive(path: &PathBuf, listen_addr: &String) -> Result<()> {
                 if len > 0 {
                     // In try_parse we verify we received a valid CID...that is probably
                     // good enough verification for here
-                    if let Ok(blob) = DataBlob::try_parse(&buf[..len]) {
-                        println!("Received CID {} with {} bytes", &blob.cid, len);
+                    if let Ok(blob) = serde_cbor_2::from_slice::<DataBlob>(&buf[..len]) {
+                        let block = blob.as_block()?;
+                        println!("Received CID {} with {} bytes", &block.cid(), len);
                         // Check for root block
-                        if blob.links.len() > 0 {
-                            root = Some(blob);
+                        if !blob.links.is_empty() {
+                            root = Some(block);
                         } else {
-                            blocks.insert(blob.cid, blob);
+                            blocks.insert(*block.cid(), block.clone());
                         }
                         receiving_cid = true;
                     }
