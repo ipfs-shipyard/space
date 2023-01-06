@@ -1,10 +1,11 @@
+use crate::types::DataBlob;
 use anyhow::Result;
 use futures::TryStreamExt;
 use iroh_resolver::unixfs_builder::{File, FileBuilder};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use serde_cbor_2::to_vec;
-use std::collections::BTreeMap;
+use serde_cbor_2::ser::to_vec_packed;
+
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::net::UdpSocket;
@@ -21,24 +22,9 @@ async fn chunk(path: &PathBuf) -> Result<Vec<Vec<u8>>> {
     let mut payloads = vec![];
 
     for block in blocks {
-        let mut datamap = BTreeMap::new();
-        datamap.insert("c", vec![block.cid().to_bytes()]);
-        if block.links().len() > 0 {
-            // Still not sure what the data in the root block is...
-            datamap.insert("d", vec![vec![]]);
-        } else {
-            datamap.insert("d", vec![block.data().to_vec()]);
-        }
+        let blob = DataBlob::from_block(block)?;
 
-        let mut links = vec![];
-        for l in block.links() {
-            links.push(l.to_bytes());
-        }
-        datamap.insert("l", links);
-
-        let buf = to_vec(&datamap)?;
-
-        payloads.push(buf);
+        payloads.push(to_vec_packed(&blob)?);
     }
 
     // This randomly shuffles the order of parts in the payload vec in order
