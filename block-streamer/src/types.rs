@@ -2,9 +2,9 @@ use anyhow::Result;
 use bytes::Bytes;
 use cid::Cid;
 use iroh_resolver::resolver::Block;
-use serde::{Deserialize, Serialize};
+use parity_scale_codec_derive::{Decode, Encode};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Encode, Decode)]
 pub struct DataBlob {
     pub cid: Vec<u8>,
     pub data: Vec<u8>,

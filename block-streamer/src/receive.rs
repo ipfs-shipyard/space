@@ -1,8 +1,8 @@
+use crate::types::DataBlob;
 use anyhow::Result;
 use cid::Cid;
 use iroh_resolver::resolver::Block;
-
-use crate::types::DataBlob;
+use parity_scale_codec::Decode;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -68,7 +68,9 @@ pub async fn receive(path: &PathBuf, listen_addr: &String) -> Result<()> {
                 if len > 0 {
                     // In try_parse we verify we received a valid CID...that is probably
                     // good enough verification for here
-                    if let Ok(blob) = serde_cbor_2::from_slice::<DataBlob>(&buf[..len]) {
+                    // if let Ok(blob) = serde_cbor_2::from_slice::<DataBlob>(&buf[..len]) {
+                    let mut databuf = &buf[..len];
+                    if let Ok(blob) = DataBlob::decode(&mut databuf) {
                         let block = blob.as_block()?;
                         println!("Received CID {} with {} bytes", &block.cid(), len);
                         // Check for root block
