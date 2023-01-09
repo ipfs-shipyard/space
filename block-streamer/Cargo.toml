@@ -9,10 +9,10 @@ edition = "2021"
 anyhow = "1"
 iroh-resolver = "0.1.3"
 tokio = { version = "1", features = ["fs", "io-util"] }
-cid = "0.9"
+cid = {version = "0.9", features = ["scale-codec"] }
 futures = "0.3.21"
 clap = { version = "4.0.15", features = ["derive"] }
 rand = "0.8.5"
-serde_cbor_2 = "0.12.0-dev"
-serde = { version = "1.0", features = ["derive"] }
+parity-scale-codec = { version = "3.0.0", default-features = false, features = ["derive"] }
+parity-scale-codec-derive = "3.1.3"
 bytes = "1.1"

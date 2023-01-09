@@ -2,10 +2,9 @@ use crate::types::DataBlob;
 use anyhow::Result;
 use futures::TryStreamExt;
 use iroh_resolver::unixfs_builder::{File, FileBuilder};
+use parity_scale_codec::Encode;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use serde_cbor_2::ser::to_vec_packed;
-
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::net::UdpSocket;
@@ -13,7 +12,7 @@ use tokio::net::UdpSocket;
 async fn chunk(path: &PathBuf) -> Result<Vec<Vec<u8>>> {
     let file: File = FileBuilder::new()
         .path(path)
-        .fixed_chunker(24)
+        .fixed_chunker(20)
         .build()
         .await?;
 
@@ -24,7 +23,7 @@ async fn chunk(path: &PathBuf) -> Result<Vec<Vec<u8>>> {
     for block in blocks {
         let blob = DataBlob::from_block(block)?;
 
-        payloads.push(to_vec_packed(&blob)?);
+        payloads.push(blob.encode());
     }
 
     // This randomly shuffles the order of parts in the payload vec in order
