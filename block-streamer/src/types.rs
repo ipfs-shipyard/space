@@ -1,10 +1,10 @@
 use anyhow::Result;
 use bytes::Bytes;
 use cid::Cid;
-use iroh_resolver::resolver::Block;
+use iroh_unixfs::Block;
 use parity_scale_codec_derive::{Decode, Encode};
 
-#[derive(Clone, Encode, Decode)]
+#[derive(Clone, Debug, Decode, Encode)]
 pub struct DataBlob {
     pub cid: Vec<u8>,
     pub data: Vec<u8>,
@@ -29,9 +29,18 @@ impl DataBlob {
         for l in block.links() {
             links.push(l.to_bytes());
         }
+
+        // Right now we're ignoring the data attached to the root nodes
+        // because the current assembly method doesn't require it
+        // and it saves a decent amount of payload weight
+        let data = if !links.is_empty() {
+            vec![]
+        } else {
+            block.data().to_vec()
+        };
         Ok(DataBlob {
             cid: block.cid().to_bytes(),
-            data: block.data().to_vec(),
+            data,
             links,
         })
     }
