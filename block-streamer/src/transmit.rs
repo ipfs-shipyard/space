@@ -1,7 +1,7 @@
 use crate::types::DataBlob;
 use anyhow::Result;
 use futures::TryStreamExt;
-use iroh_resolver::unixfs_builder::{File, FileBuilder};
+use iroh_unixfs::builder::{File, FileBuilder};
 use parity_scale_codec::Encode;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
@@ -13,6 +13,11 @@ async fn chunk(path: &PathBuf) -> Result<Vec<Vec<u8>>> {
     let file: File = FileBuilder::new()
         .path(path)
         .fixed_chunker(20)
+        // This will decrease the width of the underlying tree
+        // but the logic isn't ready on the receiving end end
+        // and the current CID size means that two links will
+        // still overrun the lab radio packet size
+        // .degree(2)
         .build()
         .await?;
 
@@ -21,9 +26,7 @@ async fn chunk(path: &PathBuf) -> Result<Vec<Vec<u8>>> {
     let mut payloads = vec![];
 
     for block in blocks {
-        let blob = DataBlob::from_block(block)?;
-
-        payloads.push(blob.encode());
+        payloads.push(DataBlob::from_block(block)?.encode());
     }
 
     // This randomly shuffles the order of parts in the payload vec in order

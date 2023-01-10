@@ -1,7 +1,7 @@
 use crate::types::DataBlob;
 use anyhow::Result;
 use cid::Cid;
-use iroh_resolver::resolver::Block;
+use iroh_unixfs::Block;
 use parity_scale_codec::Decode;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
@@ -13,7 +13,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::UdpSocket;
 
 async fn assemble(path: &PathBuf, root: &Block, blocks: &BTreeMap<Cid, Block>) -> Result<bool> {
-    // First check if all cids exist
+    // First check if all CIDs exist
     for c in root.links().iter() {
         if !blocks.contains_key(c) {
             println!("Missing cid {}, wait for more data", c);
@@ -26,7 +26,9 @@ async fn assemble(path: &PathBuf, root: &Block, blocks: &BTreeMap<Cid, Block>) -
         if let Some(data) = blocks.get(cid) {
             output_file.write_all(data.data()).await?;
         } else {
-            // missing a cid...not ready yet
+            // missing a cid...not ready yet...we shouldn't get
+            // here because of the CIDs check above, but
+            // we verify again anyways
             return Ok(false);
         }
     }
@@ -66,17 +68,15 @@ pub async fn receive(path: &PathBuf, listen_addr: &String) -> Result<()> {
         loop {
             if let Ok(len) = socket.try_recv(&mut buf) {
                 if len > 0 {
-                    // In try_parse we verify we received a valid CID...that is probably
-                    // good enough verification for here
-                    // if let Ok(blob) = serde_cbor_2::from_slice::<DataBlob>(&buf[..len]) {
                     let mut databuf = &buf[..len];
                     if let Ok(blob) = DataBlob::decode(&mut databuf) {
                         let block = blob.as_block()?;
-                        println!("Received CID {} with {} bytes", &block.cid(), len);
                         // Check for root block
                         if !blob.links.is_empty() {
+                            println!("Received root CID {}", &block.cid());
                             root = Some(block);
                         } else {
+                            println!("Received child CID {} with {} bytes", &block.cid(), len);
                             blocks.insert(*block.cid(), block.clone());
                         }
                         receiving_cid = true;
