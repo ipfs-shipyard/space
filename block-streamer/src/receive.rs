@@ -1,4 +1,4 @@
-use crate::types::DataBlob;
+use crate::types::{BlockWrapper, TransmissionChunk, TransmissionMessage};
 use anyhow::Result;
 use cid::Cid;
 use iroh_unixfs::Block;
@@ -29,6 +29,7 @@ async fn assemble(path: &PathBuf, root: &Block, blocks: &BTreeMap<Cid, Block>) -
             // missing a cid...not ready yet...we shouldn't get
             // here because of the CIDs check above, but
             // we verify again anyways
+            println!("Still missing a cid...");
             return Ok(false);
         }
     }
@@ -50,6 +51,8 @@ pub async fn receive(path: &PathBuf, listen_addr: &String) -> Result<()> {
 
     let mut root: Option<Block> = None;
     let mut blocks: BTreeMap<Cid, Block> = BTreeMap::new();
+    let mut current_cid: Option<Vec<u8>> = None;
+    let mut current_cid_chunks: Vec<TransmissionChunk> = vec![];
 
     loop {
         println!(
@@ -57,8 +60,16 @@ pub async fn receive(path: &PathBuf, listen_addr: &String) -> Result<()> {
             blocks.len()
         );
 
+        println!(
+            "Current CID {:?} has {} chunks",
+            current_cid,
+            current_cid_chunks.len()
+        );
+
         if let Some(root) = &root {
+            println!("Found root, try to assemble");
             if assemble(path, root, &blocks).await? {
+                println!("Assembly success!!");
                 return Ok(());
             }
         }
@@ -69,18 +80,53 @@ pub async fn receive(path: &PathBuf, listen_addr: &String) -> Result<()> {
             if let Ok(len) = socket.try_recv(&mut buf) {
                 if len > 0 {
                     let mut databuf = &buf[..len];
-                    if let Ok(blob) = DataBlob::decode(&mut databuf) {
-                        let block = blob.as_block()?;
-                        // Check for root block
-                        if !blob.links.is_empty() {
-                            println!("Received root CID {}", &block.cid());
-                            root = Some(block);
-                        } else {
-                            println!("Received child CID {} with {} bytes", &block.cid(), len);
-                            blocks.insert(*block.cid(), block.clone());
+                    if let Ok(message) = TransmissionMessage::decode(&mut databuf) {
+                        // current_cid_chunks.push(message.clone());
+                        print!("Received Message {} bytes -- ", len);
+                        match message {
+                            TransmissionMessage::Cid(cid) => {
+                                println!("Received CID: {:?}", cid);
+                                current_cid = Some(cid);
+                                current_cid_chunks.clear();
+                            }
+                            TransmissionMessage::Chunk(chunk) => {
+                                println!("Received Chunk for CID: {:?}", chunk.cid_marker);
+                                if let Some(current_cid) = &current_cid {
+                                    current_cid_chunks.push(chunk);
+
+                                    if let Ok(wrapper) =
+                                        BlockWrapper::from_chunks(current_cid, &current_cid_chunks)
+                                    {
+                                        let block = wrapper.to_block()?;
+                                        if !block.links().is_empty() {
+                                            println!("Found root CID {}", &block.cid());
+                                            root = Some(block);
+                                        } else {
+                                            println!(
+                                                "Found child CID {} with {} bytes",
+                                                &block.cid(),
+                                                len
+                                            );
+                                            blocks.insert(*block.cid(), block.clone());
+                                        }
+                                        receiving_cid = true;
+                                    }
+                                }
+                            }
                         }
-                        receiving_cid = true;
                     }
+                    // if let Ok(blob) = DataBlob::decode(&mut databuf) {
+                    //     let block = blob.as_block()?;
+                    //     // Check for root block
+                    //     if !blob.links.is_empty() {
+                    //         println!("Received root CID {}", &block.cid());
+                    //         root = Some(block);
+                    //     } else {
+                    //         println!("Received child CID {} with {} bytes", &block.cid(), len);
+                    //         blocks.insert(*block.cid(), block.clone());
+                    //     }
+                    //     receiving_cid = true;
+                    // }
                 }
             } else if receiving_cid {
                 break;
