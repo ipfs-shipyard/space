@@ -321,10 +321,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "block-ship"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "cid 0.9.0",
+ "futures",
+ "iroh-unixfs",
+ "parity-scale-codec",
+ "parity-scale-codec-derive",
+ "rand 0.8.5",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "block-streamer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "block-ship",
  "bytes",
  "cid 0.9.0",
  "clap",
@@ -334,6 +351,8 @@ dependencies = [
  "parity-scale-codec-derive",
  "rand 0.8.5",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

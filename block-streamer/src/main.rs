@@ -1,12 +1,12 @@
 mod receive;
 mod transmit;
-mod types;
 
 use crate::receive::receive;
 use crate::transmit::transmit;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+use tracing::Level;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(version, long_about = None, propagate_version = true)]
@@ -52,6 +52,8 @@ impl Cli {
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
+    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+
     let cli = Cli::parse();
     cli.run().await
 }

@@ -85,19 +85,6 @@ impl BlockWrapper {
     }
 
     pub fn from_chunks(cid: &[u8], messages: &[TransmissionChunk]) -> Result<Self> {
-        // let cid = messages.iter().find(|m| match m {
-        //     TransmissionMessage::CID(_) => true,
-        //     _ => false,
-        // });
-        // if let Some(TransmissionMessage::CID(cid)) = cid {
-        // let chunks: Vec<&TransmissionChunk> = messages
-        //     .iter()
-        //     .filter_map(|m| match m {
-        //         TransmissionMessage::Chunk(chunk) => Some(chunk),
-        //         _ => None,
-        //     })
-        //     .collect();
-
         let blob: Vec<u8> = messages.iter().flat_map(|c| c.data.clone()).collect();
         if let Ok(payload) = BlockPayload::decode(&mut blob.as_slice()) {
             return Ok(BlockWrapper {
@@ -105,8 +92,6 @@ impl BlockWrapper {
                 payload,
             });
         }
-
-        // }
         Err(anyhow!("Failed to find payload"))
     }
 }
@@ -116,7 +101,7 @@ mod tests {
     use super::*;
 
     #[test]
-    pub fn chunk_and_rebuild_block() {
+    pub fn test_chunk_and_rebuild_block() {
         let cid = vec![1, 2, 4, 5, 6];
         let wrapper = BlockWrapper {
             cid: cid.clone(),
