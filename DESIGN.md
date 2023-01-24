@@ -1,4 +1,4 @@
-This is an overview of the current protocol design implemented in the `block-streamer/` application and a few open questions for the future.
+This is an overview of the current data transfer protocol implemented in the `block-streamer/` application and a few open questions for the future.
 
 ## Current Design
 
