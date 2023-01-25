@@ -84,6 +84,7 @@ impl BlockWrapper {
         Ok(chunks)
     }
 
+    // TODO: This should probably verify the hash against the data
     pub fn from_chunks(cid: &[u8], messages: &[TransmissionChunk]) -> Result<Self> {
         let blob: Vec<u8> = messages.iter().flat_map(|c| c.data.clone()).collect();
         if let Ok(payload) = BlockPayload::decode(&mut blob.as_slice()) {

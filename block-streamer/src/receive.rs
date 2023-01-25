@@ -55,6 +55,7 @@ pub async fn receive(path: &PathBuf, listen_addr: &String) -> Result<()> {
                 if len > 0 {
                     let mut databuf = &buf[..len];
                     // TODO: Some of this reassembly logic needs to be extracted so that it can be tested directly
+                    // TODO: This also should be reworked to handle a stream of chunks/blocks sent totally out of order
                     if let Ok(message) = TransmissionMessage::decode(&mut databuf) {
                         info!("Received Message {} bytes", len);
                         match message {
