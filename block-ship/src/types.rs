@@ -2,23 +2,15 @@ use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use cid::Cid;
 use iroh_unixfs::Block;
+use messages::{TransmissionChunk, TransmissionMessage};
 use parity_scale_codec::{Decode, Encode};
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
 
 const CHUNK_SIZE: usize = 40;
 
-#[derive(Clone, Debug, ParityDecode, ParityEncode)]
-pub struct TransmissionChunk {
-    pub cid_marker: Vec<u8>,
-    pub chunk_offset: u16,
-    pub data: Vec<u8>,
-}
-
-#[derive(Clone, Debug, ParityDecode, ParityEncode)]
-pub enum TransmissionMessage {
-    Cid(Vec<u8>),
-    Chunk(TransmissionChunk),
-}
+// TODO: Create a function to more cleanly create this marker
+// and pull it from *just* the cid hash digest
+pub const CID_MARKER_LEN: usize = 10;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct BlockWrapper {
@@ -67,7 +59,7 @@ impl BlockWrapper {
     }
 
     pub fn to_chunks(&self) -> Result<Vec<TransmissionMessage>> {
-        let cid_marker = &self.cid[..4];
+        let cid_marker = &self.cid[..CID_MARKER_LEN];
         let mut chunks = vec![];
 
         chunks.push(TransmissionMessage::Cid(self.cid.clone()));
@@ -89,7 +81,7 @@ impl BlockWrapper {
         let blob: Vec<u8> = messages.iter().flat_map(|c| c.data.clone()).collect();
         if let Ok(payload) = BlockPayload::decode(&mut blob.as_slice()) {
             return Ok(BlockWrapper {
-                cid: cid.to_owned(),
+                cid: cid.to_vec(),
                 payload,
             });
         }
@@ -103,7 +95,7 @@ mod tests {
 
     #[test]
     pub fn test_chunk_and_rebuild_block() {
-        let cid = vec![1, 2, 4, 5, 6];
+        let cid = b"12345678901230123".to_vec();
         let wrapper = BlockWrapper {
             cid: cid.clone(),
             payload: BlockPayload {

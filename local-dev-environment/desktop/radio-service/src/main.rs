@@ -60,7 +60,7 @@ async fn main() -> tokio_serial::Result<()> {
         if let Ok(data) = serial_queue_reader.recv() {
             println!("Found {} bytes to send over serial", data.len());
             let mut ser = thread_serial.lock().unwrap();
-            ser.write(&data).unwrap();
+            let _ = ser.write(&data).unwrap();
         }
         thread::sleep(Duration::from_millis(250));
     });
@@ -70,7 +70,7 @@ async fn main() -> tokio_serial::Result<()> {
     loop {
         if let Ok(len) = socket.try_recv(&mut buf) {
             if len > 0 {
-                println!("Received {} bytes over udp, queueing for serial", len);
+                println!("Received {len} bytes over udp, queueing for serial");
                 serial_queue_writer
                     .send(buf[..len].to_vec())
                     .expect("Failed to send??");
@@ -83,10 +83,7 @@ async fn main() -> tokio_serial::Result<()> {
         };
         if let Ok(serial_len) = len {
             if serial_len > 0 {
-                println!(
-                    "Received {} bytes over serial, sending over udp",
-                    serial_len
-                );
+                println!("Received {serial_len} bytes over serial, sending over udp");
                 socket.send_to(&buf[..serial_len], downlink_addr).await?;
             }
         }

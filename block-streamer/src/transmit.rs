@@ -1,5 +1,6 @@
 use anyhow::Result;
 use block_ship::chunking::path_to_chunks;
+use messages::Message;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::net::UdpSocket;
@@ -17,8 +18,10 @@ pub async fn transmit(path: &PathBuf, target_addr: &String) -> Result<()> {
     let data = path_to_chunks(path).await?;
 
     for packet in data {
-        info!("Transmitting {} bytes", packet.len());
-        socket.send_to(&packet, target_address).await?;
+        let msg = Message::DataProtocol(packet);
+        let packet_bytes = msg.to_bytes();
+        info!("Transmitting {} bytes", packet_bytes.len());
+        socket.send_to(&packet_bytes, target_address).await?;
     }
     Ok(())
 }

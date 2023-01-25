@@ -5,5 +5,7 @@ members = [
     "block-ship",
     "block-streamer",
     "car-utility",
-    "local-dev-environment/desktop/radio-service"
+    "local-dev-environment/desktop/radio-service",
+    "messages",
+    "cpp-transmit-example"
 ]

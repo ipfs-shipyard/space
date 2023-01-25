@@ -7,7 +7,7 @@ use iroh_unixfs::{
     builder::{File, FileBuilder},
     Block,
 };
-use parity_scale_codec::Encode;
+use messages::TransmissionMessage;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use std::collections::BTreeMap;
@@ -18,7 +18,7 @@ use tracing::{info, warn};
 
 // TODO: Refactor this and chunks_to_path so that they actually do what their names say
 // and so that they can be tested directly against each other
-pub async fn path_to_chunks(path: &PathBuf) -> Result<Vec<Vec<u8>>> {
+pub async fn path_to_chunks(path: &PathBuf) -> Result<Vec<TransmissionMessage>> {
     let file: File = FileBuilder::new()
         .path(path)
         .fixed_chunker(50)
@@ -44,7 +44,7 @@ pub async fn path_to_chunks(path: &PathBuf) -> Result<Vec<Vec<u8>>> {
         let wrapper = BlockWrapper::from_block(block)?;
         let chunks = wrapper.to_chunks()?;
         for c in chunks {
-            payloads.push(c.encode());
+            payloads.push(c);
         }
     }
 

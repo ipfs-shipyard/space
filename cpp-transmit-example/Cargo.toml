@@ -1,0 +1,11 @@
+[package]
+name = "cpp-transmit-example"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+messages = { path = "../messages" }
+
+[lib]
+name = "transmit"
+crate-type = ["staticlib"]
