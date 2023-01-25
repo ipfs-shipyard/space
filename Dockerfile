@@ -6,3 +6,4 @@ RUN apt-get update && \
 RUN curl -Lo protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protoc-21.12-linux-x86_64.zip"
 RUN unzip -q protoc.zip -d /usr/local
 RUN chmod a+x /usr/local/bin/protoc
+ENV PROTOC=/usr/local/bin/protoc
