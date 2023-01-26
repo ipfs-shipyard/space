@@ -110,4 +110,4 @@ This is an overview of the different pieces of software which will be built and 
 ## Meeting Notes
 
 [11/14/2022](meetings/2022-11-14.md)
-[1/26/2023](meetings/2023-01-23.md)
+[1/26/2023](meetings/2023-01-26.md)
