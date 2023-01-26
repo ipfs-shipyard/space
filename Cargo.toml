@@ -1,8 +1,9 @@
 [workspace]
 
 members = [
-    "car-utility",
+    "app-api-cli",
     "block-ship",
     "block-streamer",
+    "car-utility",
     "local-dev-environment/desktop/radio-service"
 ]
