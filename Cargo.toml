@@ -1,0 +1,8 @@
+[workspace]
+
+members = [
+    "car-utility",
+    "block-ship",
+    "block-streamer",
+    "local-dev-environment/desktop/radio-service"
+]
