@@ -6,6 +6,16 @@ This project is focusing on applying content-addressable data & tooling to satel
 
 The work and communications for this project will be coordinated through the [ipfs-shipyard/space repo](https://github.com/ipfs-shipyard/space) and the [Filecoin #space channel](https://filecoinproject.slack.com/archives/C02N7M67FKK).
 
+### MVPs
+
+- [x] [v0.1 - Generate & transmit CAR over radio](https://github.com/ipfs-shipyard/space/issues/5)
+- [x] v0.2 - Generate DAG, transmit & receive over Radio
+- [ ] v0.3 - Demonstrate block-ship retransmit over radio
+- [ ] v0.4 - Demonstrate block-ship request by CID
+- [ ] v0.5 - Basic application API and CID advertisements
+
+A more detailed roadmap can be found [here](https://github.com/ipfs-shipyard/space/blob/main/ROADMAP.md).
+
 ## Objectives
 
 1. Demonstrate the utility of content addressable protocols in the context of space-to-ground and space-to-space communications.
@@ -65,8 +75,8 @@ These are assumptions we are establishing to 1) limit scope and 2) establish rea
 ```mermaid
 flowchart TD
     subgraph Spacecraft
-        A[Application] -- ApplicationAPI --> B[IPFS]
-        B <-- CommsAPI --> C[Comms]
+        A[Application] -- ApplicationAPI/UDP --> B[IPFS]
+        B <-- CommsAPI/UDP --> C[Comms]
     end
 
     subgraph Radio
@@ -74,8 +84,8 @@ flowchart TD
     end
 
     subgraph Ground
-        F[Service] -- ApplicationAPI --> E[IPFS]
-        E <-- CommsAPI --> G[Comms]
+        F[Service] -- ApplicationAPI/UDP --> E[IPFS]
+        E <-- CommsAPI/UDP --> G[Comms]
     end
 
     C <--> Z
@@ -85,8 +95,8 @@ flowchart TD
 This is an overview of the different pieces of software which will be built and which are assumed to exist in the target environments:
 
 * Interfaces
-    * Application API - An API provided by the IPFS processes to allow it to be commanded by local processes either onboard spacecraft or in a ground station.
-    * Communications API - An API provided by the IPFS process for integration with communications links either onboard spacecraft or in a ground station.
+    * Application API - An API provided by the IPFS processes to allow it to be commanded by local processes either onboard spacecraft or in a ground station. This will be a network API using UDP packets sent either over the local network or the communications link.
+    * Communications API - An API provided by the IPFS process for integration with communications links either onboard spacecraft or in a ground station. The IPFS side of this API will be a network API using UDP packets. The system side will essentially be a comms to UDP translation layer.
     * Data Transfer Protocol - A protocol used by IPFS processes on spacecraft and ground to handle the transfer of files in DAG blocks form. This will logically do what BitSwap does, but BitSwap will not be used.
 
 * Spacecraft
@@ -98,14 +108,6 @@ This is an overview of the different pieces of software which will be built and 
     * IPFS - A modified IPFS instance tailored for the ground station environment, which is able to communicate with the space-bound IPFS instance, and possibly also bridge with other public/private IPFS networks.
     * Service - Ground stations are expected to have services or applications which will command the IPFS process via the `Application API` to perform functions such as _"store and upload a file"_ or _"request a CID from space"_.
     * Comms - Each ground station is expected to have a communication link with an existing interface, which IPFS will communicate over using the `Communications API`.
-
-### MVPs
-
-- [ ] [v0.1 - Generate & transmit CAR over radio](https://github.com/ipfs-shipyard/space/issues/5)
-- [ ] v0.2 - Generate DAG, transmit & receive over Radio
-- [ ] v0.3 - Demonstrate block-ship retransmit over radio
-- [ ] v0.4 - Demonstrate block-ship request by CID
-- [ ] v0.5 - Basic application API and CID advertisements
 
 ## Meeting Notes
 
