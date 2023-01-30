@@ -9,7 +9,7 @@ The work and communications for this project will be coordinated through the [ip
 ### MVPs
 
 - [x] [v0.1 - Generate & transmit CAR over radio](https://github.com/ipfs-shipyard/space/issues/5)
-- [x] v0.2 - Generate DAG, transmit & receive over Radio
+- [x] [v0.2 - Generate DAG, transmit & receive over Radio](https://github.com/ipfs-shipyard/space/pull/15)
 - [ ] v0.3 - Demonstrate block-ship retransmit over radio
 - [ ] v0.4 - Demonstrate block-ship request by CID
 - [ ] v0.5 - Basic application API and CID advertisements
