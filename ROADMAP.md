@@ -25,8 +25,7 @@ Milestone two focuses on creating a bare minimum method of transferring a file u
 Milestone three focuses on exploring a basic application API.
 
 - [ ] [**PoC - Prototype application API**](https://github.com/ipfs-shipyard/space/pull/16) - Take a first pass at the application API functionality required to implement basic IPFS-in-space scenarios, such as requesting a CID from space to ground. Implement this API using JSON over UDP to get an easy sense of API usage. Implement a basic cli utility for sending API commands. Only implement actually responding to api messages to transmit and receive.
-
-- [ ] **PoC - Investigate binary API format** - The initial application API is implemented in JSON, but that format will not be suitable for real-world usage. Investigate other formats such as [cbor](https://cbor.io/) and decide which to use for this API.
+- [ ] **PoC - Investigate binary messaging format** - The initial application API is implemented in JSON, but that format will not be suitable for real-world usage. Investigate other formats such as [cbor](https://cbor.io/) and decide which to use for all message formatting, including this API.
 - [ ] **PoC - Prototype interleaving application API and data transfer protocol** - In the initial application API the API messages and data transfer protocol messages are handled in independent messaging "sessions". This system will need the ability to handle either type of these messages at the same time on the same port. Implement a higher level message type which can support either the application API or data transfer protocol.
 - [ ] **MVP 0.3 - Demonstrate application API over radio** - Demonstrate both space & ground instances of IPFS which can receive control messages to *transmit* and *receive* files. Use these control messages to command the ground instance to transmit a file to the space instance, all using the same radio link.
 
@@ -34,24 +33,24 @@ Milestone three focuses on exploring a basic application API.
 
 Milestone four focuses on implementing basic file/CID handling APIs.
 
-- [ ] **PoC - Implement `Import File` and `Export CID` APIs** - This will involve not just implementing the APIs but also creating some basic IPFS storage layer.
-- [ ] **PoC - Implement `Available CIDs` and `Request CID` APIs** - Building on the IPFS storage layer, and APIs for importing exporting, this exposes stored CIDs for requesting and transfer.
+- [ ] **PoC - Implement `Import File` and `Export CID` APIs** - Decide on a basic IPFS storage layer, and then implement the APIs for importing & exporting a file to/from that storage layer.
+- [ ] **PoC - Implement `Available CIDs` and `Request CID` APIs** - Building on the IPFS storage layer, and APIs for importing exporting. This exposes available CIDs via API, and allows requesting the transfer of a specific CID if available.
 - [ ] **MVP 0.4 - Demonstrate a file import and transfer request**
 
 ## Milestone 5
 
 Milestone five focuses on CID and block validation
 
-- [ ] **PoC - Implement block-level validate**
-- [ ] **PoC - Implement `Is CID Complete` and `Validate CID` APIs**
+- [ ] **PoC - Implement block-level validation** - Implement validation on a per-block basis as they are received and assembled.
+- [ ] **PoC - Implement `Is CID Complete` and `Validate CID` APIs** - Implement an API to determine if a CID is present with all of it's children blocks, and an API to validate that CID all the way down.
 - [ ] **MVP 0.5 - Demonstrate CID complete/validate APIs after transfer**
 
 ## Milestone 6
 
 Milestone six focuses on APIs for gathering pass/connectedness info, and incorporating that info into the transfer process.
 
-- [ ] **PoC - Implement `Is Connected` and `Next Pass Info` APIs**
-- [ ] **PoC - Modify data transfer protocol to account for pass/connectedness info**
+- [ ] **PoC - Implement `Is Connected` and `Next Pass Info` APIs** - Implement APIs to be used by external systems to indicate if the system is connected and to give information about the next pass.
+- [ ] **PoC - Modify data transfer protocol to account for pass/connectedness info** - Update the data transfer protocol to track pass/connectedness information and determine when it should be transmitting data based on known pass information.
 - [ ] **MVP 0.6 - Simulate a "pass" using implemented APIs and demonstrate how data transfer responds**
 
 ## Milestone 7
@@ -64,9 +63,8 @@ Milestone 7 focuses on implementing minimum retry methods for reliability.
 
 ## Future Milestones
 
-### PoC - Explore various satellite profiles
-
-Satellites operate across a variety of scenarios (earth observing, communications, navigation, weather, etc), each of which may require a different operational profile. Research these common scenarios, and their associated operational profiles, and create simulation scenarios to test against IPFS software.
+- **PoC - Explore various satellite profiles** - Satellites operate across a variety of scenarios (earth observing, communications, navigation, weather, etc), each of which may require a different operational profile. Research these common scenarios, and their associated operational profiles, and create simulation scenarios to test against IPFS software.
+- **Poc - Explore multi-block specification techniques** - Explore how to specify multiple blocks for request/transmission, such as by CID, sub-graph, bloom filter, etc.
 
 ## Future ideas
 

@@ -10,9 +10,11 @@ The work and communications for this project will be coordinated through the [ip
 
 - [x] [v0.1 - Generate & transmit CAR over radio](https://github.com/ipfs-shipyard/space/issues/5)
 - [x] [v0.2 - Generate DAG, transmit & receive over Radio](https://github.com/ipfs-shipyard/space/pull/15)
-- [ ] v0.3 - Demonstrate block-ship retransmit over radio
-- [ ] v0.4 - Demonstrate block-ship request by CID
-- [ ] v0.5 - Basic application API and CID advertisements
+- [ ] v0.3 - Transmit & receive triggered by application API
+- [ ] v0.4 - IPFS storage, CID advertisements and requests
+- [ ] v0.5 - Block validation and CID validation APIs
+- [ ] v0.6 - Pass-aware data transfer protocol
+- [ ] v0.7 - Block and chunk requests and re-transmissions
 
 A more detailed roadmap can be found [here](https://github.com/ipfs-shipyard/space/blob/main/ROADMAP.md).
 
