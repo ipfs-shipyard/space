@@ -1,29 +1,25 @@
 use anyhow::Result;
-use block_ship::{chunking::chunks_to_path, types::BlockWrapper, types::CID_MARKER_LEN};
-use cid::Cid;
-use iroh_unixfs::Block;
+use block_ship::{types::BlockWrapper, types::CID_MARKER_LEN};
+use local_storage::storage::{Storage, StoredBlock};
 use messages::{TransmissionChunk, TransmissionMessage};
-use std::{collections::BTreeMap, path::PathBuf};
+use std::collections::BTreeMap;
+use std::rc::Rc;
 use tracing::info;
 
 pub struct Receiver {
-    // Map of cid to blocks
-    pub blocks: BTreeMap<Cid, Block>,
-    // Map of cid to root blocks
-    pub roots: BTreeMap<Cid, Block>,
     // Map of cid_marker to cid
     pub cids_to_build: BTreeMap<Vec<u8>, Vec<u8>>,
     // Map of cid_marker to [chunk]
     pub cid_chunks: BTreeMap<Vec<u8>, Vec<TransmissionChunk>>,
+    pub storage: Rc<Storage>,
 }
 
 impl Receiver {
-    pub fn new() -> Receiver {
+    pub fn new(storage: Rc<Storage>) -> Receiver {
         Receiver {
-            blocks: BTreeMap::new(),
-            roots: BTreeMap::new(),
             cids_to_build: BTreeMap::new(),
             cid_chunks: BTreeMap::new(),
+            storage,
         }
     }
 
@@ -50,62 +46,20 @@ impl Receiver {
         for (cid_marker, cid) in &self.cids_to_build {
             if let Some(cid_chunks) = &self.cid_chunks.get(cid_marker) {
                 if let Ok(wrapper) = BlockWrapper::from_chunks(cid, cid_chunks) {
-                    let block = wrapper.to_block()?;
-                    if !block.links().is_empty() {
-                        info!(
-                            "Found root block {} with links {:?}",
-                            &block.cid(),
-                            &block.links()
-                        );
-                        self.roots.insert(*block.cid(), block);
-                    } else {
-                        info!(
-                            "Found child block {} with {} bytes",
-                            &block.cid(),
-                            block.data().len()
-                        );
-                        self.blocks.insert(*block.cid(), block.clone());
-                    }
+                    let stored_block: StoredBlock = wrapper.try_into()?;
+                    info!(
+                        "Found block {} with {} bytes {} links",
+                        &stored_block.cid,
+                        &stored_block.data.len(),
+                        &stored_block.links.len()
+                    );
+                    self.storage.import_block(&stored_block)?;
+                    // Purge chunks after insert
+                    self.cid_chunks.remove(cid_marker);
                 }
             }
         }
         Ok(())
-    }
-
-    // Walks the list of root blocks and attempts to assemble the associated tree by
-    // checking if all child blocks are present, and if so writing out to a file
-    pub async fn attempt_tree_assembly(&self) -> Result<()> {
-        // TODO could optimize this to only attempt block assembly for the last seen CID
-        for (_, root) in self.roots.iter() {
-            if self.verify_block_complete(*root.cid())? {
-                info!("Block complete: {}", &root.cid());
-                let path = PathBuf::from(root.cid().to_string());
-                if chunks_to_path(&path, root, &self.blocks).await? {
-                    info!("Assembly success! {}", &path.display());
-                }
-            }
-        }
-        Ok(())
-    }
-
-    pub fn verify_block_complete(&self, cid: Cid) -> Result<bool> {
-        let block = self.roots.get(&cid);
-        match block {
-            Some(block) => {
-                // Check if all child blocks are present
-                for c in block.links().iter() {
-                    if !self.blocks.contains_key(c) {
-                        info!("Missing cid {}, wait for more data", c);
-                        return Ok(false);
-                    }
-                }
-                Ok(true)
-            }
-            None => {
-                info!("Failed to find block for {}", cid);
-                Ok(false)
-            }
-        }
     }
 
     pub async fn handle_transmission_msg(&mut self, msg: TransmissionMessage) -> Result<()> {
@@ -120,42 +74,68 @@ impl Receiver {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    use assert_fs::{fixture::PathChild, TempDir};
     use block_ship::types::{BlockPayload, BlockWrapper};
     use cid::multihash::{Code, MultihashDigest};
     use cid::Cid;
     use futures::TryStreamExt;
     use iroh_unixfs::builder::{File, FileBuilder};
+    use local_storage::provider::SqliteStorageProvider;
 
-    use super::*;
+    struct TestHarness {
+        storage: Rc<Storage>,
+        receiver: Receiver,
+        _db_dir: TempDir,
+    }
+
+    impl TestHarness {
+        pub fn new() -> Self {
+            let db_dir = TempDir::new().unwrap();
+            let db_path = db_dir.child("storage.db");
+            let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
+            provider.setup().unwrap();
+            let storage = Rc::new(Storage::new(Box::new(provider)));
+            let receiver = Receiver::new(Rc::clone(&storage));
+            return TestHarness {
+                storage,
+                receiver,
+                _db_dir: db_dir,
+            };
+        }
+    }
 
     #[test]
     pub fn test_receive_chunk() {
-        let mut r = Receiver::new();
+        let mut harness = TestHarness::new();
 
         let chunk = TransmissionChunk {
             cid_marker: vec![],
             chunk_offset: 0,
             data: vec![],
         };
-        r.handle_chunk_msg(chunk.clone()).unwrap();
-        let entry = r.cid_chunks.first_key_value().unwrap();
+        harness.receiver.handle_chunk_msg(chunk.clone()).unwrap();
+        let entry = harness.receiver.cid_chunks.first_key_value().unwrap();
         assert_eq!(entry.0, &chunk.cid_marker);
         assert!(entry.1.contains(&chunk));
     }
 
     #[test]
     pub fn test_receive_cid() {
-        let mut r = Receiver::new();
-
+        let mut harness = TestHarness::new();
         let cid = b"101010101010101".to_vec();
-        r.handle_cid_msg(cid.clone()).unwrap();
+        harness.receiver.handle_cid_msg(cid.clone()).unwrap();
 
-        assert_eq!(r.cids_to_build.first_key_value().unwrap().1, &cid);
+        assert_eq!(
+            harness.receiver.cids_to_build.first_key_value().unwrap().1,
+            &cid
+        );
     }
 
     #[tokio::test]
     pub async fn test_child_block_assembly() {
-        let mut r = Receiver::new();
+        let mut harness = TestHarness::new();
         let h = Code::Sha2_256.digest(b"test this");
         let cid = Cid::new_v1(0x55, h);
 
@@ -168,16 +148,16 @@ mod tests {
         };
         let chunks = wrapper.to_chunks().unwrap();
         for c in chunks {
-            r.handle_transmission_msg(c).await.unwrap();
+            harness.receiver.handle_transmission_msg(c).await.unwrap();
         }
 
-        r.attempt_block_assembly().unwrap();
-        assert_eq!(r.blocks.len(), 1);
+        harness.receiver.attempt_block_assembly().unwrap();
+        assert_eq!(harness.storage.list_available_cids().unwrap().len(), 1);
     }
 
     #[tokio::test]
     pub async fn test_root_block_assembly() {
-        let mut r = Receiver::new();
+        let mut harness = TestHarness::new();
         let h = Code::Sha2_256.digest(b"test this");
         let cid = Cid::new_v1(0x55, h);
 
@@ -190,11 +170,11 @@ mod tests {
         };
         let chunks = wrapper.to_chunks().unwrap();
         for c in chunks {
-            r.handle_transmission_msg(c).await.unwrap();
+            harness.receiver.handle_transmission_msg(c).await.unwrap();
         }
 
-        r.attempt_block_assembly().unwrap();
-        assert_eq!(r.roots.len(), 1);
+        harness.receiver.attempt_block_assembly().unwrap();
+        assert_eq!(harness.storage.list_available_dags().unwrap().len(), 1);
     }
 
     // TODO: write tests for handling incomplete blocks
@@ -203,7 +183,7 @@ mod tests {
     #[ignore]
     #[tokio::test]
     pub async fn test_verify_single_block_complete() {
-        let mut r = Receiver::new();
+        let mut harness = TestHarness::new();
         let content = b"10101010101001010101010".to_vec();
         let file: File = FileBuilder::new()
             .content_bytes(content)
@@ -217,21 +197,63 @@ mod tests {
         assert_eq!(blocks.len(), 1);
         let mut msgs = vec![];
         for b in blocks {
-            let wrapper = BlockWrapper::from_block(b).unwrap();
+            let wrapper = BlockWrapper::from(b);
             let chunks = wrapper.to_chunks().unwrap();
             msgs.extend(chunks);
         }
 
         for m in msgs {
-            r.handle_transmission_msg(m).await.unwrap();
+            harness.receiver.handle_transmission_msg(m).await.unwrap();
         }
-        let (root, _) = r.roots.first_key_value().unwrap();
-        assert_eq!(r.verify_block_complete(*root).unwrap(), true);
+        let root = harness.storage.list_available_dags().unwrap();
+        let root = root.first().unwrap();
+        assert_eq!(
+            harness.storage.get_missing_dag_blocks(root).unwrap().len(),
+            0
+        );
     }
 
     #[tokio::test]
-    pub async fn test_verify_multi_block_complete() {
-        let mut r = Receiver::new();
+    pub async fn test_verify_multi_block_complete_with_leading_root_block() {
+        let mut harness = TestHarness::new();
+        let content =
+            b"1010101010100101010101010101010101010101010101010101010101001010101010101010"
+                .to_vec();
+        let file: File = FileBuilder::new()
+            .content_bytes(content)
+            .name("test-name")
+            .fixed_chunker(50)
+            .build()
+            .await
+            .unwrap();
+
+        let mut blocks: Vec<_> = file.encode().await.unwrap().try_collect().await.unwrap();
+        // Reverse to get root block at the front
+        blocks.reverse();
+        assert_eq!(blocks.len(), 3);
+        let mut msgs = vec![];
+        for b in blocks {
+            let wrapper = BlockWrapper::from(b);
+            let chunks = wrapper.to_chunks().unwrap();
+            msgs.extend(chunks);
+        }
+
+        for m in msgs {
+            harness.receiver.handle_transmission_msg(m).await.unwrap();
+        }
+        let blocks = harness.storage.list_available_cids().unwrap();
+        assert_eq!(blocks.len(), 3);
+        let root = harness.storage.list_available_dags().unwrap();
+        let root = root.first().unwrap();
+        assert_eq!(
+            harness.storage.get_missing_dag_blocks(root).unwrap().len(),
+            0
+        );
+    }
+
+    #[tokio::test]
+    pub async fn test_verify_multi_block_complete_with_trailing_root_block() {
+        let mut harness = TestHarness::new();
         let content =
             b"1010101010100101010101010101010101010101010101010101010101001010101010101010"
                 .to_vec();
@@ -247,15 +269,21 @@ mod tests {
         assert_eq!(blocks.len(), 3);
         let mut msgs = vec![];
         for b in blocks {
-            let wrapper = BlockWrapper::from_block(b).unwrap();
+            let wrapper = BlockWrapper::from(b);
             let chunks = wrapper.to_chunks().unwrap();
             msgs.extend(chunks);
         }
 
         for m in msgs {
-            r.handle_transmission_msg(m).await.unwrap();
+            harness.receiver.handle_transmission_msg(m).await.unwrap();
         }
-        let (root, _) = r.roots.first_key_value().unwrap();
-        assert_eq!(r.verify_block_complete(*root).unwrap(), true);
+        let blocks = harness.storage.list_available_cids().unwrap();
+        assert_eq!(blocks.len(), 3);
+        let root = harness.storage.list_available_dags().unwrap();
+        let root = root.first().unwrap();
+        assert_eq!(
+            harness.storage.get_missing_dag_blocks(root).unwrap().len(),
+            0
+        );
     }
 }

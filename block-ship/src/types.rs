@@ -2,9 +2,12 @@ use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use cid::Cid;
 use iroh_unixfs::Block;
+use local_storage::storage::StoredBlock;
 use messages::{TransmissionChunk, TransmissionMessage};
 use parity_scale_codec::{Decode, Encode};
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
+use std::convert::{From, TryFrom};
+use tracing::error;
 
 const CHUNK_SIZE: usize = 40;
 
@@ -24,24 +27,13 @@ pub struct BlockPayload {
     pub links: Vec<Vec<u8>>,
 }
 
-impl BlockWrapper {
-    pub fn to_block(&self) -> Result<Block> {
-        let mut links = vec![];
-        for l in &self.payload.links {
-            links.push(Cid::try_from(l.clone())?);
-        }
-        Ok(Block::new(
-            Cid::try_from(self.cid.clone())?,
-            Bytes::from(self.payload.data.clone()),
-            links,
-        ))
-    }
-
-    pub fn from_block(block: Block) -> Result<Self> {
-        let mut links = vec![];
-        for l in block.links() {
-            links.push(l.to_bytes());
-        }
+impl From<Block> for BlockWrapper {
+    fn from(block: Block) -> Self {
+        let links = block
+            .links()
+            .iter()
+            .map(|l| l.to_bytes())
+            .collect::<Vec<Vec<u8>>>();
 
         // Right now we're ignoring the data attached to the root nodes
         // because the current assembly method doesn't require it
@@ -52,12 +44,94 @@ impl BlockWrapper {
             block.data().to_vec()
         };
 
-        Ok(BlockWrapper {
+        BlockWrapper {
             cid: block.cid().to_bytes(),
+            payload: BlockPayload { data, links },
+        }
+    }
+}
+
+impl TryFrom<BlockWrapper> for Block {
+    type Error = anyhow::Error;
+
+    fn try_from(value: BlockWrapper) -> std::result::Result<Self, Self::Error> {
+        let links = value
+            .payload
+            .links
+            .iter()
+            .filter_map(|l| match Cid::try_from(l.clone()) {
+                Ok(cid) => Some(cid),
+                Err(e) => {
+                    error!("Failed to parse CID from {l:?}: {e}");
+                    None
+                }
+            })
+            .collect::<Vec<Cid>>();
+        Ok(Block::new(
+            Cid::try_from(value.cid.clone())?,
+            Bytes::from(value.payload.data),
+            links,
+        ))
+    }
+}
+
+impl TryFrom<&StoredBlock> for BlockWrapper {
+    type Error = anyhow::Error;
+
+    fn try_from(block: &StoredBlock) -> std::result::Result<Self, Self::Error> {
+        let links = block
+            .links
+            .iter()
+            .filter_map(|l| match Cid::try_from(l.to_string()) {
+                Ok(cid) => Some(cid.to_bytes()),
+                Err(e) => {
+                    error!("Failed to parse CID {l}: {e}");
+                    None
+                }
+            })
+            .collect::<Vec<Vec<u8>>>();
+
+        // Right now we're ignoring the data attached to the root nodes
+        // because the current assembly method doesn't require it
+        // and it saves a decent amount of payload weight
+        let data = if !links.is_empty() {
+            vec![]
+        } else {
+            block.data.to_vec()
+        };
+
+        Ok(BlockWrapper {
+            cid: Cid::try_from(block.cid.to_string())?.to_bytes(),
             payload: BlockPayload { data, links },
         })
     }
+}
 
+impl TryFrom<BlockWrapper> for StoredBlock {
+    type Error = anyhow::Error;
+
+    fn try_from(value: BlockWrapper) -> std::result::Result<Self, Self::Error> {
+        let links = value
+            .payload
+            .links
+            .iter()
+            .filter_map(|l| match Cid::try_from(l.to_owned()) {
+                Ok(cid) => Some(cid.to_string()),
+                Err(e) => {
+                    error!("Failed to parse CID from {l:?}: {e}");
+                    None
+                }
+            })
+            .collect::<Vec<String>>();
+        Ok(StoredBlock {
+            cid: Cid::try_from(value.cid.clone())?.to_string(),
+            data: value.payload.data,
+            links,
+        })
+    }
+}
+
+impl BlockWrapper {
     pub fn to_chunks(&self) -> Result<Vec<TransmissionMessage>> {
         let cid_marker = &self.cid[..CID_MARKER_LEN];
         let mut chunks = vec![];
@@ -92,6 +166,36 @@ impl BlockWrapper {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cid::multihash::{Code, MultihashDigest};
+    use cid::Cid;
+
+    #[test]
+    pub fn test_block_to_and_from_wrapper() {
+        let h = Code::Sha2_256.digest(b"test this");
+        let cid = Cid::new_v1(0x55, h);
+
+        let block = Block::new(cid, vec![].into(), vec![cid.clone()]);
+        let wrapper = BlockWrapper::try_from(block.clone()).unwrap();
+        let block_again: Block = wrapper.try_into().unwrap();
+        assert_eq!(block, block_again);
+    }
+
+    #[test]
+    pub fn test_stored_block_to_and_from_wrapper() {
+        let h = Code::Sha2_256.digest(b"test this");
+        let cid = Cid::new_v1(0x55, h);
+
+        let stored_block = StoredBlock {
+            cid: cid.to_string(),
+            data: vec![],
+            links: vec![cid.to_string()],
+        };
+
+        let wrapper = BlockWrapper::try_from(&stored_block).unwrap();
+
+        let stored_block_again: StoredBlock = wrapper.try_into().unwrap();
+        assert_eq!(stored_block, stored_block_again);
+    }
 
     #[test]
     pub fn test_chunk_and_rebuild_block() {
@@ -112,7 +216,6 @@ mod tests {
                 TransmissionMessage::Cid(_) => None,
             })
             .collect();
-        dbg!(&chunks);
         let rebuilt = BlockWrapper::from_chunks(&cid, &chunks).unwrap();
         assert_eq!(wrapper, rebuilt);
     }
