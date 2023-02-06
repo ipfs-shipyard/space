@@ -1,6 +1,9 @@
+mod api;
+mod control;
 mod receive;
 mod transmit;
 
+use crate::control::control;
 use crate::receive::receive;
 use crate::transmit::transmit;
 use anyhow::Result;
@@ -32,6 +35,8 @@ enum Commands {
         /// The address to listen for the file on
         listen_address: String,
     },
+    #[clap(about = "Control mode")]
+    Control { listen_address: String },
 }
 
 impl Cli {
@@ -45,6 +50,7 @@ impl Cli {
                 path,
                 listen_address,
             } => receive(path, listen_address).await?,
+            Commands::Control { listen_address } => control(listen_address).await?,
         }
         Ok(())
     }
