@@ -7,17 +7,17 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1"
-iroh-unixfs = "0.2.0"
-tokio = { version = "1", features = ["fs", "io-util"] }
-cid = {version = "0.9", features = ["scale-codec"] }
-futures = "0.3.21"
-clap = { version = "4.0.15", features = ["derive"] }
-rand = "0.8.5"
-parity-scale-codec = { version = "3.0.0", default-features = false, features = ["derive"] }
-parity-scale-codec-derive = "3.1.3"
+block-ship = { path = "../block-ship" }
 bytes = "1.1"
+cid = {version = "0.9", features = ["scale-codec"] }
+clap = { version = "4.0.15", features = ["derive"] }
+futures = "0.3.21"
+iroh-unixfs = "0.2.0"
+messages = { path = "../messages" }
+parity-scale-codec = { version = "3.0.0", default-features = false, features = ["derive", "std"] }
+parity-scale-codec-derive = "3.1.3"
+rand = "0.8.5"
+serde = "1"
+tokio = { version = "1", features = ["fs", "io-util"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
-block-ship = { path = "../block-ship" }
-serde_json = "1"
-serde = "1"

@@ -1,6 +1,6 @@
-mod api;
 mod control;
 mod receive;
+mod receiver;
 mod transmit;
 
 use crate::control::control;
@@ -28,11 +28,9 @@ enum Commands {
         /// The address to transmit the file to
         target_address: String,
     },
-    #[clap(about = "Receive a file")]
+    #[clap(about = "Receive files")]
     Receive {
-        /// The path to a file where received blocks will be output
-        path: PathBuf,
-        /// The address to listen for the file on
+        /// The address to listen for the file data on
         listen_address: String,
     },
     #[clap(about = "Control mode")]
@@ -46,10 +44,7 @@ impl Cli {
                 path,
                 target_address,
             } => transmit(path, target_address).await?,
-            Commands::Receive {
-                path,
-                listen_address,
-            } => receive(path, listen_address).await?,
+            Commands::Receive { listen_address } => receive(listen_address).await?,
             Commands::Control { listen_address } => control(listen_address).await?,
         }
         Ok(())
