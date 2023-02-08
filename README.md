@@ -118,7 +118,8 @@ Here are a few different scenarios this system is expected to perform in and dia
 
 ### Ground to Space in single pass
 
-In this scenario the ground station transmits a file to space across a single pass.
+In this scenario the ground station transmits a file to the spacecraft across a single pass.
+
 ```mermaid
 sequenceDiagram
     participant TTL
@@ -136,7 +137,30 @@ sequenceDiagram
     Space->>Space: IsConnected(false)
 ```
 
+### Space to Ground in a single pass
+
+In this scenario, the ground station queries which DAGs are available in the spacecraft, and then requests one to be transferred to ground across a single pass.
+
+```mermaid
+sequenceDiagram
+    participant TTL
+    participant Ground
+    participant Space
+    TTL->>Ground: IsConnected(true)
+    Space->>Space: IsConnected(true)
+    TTL->>Space: RequestAvailableDags
+    Space->>TTL: AvailableDags([CID, Path])
+    Ground->>Space: RequestCID(CID)
+    Note over Ground, Space: Transfer of blocks
+    TTL->>Space: RemainingDagBlocks(CID): [Block]
+    Ground->>Space: If blocks remain, TransmitBlock(CID)
+    TTL->>Space: ExportDag(CID, path)
+    TTL->>Ground: IsConnected(false)
+    Space->>Space: IsConnected(false)
+```
+
 ## Meeting Notes
 
 [11/14/2022](meetings/2022-11-14.md)
 [1/26/2023](meetings/2023-01-26.md)
+[2/6/2023](meetings/2023-02-06.md)
