@@ -111,6 +111,31 @@ This is an overview of the different pieces of software which will be built and 
     * Service - Ground stations are expected to have services or applications which will command the IPFS process via the `Application API` to perform functions such as _"store and upload a file"_ or _"request a CID from space"_.
     * Comms - Each ground station is expected to have a communication link with an existing interface, which IPFS will communicate over using the `Communications API`.
 
+
+## Usage Diagrams
+
+Here are a few different scenarios this system is expected to perform in and diagrams demonstrating how the various control messages will be used.
+
+### Ground to Space in single pass
+
+In this scenario the ground station transmits a file to space across a single pass.
+```mermaid
+sequenceDiagram
+    participant TTL
+    participant Ground
+    participant Space
+    TTL->>Ground: ImportFile(path): CID
+    TTL->>Ground: IsConnected(true)
+    Space->>Space: IsConnected(true)
+    TTL->>Ground: TransmitCID(CID)
+    Note over Ground, Space: Transfer of blocks
+    TTL->>Space: RemainingDagBlocks(CID): [Block]
+    Ground->>Space: If blocks remain, TransmitBlock(CID)
+    TTL->>Space: ExportDag(CID, path)
+    TTL->>Ground: IsConnected(false)
+    Space->>Space: IsConnected(false)
+```
+
 ## Meeting Notes
 
 [11/14/2022](meetings/2022-11-14.md)
