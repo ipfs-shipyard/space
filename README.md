@@ -120,21 +120,26 @@ Here are a few different scenarios this system is expected to perform in and dia
 
 In this scenario the ground station transmits a file to the spacecraft across a single pass.
 
+
+# TODO - Rename "ground" and "space" to reflect IPFS nodes
+
 ```mermaid
 sequenceDiagram
-    participant TTC
-    participant Ground
-    participant Space
-    TTC->>Ground: ImportFile(path): CID
-    TTC->>Ground: IsConnected(true)
-    Space->>Space: IsConnected(true)
-    TTC->>Ground: TransmitCID(CID)
-    Note over Ground, Space: Transfer of blocks
-    TTC->>Space: RemainingDagBlocks(CID): [Block]
-    Ground->>Space: If blocks remain, TransmitBlock(CID)
-    TTC->>Space: ExportDag(CID, path)
-    TTC->>Ground: IsConnected(false)
-    Space->>Space: IsConnected(false)
+    participant T as TT&C
+    participant G as Ground IPFS
+    participant S as Space IPFS
+    T->>G: ImportFile(path): CID
+    T->>G: IsConnected(true)
+    S->>S: IsConnected(true)
+    T->>G: TransmitCID(CID)
+    Note over G, S: Transfer of blocks
+    loop Until DAG is Complete
+        T->>S: RemainingDagBlocks(CID): [Block]
+        G->>S: If blocks remain, TransmitBlock(CID)
+    end
+    T->>S: ExportDag(CID, path)
+    T->>G: IsConnected(false)
+    S->>S: IsConnected(false)
 ```
 
 ### Space to Ground in a single pass
@@ -143,20 +148,22 @@ In this scenario, the ground station queries which DAGs are available in the spa
 
 ```mermaid
 sequenceDiagram
-    participant TTC
-    participant Ground
-    participant Space
-    TTC->>Ground: IsConnected(true)
-    Space->>Space: IsConnected(true)
-    TTC->>Space: RequestAvailableDags
-    Space->>TTC: AvailableDags([CID, Path])
-    Ground->>Space: RequestCID(CID)
-    Note over Ground, Space: Transfer of blocks
-    TTC->>Space: RemainingDagBlocks(CID): [Block]
-    Ground->>Space: If blocks remain, TransmitBlock(CID)
-    TTC->>Space: ExportDag(CID, path)
-    TTC->>Ground: IsConnected(false)
-    Space->>Space: IsConnected(false)
+    participant T as TT&C
+    participant G as Ground IPFS
+    participant S as Space IPFS
+    T->>G: IsConnected(true)
+    S->>S: IsConnected(true)
+    T->>S: RequestAvailableDags
+    S->>T: AvailableDags([CID, Path])
+    G->>S: RequestCID(CID)
+    Note over G, S: Transfer of blocks
+    loop Until DAG is Complete
+        T->>S: RemainingDagBlocks(CID): [Block]
+        G->>S: If blocks remain, TransmitBlock(CID)
+    end
+    T->>S: ExportDag(CID, path)
+    T->>G: IsConnected(false)
+    S->>S: IsConnected(false)
 ```
 
 ## Meeting Notes
