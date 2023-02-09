@@ -122,18 +122,18 @@ In this scenario the ground station transmits a file to the spacecraft across a 
 
 ```mermaid
 sequenceDiagram
-    participant TTL
+    participant TTC
     participant Ground
     participant Space
-    TTL->>Ground: ImportFile(path): CID
-    TTL->>Ground: IsConnected(true)
+    TTC->>Ground: ImportFile(path): CID
+    TTC->>Ground: IsConnected(true)
     Space->>Space: IsConnected(true)
-    TTL->>Ground: TransmitCID(CID)
+    TTC->>Ground: TransmitCID(CID)
     Note over Ground, Space: Transfer of blocks
-    TTL->>Space: RemainingDagBlocks(CID): [Block]
+    TTC->>Space: RemainingDagBlocks(CID): [Block]
     Ground->>Space: If blocks remain, TransmitBlock(CID)
-    TTL->>Space: ExportDag(CID, path)
-    TTL->>Ground: IsConnected(false)
+    TTC->>Space: ExportDag(CID, path)
+    TTC->>Ground: IsConnected(false)
     Space->>Space: IsConnected(false)
 ```
 
@@ -143,19 +143,19 @@ In this scenario, the ground station queries which DAGs are available in the spa
 
 ```mermaid
 sequenceDiagram
-    participant TTL
+    participant TTC
     participant Ground
     participant Space
-    TTL->>Ground: IsConnected(true)
+    TTC->>Ground: IsConnected(true)
     Space->>Space: IsConnected(true)
-    TTL->>Space: RequestAvailableDags
-    Space->>TTL: AvailableDags([CID, Path])
+    TTC->>Space: RequestAvailableDags
+    Space->>TTC: AvailableDags([CID, Path])
     Ground->>Space: RequestCID(CID)
     Note over Ground, Space: Transfer of blocks
-    TTL->>Space: RemainingDagBlocks(CID): [Block]
+    TTC->>Space: RemainingDagBlocks(CID): [Block]
     Ground->>Space: If blocks remain, TransmitBlock(CID)
-    TTL->>Space: ExportDag(CID, path)
-    TTL->>Ground: IsConnected(false)
+    TTC->>Space: ExportDag(CID, path)
+    TTC->>Ground: IsConnected(false)
     Space->>Space: IsConnected(false)
 ```
 
