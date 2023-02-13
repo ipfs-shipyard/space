@@ -191,6 +191,7 @@ sequenceDiagram
 
 ## Meeting Notes
 
-[11/14/2022](meetings/2022-11-14.md)
-[1/26/2023](meetings/2023-01-26.md)
-[2/6/2023](meetings/2023-02-06.md)
+* [2/13/2023](meetings/2023-02-13.md)
+* [2/6/2023](meetings/2023-02-06.md)
+* [11/14/2022](meetings/2022-11-14.md)
+* [1/26/2023](meetings/2023-01-26.md)
