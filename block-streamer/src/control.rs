@@ -42,7 +42,7 @@ pub async fn control(listen_addr: &String) -> Result<()> {
             Ok(Message::ApplicationAPI(ApplicationAPI::Receive { listen_addr })) => {
                 receive(&listen_addr).await?
             }
-            Ok(Message::ApplicationAPI(ApplicationAPI::Transmit { path, target_addr })) => {
+            Ok(Message::ApplicationAPI(ApplicationAPI::TransmitFile { path, target_addr })) => {
                 transmit(&PathBuf::from(path), &target_addr).await?
             }
             Ok(Message::DataProtocol(data_msg)) => {

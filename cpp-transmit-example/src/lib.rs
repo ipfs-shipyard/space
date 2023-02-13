@@ -17,7 +17,7 @@ pub extern "C" fn generate_transmit_msg(
         CStr::from_ptr(addr)
     };
 
-    let msg = Message::ApplicationAPI(ApplicationAPI::Transmit {
+    let msg = Message::ApplicationAPI(ApplicationAPI::TransmitFile {
         path: path_str.to_str().unwrap().to_owned(),
         target_addr: addr_str.to_str().unwrap().to_owned(),
     });
