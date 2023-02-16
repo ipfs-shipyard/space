@@ -111,7 +111,87 @@ This is an overview of the different pieces of software which will be built and 
     * Service - Ground stations are expected to have services or applications which will command the IPFS process via the `Application API` to perform functions such as _"store and upload a file"_ or _"request a CID from space"_.
     * Comms - Each ground station is expected to have a communication link with an existing interface, which IPFS will communicate over using the `Communications API`.
 
+
+## Usage Diagrams
+
+Here are a few different scenarios this system is expected to perform in and diagrams demonstrating how the various control messages will be used.
+
+### Ground to Space in single pass
+
+In this scenario ground wants to transmit a file to the satellite over IPFS. This describes transmitting a single file and is applicable to both single and multi-pass scenarios.
+
+```mermaid
+%%{init: { "sequence": { "noteAlign": "left"} } }%%
+
+sequenceDiagram
+    participant O as Operator
+    participant G as Ground IPFS
+    participant S as Space IPFS
+    Note over G,S: Both nodes begin listening for messages on boot
+    Note over O,S: Satellite comes into LOS
+    O->>G: IsConnected(true)
+    S->>S: IsConnected(true)
+    Note over O,G: Operator commands IPFS <br/> node to transmit a file
+    O->>G: TransmitFile(path)
+    Note over G,S: Transfer of blocks <br/> 1. File is chunked into blocks, each with a CID <br/> 2. Root block contains links to child CIDs <br/> 3. Blocks are transmitted over UDP-radio 
+    loop Until DAG is Complete
+        Note over G,S: Operator asks space IPFS node to verify that all <br/> CIDs are received.
+        G->>S: GetMissingDagBlocks(CID): [Block] <br/> 
+        Note over G,S: If empty response, all blocks are received
+        S->>G: MissingDagBlocks(): [CID]
+        Note over G,S: If blocks are missing, ground retransmits
+        G->>S: While blocks remain missing, <br/>TransmitBlock(CID)
+    end
+    Note over O,S: Operator asks space IPFS to write DAG to the file system
+    O->>S: ExportDag(CID, path)
+    Note over G,S: Satellite goes out of range
+    O->>G: IsConnected(false)
+    S->>S: IsConnected(false)
+```
+
+### Space to Ground in a single pass
+
+In this scenario the satellite has a file that the ground station would like transmitted down. This describes transmitting a single file and is applicable to both single and multi-pass scenarios. It also illustrates explicitly loading the file into IPFS storage before transmitting.
+
+```mermaid
+%%{init: { "sequence": { "noteAlign": "left"} } }%%
+
+sequenceDiagram
+    participant O as Operator
+    participant G as Ground IPFS
+    participant S as Space IPFS
+    Note over G,S: Both nodes begin listening for messages on boot
+    Note over O,S: Satellite comes into LOS
+    O->>G: IsConnected(true)
+    S->>S: IsConnected(true)
+    Note over O,S: Operator asks satellite to import payload into IPFS storage
+    O->>S: ImportFile(path)
+    Note over O,S: Satellite responds with CID after importing file
+    S->>O: FileImported(path, CID)
+    Note over O,S: Operator may also request list of DAGs available for transfer
+    O->>S: RequestAvailableDags
+    S->>O: AvailableDags([CID, Path])
+    Note over O,S: Operator requests transfer of imported DAG by CID
+    G->>S: RequestDag(CID)
+    Note over G, S: Transfer of blocks
+    loop Until DAG is complete
+        Note over G,S: Operator asks ground IPFS node to verify <br/> that all CIDs are received.
+        O->>G: GetMissingDagBlocks(CID): [CID] 
+        Note over O,G: If empty response, all blocks are received
+        G->>O: MissingDagBlocks(): [CID]
+        Note over O,S: If blocks are missing transmission is requested
+        O->>S: RequestBlock(CID)
+    end
+    Note over O,G: Operator asks ground IPFS to <br/> write DAG to the file system
+    O->>G: ExportDag(CID, path)
+    O->>G: IsConnected(false)
+    Note over O,S: Satellite goes out of range
+    S->>S: IsConnected(false)
+```
+
 ## Meeting Notes
 
-[11/14/2022](meetings/2022-11-14.md)
-[1/26/2023](meetings/2023-01-26.md)
+* [2/13/2023](meetings/2023-02-13.md)
+* [2/6/2023](meetings/2023-02-06.md)
+* [11/14/2022](meetings/2022-11-14.md)
+* [1/26/2023](meetings/2023-01-26.md)

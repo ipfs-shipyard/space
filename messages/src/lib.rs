@@ -2,6 +2,7 @@ use clap::Subcommand;
 use parity_scale_codec::Encode;
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
 use serde::Serialize;
+// use std::collections::BTreeMap;
 
 #[derive(Debug, ParityEncode, ParityDecode, Serialize)]
 pub enum Message {
@@ -32,18 +33,24 @@ pub enum TransmissionMessage {
 pub enum ApplicationAPI {
     /// Asks IPFS instance to import a file path into the local IPFS store
     ImportFile { path: String },
-    /// Asks IPFS instance to attempt to export a CID to a file path
-    ExportCid { cid: String },
+    /// Response message to ImportFile containing file's root CID
+    ImportFileResult { path: String, cid: String },
+    /// Asks IPFS instance to attempt to export a DAG to a file path
+    ExportDag { cid: String, path: String },
     /// Tells IPFS instance whether comms are connected or not
     IsConnected { is_connected: bool },
-    /// Asks IPFS instance if it has a given CID and all its child data
-    IsCidComplete { cid: String },
-    /// Chunks and transmits a file path to destination IP
-    Transmit { path: String, target_addr: String },
+    /// Asks IPFS instance if it has a DAG corresponding to the CID and all its child data
+    IsDagComplete { cid: String },
+    /// Chunks and initiates transmission of a file path to destination IP
+    TransmitFile { path: String, target_addr: String },
+    /// Initiates transmission of DAG corresponding to the given CID
+    TransmitDag { cid: String },
+    /// Initiates transmission of block corresponding to the given CID
+    TransmitBlock { cid: String },
     /// Listens on address for data and writes out files received
     Receive { listen_addr: String },
-    /// Verify that CID exists on system and is valid with data
-    ValidateCid { cid: String },
+    /// Verify that a block exists on the system and is valid
+    ValidateBlack { cid: String },
     /// Information about the next pass used for calculating
     /// data transfer parameters
     NextPassInfo {
@@ -51,14 +58,24 @@ pub enum ApplicationAPI {
         send_bytes: u32,
         receive_bytes: u32,
     },
-    /// Request for a CID
-    RequestCid { cid: String },
-    /// Request Available CIDs
-    RequestAvailableCids,
-    /// Advertise new CIDs w/ description...eventually
-    AvailableCids { cids: Vec<String> },
+    /// Request for a DAG
+    RequestDag { cid: String },
+    /// Request for a block
+    RequestBlock { cid: String },
+    /// Request Available Blocks
+    RequestAvailableBlocks,
+    /// Advertise all available blocks by CID
+    AvailableBlocks { cids: Vec<String> },
     /// Delete CID from local store
     DeleteCid { cid: String },
-    /// Request remaining CID pieces or children
-    RequestRemainingCidPieces { cid: String },
+    /// Request available DAGs
+    RequestAvailableDags,
+    /// Advertise available DAGs as a map of CID to filename
+    // AvailableDags { dags: BTreeMap<String, String> },
+    /// Delete block from local store
+    DeleteBlock { cid: String },
+    /// Request missing DAG blocks
+    GetMissingDagBlocks { cid: String },
+    /// List of missing block CIDs
+    MissingDagBlocks { blocks: Vec<String> },
 }
