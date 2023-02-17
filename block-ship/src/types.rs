@@ -214,6 +214,7 @@ mod tests {
             .filter_map(|mes| match mes {
                 TransmissionMessage::Chunk(chunk) => Some(chunk.clone()),
                 TransmissionMessage::Cid(_) => None,
+                TransmissionMessage::Block(_) => None,
             })
             .collect();
         let rebuilt = BlockWrapper::from_chunks(&cid, &chunks).unwrap();

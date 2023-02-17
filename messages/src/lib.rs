@@ -1,10 +1,12 @@
+pub mod chunking;
+
 use clap::Subcommand;
 use parity_scale_codec::Encode;
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
 use serde::Serialize;
 // use std::collections::BTreeMap;
 
-#[derive(Debug, ParityEncode, ParityDecode, Serialize)]
+#[derive(Clone, Debug, ParityEncode, ParityDecode, Serialize, Eq, PartialEq)]
 pub enum Message {
     DataProtocol(TransmissionMessage),
     ApplicationAPI(ApplicationAPI),
@@ -23,13 +25,21 @@ pub struct TransmissionChunk {
     pub data: Vec<u8>,
 }
 
-#[derive(Clone, Debug, ParityDecode, ParityEncode, Serialize)]
+#[derive(Eq, PartialEq, Clone, Debug, ParityDecode, ParityEncode, Serialize)]
+pub struct TransmissionBlock {
+    pub cid: Vec<u8>,
+    pub data: Vec<u8>,
+    pub links: Vec<Vec<u8>>,
+}
+
+#[derive(Clone, Debug, ParityDecode, ParityEncode, Serialize, Eq, PartialEq)]
 pub enum TransmissionMessage {
     Cid(Vec<u8>),
     Chunk(TransmissionChunk),
+    Block(TransmissionBlock),
 }
 
-#[derive(Clone, Debug, ParityEncode, ParityDecode, Serialize, Subcommand)]
+#[derive(Clone, Debug, ParityEncode, ParityDecode, Serialize, Subcommand, Eq, PartialEq)]
 pub enum ApplicationAPI {
     /// Asks IPFS instance to import a file path into the local IPFS store
     ImportFile { path: String },

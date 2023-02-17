@@ -1,7 +1,8 @@
 use anyhow::Result;
 use block_ship::{types::BlockWrapper, types::CID_MARKER_LEN};
+use cid::Cid;
 use local_storage::storage::{Storage, StoredBlock};
-use messages::{TransmissionChunk, TransmissionMessage};
+use messages::{TransmissionBlock, TransmissionChunk, TransmissionMessage};
 use std::collections::BTreeMap;
 use std::rc::Rc;
 use tracing::info;
@@ -62,10 +63,24 @@ impl Receiver {
         Ok(())
     }
 
+    pub fn handle_block_msg(&mut self, block: &TransmissionBlock) -> Result<()> {
+        let mut links = vec![];
+        for l in &block.links {
+            links.push(Cid::try_from(l.clone())?.to_string());
+        }
+        let stored_block = StoredBlock {
+            cid: Cid::try_from(block.cid.clone())?.to_string(),
+            data: block.data.clone(),
+            links,
+        };
+        self.storage.import_block(&stored_block)
+    }
+
     pub async fn handle_transmission_msg(&mut self, msg: TransmissionMessage) -> Result<()> {
         match msg {
             TransmissionMessage::Chunk(chunk) => self.handle_chunk_msg(chunk)?,
             TransmissionMessage::Cid(cid) => self.handle_cid_msg(cid)?,
+            TransmissionMessage::Block(block) => self.handle_block_msg(&block)?,
         }
         self.attempt_block_assembly()?;
         Ok(())

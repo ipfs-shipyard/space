@@ -1,7 +1,6 @@
 use anyhow::Result;
 use local_storage::provider::SqliteStorageProvider;
 use local_storage::storage::Storage;
-use parity_scale_codec::Decode;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -13,10 +12,11 @@ use tracing::{error, info};
 use crate::receive::receive;
 use crate::receiver::Receiver;
 use crate::transmit::{transmit, transmit_blocks};
+use messages::chunking::{MessageChunker, SimpleChunker};
 use messages::{ApplicationAPI, Message};
 
 // TODO: Make this configurable
-pub const MTU: usize = 1024; // 60 for radio
+pub const MTU: u16 = 60; // 60 for radio
 
 pub async fn control(listen_addr: &String) -> Result<()> {
     info!("Listening for messages on {}", listen_addr);
@@ -27,10 +27,11 @@ pub async fn control(listen_addr: &String) -> Result<()> {
     provider.setup()?;
     let storage = Rc::new(Storage::new(Box::new(provider)));
 
-    let mut buf = vec![0; MTU];
-    let mut real_len;
+    let mut buf = vec![0; usize::from(MTU)];
     let mut data_receiver = Receiver::new(Rc::clone(&storage));
     let mut sender_addr;
+
+    let mut chunker = SimpleChunker::new(MTU);
 
     let socket = UdpSocket::bind(&listen_address).await?;
 
@@ -39,7 +40,6 @@ pub async fn control(listen_addr: &String) -> Result<()> {
             loop {
                 if let Ok((len, sender)) = socket.try_recv_from(&mut buf) {
                     if len > 0 {
-                        real_len = len;
                         sender_addr = Some(sender);
                         break;
                     }
@@ -48,8 +48,7 @@ pub async fn control(listen_addr: &String) -> Result<()> {
             }
         }
 
-        let mut databuf = &buf[..real_len];
-        match Message::decode(&mut databuf) {
+        match chunker.unchunk(&buf) {
             Ok(Message::ApplicationAPI(ApplicationAPI::Receive { listen_addr })) => {
                 receive(&listen_addr).await?
             }
@@ -70,7 +69,9 @@ pub async fn control(listen_addr: &String) -> Result<()> {
                     cid: root_cid.to_string(),
                 });
                 if let Some(sender_addr) = sender_addr {
-                    socket.send_to(&response.to_bytes(), sender_addr).await?;
+                    for chunk in chunker.chunk(response)? {
+                        socket.send_to(&chunk, sender_addr).await?;
+                    }
                 }
             }
             Ok(Message::ApplicationAPI(ApplicationAPI::ExportDag { cid, path })) => {
@@ -86,7 +87,9 @@ pub async fn control(listen_addr: &String) -> Result<()> {
                 if let Some(sender_addr) = sender_addr {
                     let response =
                         Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids });
-                    socket.send_to(&response.to_bytes(), sender_addr).await?;
+                    for chunk in chunker.chunk(response)? {
+                        socket.send_to(&chunk, sender_addr).await?;
+                    }
                 }
             }
             Ok(Message::DataProtocol(data_msg)) => {
