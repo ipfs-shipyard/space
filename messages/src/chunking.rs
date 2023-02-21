@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 pub trait MessageChunker {
     fn chunk(&self, message: Message) -> Result<Vec<Vec<u8>>>;
-    fn unchunk(&mut self, data: &[u8]) -> Result<Message>;
+    fn unchunk(&mut self, data: &[u8]) -> Result<Option<Message>>;
 }
 
 #[derive(Clone, Debug, ParityDecode, ParityEncode)]
@@ -48,10 +48,8 @@ impl SimpleChunker {
 
     fn recv_chunk(&mut self, chunk: &SimpleChunk) -> Result<()> {
         if let Some(msg_map) = self.recv_buffer.get_mut(&chunk.message_id) {
-            println!("new chunk for existing message, add to map");
             msg_map.insert(chunk.sequence_number, chunk.clone());
         } else {
-            println!("new message new chunk, create maps");
             let mut msg_map: BTreeMap<u16, SimpleChunk> = BTreeMap::new();
             msg_map.insert(chunk.sequence_number, chunk.clone());
             self.recv_buffer.insert(chunk.message_id, msg_map);
@@ -61,23 +59,20 @@ impl SimpleChunker {
         Ok(())
     }
 
-    fn attempt_msg_assembly(&mut self) -> Result<Message> {
-        println!("attempt msg assembly {}", self.last_recv_msg_id);
+    fn attempt_msg_assembly(&mut self) -> Result<Option<Message>> {
         if let Some(msg_map) = self.recv_buffer.get(&self.last_recv_msg_id) {
-            println!("found a msg map");
             let chunks = msg_map.clone().into_values().collect::<Vec<SimpleChunk>>();
-            println!("chunks: {:?}", chunks);
             // First see if we have a final chunk
             if let Some(final_chunk) = chunks.iter().find(|chunk| chunk.final_chunk) {
                 // Then see if the number of chunks matches the max sequence number
                 if usize::from(final_chunk.sequence_number) == (chunks.len() - 1) {
                     // Now actually attempt to assemble the message
-                    return SimpleChunker::msg_unchunk(&chunks);
+                    return Ok(Some(SimpleChunker::msg_unchunk(&chunks)?));
                 }
             }
         }
 
-        bail!("No message found")
+        Ok(None)
     }
 
     fn msg_unchunk(data: &[SimpleChunk]) -> Result<Message> {
@@ -115,13 +110,12 @@ impl MessageChunker for SimpleChunker {
         Ok(chunks.iter().map(|c| c.encode()).collect::<Vec<Vec<u8>>>())
     }
 
-    fn unchunk(&mut self, data: &[u8]) -> Result<Message> {
+    fn unchunk(&mut self, data: &[u8]) -> Result<Option<Message>> {
         let mut databuf = &data[..data.len()];
         match SimpleChunk::decode(&mut databuf) {
             Ok(chunk) => {
-                println!("decode chunk");
                 self.recv_chunk(&chunk)?;
-                self.attempt_msg_assembly()
+                Ok(self.attempt_msg_assembly()?)
             }
             Err(e) => bail!("Failed to decode chunk {e:?}"),
         }

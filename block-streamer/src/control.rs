@@ -7,7 +7,7 @@ use std::rc::Rc;
 use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::time::sleep;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::receive::receive;
 use crate::receiver::Receiver;
@@ -49,54 +49,59 @@ pub async fn control(listen_addr: &String) -> Result<()> {
         }
 
         match chunker.unchunk(&buf) {
-            Ok(Message::ApplicationAPI(ApplicationAPI::Receive { listen_addr })) => {
-                receive(&listen_addr).await?
-            }
-            Ok(Message::ApplicationAPI(ApplicationAPI::TransmitFile { path, target_addr })) => {
-                transmit(&PathBuf::from(path), &target_addr).await?
-            }
-            Ok(Message::ApplicationAPI(ApplicationAPI::TransmitDag { cid, target_addr })) => {
-                let root_block = storage.get_block_by_cid(&cid)?;
-                let blocks = storage.get_all_blocks_under_cid(&cid)?;
-                let mut all_blocks = vec![root_block];
-                all_blocks.extend(blocks);
-                transmit_blocks(&all_blocks, &target_addr).await?;
-            }
-            Ok(Message::ApplicationAPI(ApplicationAPI::ImportFile { path })) => {
-                let root_cid = storage.import_path(&PathBuf::from(path.to_owned())).await?;
-                let response = Message::ApplicationAPI(ApplicationAPI::FileImported {
-                    path: path.to_string(),
-                    cid: root_cid.to_string(),
-                });
-                if let Some(sender_addr) = sender_addr {
-                    for chunk in chunker.chunk(response)? {
-                        socket.send_to(&chunk, sender_addr).await?;
+            Ok(Some(msg)) => match msg {
+                Message::ApplicationAPI(ApplicationAPI::Receive { listen_addr }) => {
+                    receive(&listen_addr).await?
+                }
+                Message::ApplicationAPI(ApplicationAPI::TransmitFile { path, target_addr }) => {
+                    transmit(&PathBuf::from(path), &target_addr).await?
+                }
+                Message::ApplicationAPI(ApplicationAPI::TransmitDag { cid, target_addr }) => {
+                    let root_block = storage.get_block_by_cid(&cid)?;
+                    let blocks = storage.get_all_blocks_under_cid(&cid)?;
+                    let mut all_blocks = vec![root_block];
+                    all_blocks.extend(blocks);
+                    transmit_blocks(&all_blocks, &target_addr).await?;
+                }
+                Message::ApplicationAPI(ApplicationAPI::ImportFile { path }) => {
+                    let root_cid = storage.import_path(&PathBuf::from(path.to_owned())).await?;
+                    let response = Message::ApplicationAPI(ApplicationAPI::FileImported {
+                        path: path.to_string(),
+                        cid: root_cid.to_string(),
+                    });
+                    if let Some(sender_addr) = sender_addr {
+                        for chunk in chunker.chunk(response)? {
+                            socket.send_to(&chunk, sender_addr).await?;
+                        }
                     }
                 }
-            }
-            Ok(Message::ApplicationAPI(ApplicationAPI::ExportDag { cid, path })) => {
-                storage.export_cid(&cid, &PathBuf::from(path)).await?
-            }
-            Ok(Message::ApplicationAPI(ApplicationAPI::RequestAvailableBlocks)) => {
-                let raw_cids = storage.list_available_cids()?;
-                let cids = raw_cids
-                    .iter()
-                    .map(|c| c.to_string())
-                    .collect::<Vec<String>>();
+                Message::ApplicationAPI(ApplicationAPI::ExportDag { cid, path }) => {
+                    storage.export_cid(&cid, &PathBuf::from(path)).await?
+                }
+                Message::ApplicationAPI(ApplicationAPI::RequestAvailableBlocks) => {
+                    let raw_cids = storage.list_available_cids()?;
+                    let cids = raw_cids
+                        .iter()
+                        .map(|c| c.to_string())
+                        .collect::<Vec<String>>();
 
-                if let Some(sender_addr) = sender_addr {
-                    let response =
-                        Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids });
-                    for chunk in chunker.chunk(response)? {
-                        socket.send_to(&chunk, sender_addr).await?;
+                    if let Some(sender_addr) = sender_addr {
+                        let response =
+                            Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids });
+                        for chunk in chunker.chunk(response)? {
+                            socket.send_to(&chunk, sender_addr).await?;
+                        }
                     }
                 }
-            }
-            Ok(Message::DataProtocol(data_msg)) => {
-                data_receiver.handle_transmission_msg(data_msg).await?;
-            }
-            Ok(message) => {
-                info!("Received unhandled message: {:?}", message);
+                Message::DataProtocol(data_msg) => {
+                    data_receiver.handle_transmission_msg(data_msg).await?;
+                }
+                message => {
+                    info!("Received unhandled message: {:?}", message);
+                }
+            },
+            Ok(None) => {
+                debug!("No msg found yet");
             }
             Err(err) => {
                 error!("{err}");

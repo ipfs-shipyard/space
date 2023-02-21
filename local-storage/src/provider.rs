@@ -71,7 +71,7 @@ impl SqliteStorageProvider {
 impl StorageProvider for SqliteStorageProvider {
     fn import_block(&self, block: &StoredBlock) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO blocks (cid, data) VALUES (?1, ?2)",
+            "INSERT OR IGNORE INTO blocks (cid, data) VALUES (?1, ?2)",
             (&block.cid, &block.data),
         )?;
         // TODO: Should we have another indicator for root blocks that isn't just the number of links?
@@ -87,14 +87,14 @@ impl StorageProvider for SqliteStorageProvider {
                     WHERE cid == (?1)",
                     [link_cid],
                     |row| {
-                        let id: u32 = row.get(0).unwrap();
+                        let id: u32 = row.get(0)?;
                         Ok(id)
                     },
                 ) {
                     maybe_block_id = Some(block_id);
                 }
                 self.conn.execute(
-                    "INSERT INTO links (root_cid, block_cid, block_id) VALUES(?1, ?2, ?3)",
+                    "INSERT OR IGNORE INTO links (root_cid, block_cid, block_id) VALUES(?1, ?2, ?3)",
                     (&block.cid, link_cid, maybe_block_id),
                 )?;
             }
@@ -139,8 +139,8 @@ impl StorageProvider for SqliteStorageProvider {
             WHERE cid == (?1)",
             [&cid],
             |row| {
-                let cid_str: String = row.get(0).unwrap();
-                let data: Vec<u8> = row.get(1).unwrap();
+                let cid_str: String = row.get(0)?;
+                let data: Vec<u8> = row.get(1)?;
                 Ok(StoredBlock {
                     cid: cid_str,
                     data,
