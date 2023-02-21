@@ -21,7 +21,7 @@ pub(crate) struct MessageContainer {
 
 impl MessageContainer {
     pub fn new(message: Message) -> Self {
-        let hash = Code::Blake2s128.digest(&message.clone().to_bytes());
+        let hash = Code::Blake2s128.digest(&message.to_bytes());
         let cid = Cid::new_v1(0x55, hash);
         MessageContainer {
             cid: cid.to_bytes(),
@@ -35,7 +35,7 @@ impl MessageContainer {
         Cid::new_v1(0x55, hash)
     }
 
-    pub fn to_bytes(self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         self.encode()
     }
 
@@ -61,7 +61,7 @@ pub enum Message {
 }
 
 impl Message {
-    pub fn to_bytes(self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         self.encode()
     }
 }
