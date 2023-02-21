@@ -61,12 +61,18 @@ impl SimpleChunker {
 
     fn attempt_msg_assembly(&mut self) -> Result<Option<Message>> {
         if let Some(msg_map) = self.recv_buffer.get(&self.last_recv_msg_id) {
+            // The BTreeMap docs tell us that into_values will be an iter sorted by key
+            // In this case the key is the sequence_number, so in a complete set of chunks
+            // that means the last item in the iter (or now vec) should be the "final chunk"
             let chunks = msg_map.clone().into_values().collect::<Vec<SimpleChunk>>();
-            // First see if we have a final chunk
-            if let Some(final_chunk) = chunks.iter().find(|chunk| chunk.final_chunk) {
-                // Then see if the number of chunks matches the max sequence number
-                if usize::from(final_chunk.sequence_number) == (chunks.len() - 1) {
-                    // Now actually attempt to assemble the message
+            // So to verify we have all message chunks...First grab the last chunk in the list
+            if let Some(last_chunk) = chunks.last() {
+                // Second, check if the last chunk has final_chunk set
+                if last_chunk.final_chunk 
+                // Lastly, check if the final chunk's sequence number matches the number of chunks
+                && (usize::from(last_chunk.sequence_number) == (chunks.len() - 1)) {
+                    // If all those checks pass, then we *should* have all the chunks in order
+                    // Now we attempt to assemble the message
                     return Ok(Some(SimpleChunker::msg_unchunk(&chunks)?));
                 }
             }
@@ -179,7 +185,7 @@ mod tests {
 
         assert_eq!(chunks.len(), 1);
 
-        let unchunked_message = chunker.unchunk(chunks.first().unwrap()).unwrap();
+        let unchunked_message = chunker.unchunk(chunks.first().unwrap()).unwrap().unwrap();
         assert_eq!(msg, unchunked_message);
     }
 
@@ -197,10 +203,10 @@ mod tests {
         let last_chunk = chunks.pop().unwrap();
 
         for chunk in chunks {
-            let unchunk = chunker.unchunk(&chunk);
-            assert!(unchunk.is_err());
+            let unchunk = chunker.unchunk(&chunk).unwrap();
+            assert!(unchunk.is_none());
         }
-        let unchunked_msg = chunker.unchunk(&last_chunk).unwrap();
+        let unchunked_msg = chunker.unchunk(&last_chunk).unwrap().unwrap();
         assert_eq!(unchunked_msg, msg);
     }
 
@@ -222,10 +228,10 @@ mod tests {
         let last_chunk = chunks.pop().unwrap();
 
         for chunk in chunks {
-            let unchunk = chunker.unchunk(&chunk);
-            assert!(unchunk.is_err());
+            let unchunk = chunker.unchunk(&chunk).unwrap();
+            assert!(unchunk.is_none());
         }
-        let unchunked_msg = chunker.unchunk(&last_chunk).unwrap();
+        let unchunked_msg = chunker.unchunk(&last_chunk).unwrap().unwrap();
         assert_eq!(unchunked_msg, msg);
     }
 
@@ -242,10 +248,10 @@ mod tests {
         let msg_one_chunks = chunker.chunk(msg_one.clone()).unwrap();
         let msg_two_chunks = chunker.chunk(msg_two.clone()).unwrap();
 
-        let unchunked_message = chunker.unchunk(msg_one_chunks.first().unwrap()).unwrap();
+        let unchunked_message = chunker.unchunk(msg_one_chunks.first().unwrap()).unwrap().unwrap();
         assert_eq!(msg_one, unchunked_message);
 
-        let unchunked_message = chunker.unchunk(msg_two_chunks.first().unwrap()).unwrap();
+        let unchunked_message = chunker.unchunk(msg_two_chunks.first().unwrap()).unwrap().unwrap();
         assert_eq!(msg_two, unchunked_message);
     }
 
@@ -269,10 +275,11 @@ mod tests {
         let mut found_msgs = 0;
         for chunk in chunks {
             match chunker.unchunk(&chunk) {
-                Ok(msg) => {
+                Ok(Some(msg)) => {
                     assert!([&msg_one, &msg_two].contains(&&msg));
                     found_msgs = found_msgs + 1;
-                }
+                },
+                Ok(None) => {},
                 Err(_) => {}
             }
         }
@@ -301,10 +308,11 @@ mod tests {
         let mut found_msgs = 0;
         for chunk in chunks {
             match chunker.unchunk(&chunk) {
-                Ok(msg) => {
+                Ok(Some(msg)) => {
                     assert!([&msg_one, &msg_two].contains(&&msg));
                     found_msgs = found_msgs + 1;
                 }
+                Ok(None) => {}
                 Err(_) => {}
             }
         }
@@ -339,10 +347,11 @@ mod tests {
         let mut found_msgs = 0;
         for chunk in chunks {
             match chunker.unchunk(&chunk) {
-                Ok(msg) => {
+                Ok(Some(msg)) => {
                     assert!(msgs.contains(&msg));
                     found_msgs = found_msgs + 1;
                 }
+                Ok(None) => {}
                 Err(_) => {}
             }
         }
