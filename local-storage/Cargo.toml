@@ -1,0 +1,19 @@
+[package]
+name = "local-storage"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1"
+cid = "0.9"
+futures = "0.3.21"
+iroh-unixfs = "0.2.0"
+rusqlite = { version = "0.28.0", features = ["bundled"] }
+thiserror = "1"
+tokio = "1"
+tracing = "0.1"
+
+[dev-dependencies]
+assert_fs = "1"

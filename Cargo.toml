@@ -7,5 +7,6 @@ members = [
     "car-utility",
     "local-dev-environment/desktop/radio-service",
     "messages",
-    "cpp-transmit-example"
+    "cpp-transmit-example",
+    "local-storage"
 ]

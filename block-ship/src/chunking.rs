@@ -7,6 +7,7 @@ use iroh_unixfs::{
     builder::{File, FileBuilder},
     Block,
 };
+use local_storage::storage::StoredBlock;
 use messages::TransmissionMessage;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
@@ -41,7 +42,7 @@ pub async fn path_to_chunks(path: &PathBuf) -> Result<Vec<TransmissionMessage>> 
     blocks.shuffle(&mut thread_rng());
 
     for block in blocks {
-        let wrapper = BlockWrapper::from_block(block)?;
+        let wrapper = BlockWrapper::from(block);
         let chunks = wrapper.to_chunks()?;
         for c in chunks {
             payloads.push(c);
@@ -49,6 +50,11 @@ pub async fn path_to_chunks(path: &PathBuf) -> Result<Vec<TransmissionMessage>> 
     }
 
     Ok(payloads)
+}
+
+pub fn stored_block_to_chunks(block: &StoredBlock) -> Result<Vec<TransmissionMessage>> {
+    let wrapper = BlockWrapper::try_from(block)?;
+    wrapper.to_chunks()
 }
 
 pub async fn chunks_to_path(

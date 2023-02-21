@@ -1,9 +1,11 @@
 use crate::control::MTU;
 use crate::receiver::Receiver;
 use anyhow::Result;
+use local_storage::{provider::SqliteStorageProvider, storage::Storage};
 use messages::Message;
 use parity_scale_codec::Decode;
 use std::net::SocketAddr;
+use std::rc::Rc;
 use std::thread::sleep;
 use std::time::Duration;
 use tokio::net::UdpSocket;
@@ -15,7 +17,13 @@ pub async fn receive(listen_addr: &String) -> Result<()> {
 
     let mut buf = vec![0; MTU];
     let mut real_len;
-    let mut data_receiver = Receiver::new();
+
+    // Setup storage
+    let provider = SqliteStorageProvider::new("storage.db")?;
+    provider.setup()?;
+    let storage = Rc::new(Storage::new(Box::new(provider)));
+
+    let mut data_receiver = Receiver::new(storage);
 
     let socket = UdpSocket::bind(&listen_address).await?;
     loop {
@@ -35,7 +43,6 @@ pub async fn receive(listen_addr: &String) -> Result<()> {
         match Message::decode(&mut databuf) {
             Ok(Message::DataProtocol(msg)) => {
                 data_receiver.handle_transmission_msg(msg).await?;
-                data_receiver.attempt_tree_assembly().await?;
             }
             Ok(other) => {
                 warn!("Received API message: {:?}", other)
