@@ -31,7 +31,7 @@ impl Cli {
 
         if self.listen {
             let mut buf = vec![0; 1024];
-            if let Ok(_) = socket.recv(&mut buf).await {
+            if socket.recv(&mut buf).await.is_ok() {
                 match chunker.unchunk(&buf) {
                     Ok(msg) => println!("{msg:?}"),
                     Err(e) => println!("{e:?}"),

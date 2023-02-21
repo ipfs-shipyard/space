@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 pub trait MessageChunker {
     fn chunk(&self, message: Message) -> Result<Vec<Vec<u8>>>;
-    fn unchunk(&mut self, data: &Vec<u8>) -> Result<Message>;
+    fn unchunk(&mut self, data: &[u8]) -> Result<Message>;
 }
 
 #[derive(Clone, Debug, ParityDecode, ParityEncode)]
@@ -80,7 +80,7 @@ impl SimpleChunker {
         bail!("No message found")
     }
 
-    fn msg_unchunk(data: &Vec<SimpleChunk>) -> Result<Message> {
+    fn msg_unchunk(data: &[SimpleChunk]) -> Result<Message> {
         let mut all_data = vec![];
         data.iter().for_each(|c| all_data.extend(c.data.clone()));
         let mut databuf = &all_data[..all_data.len()];
@@ -104,24 +104,24 @@ impl MessageChunker for SimpleChunker {
                     data: data.to_vec(),
                     final_chunk: false,
                 };
-                seq_num = seq_num + 1;
+                seq_num += 1;
                 chunk
             })
             .collect::<Vec<SimpleChunk>>();
         // Set final to true in last chunk
         let mut last_chunk = chunks.last_mut().unwrap();
-        (*last_chunk).final_chunk = true;
+        last_chunk.final_chunk = true;
         // Encode all the chunks
         Ok(chunks.iter().map(|c| c.encode()).collect::<Vec<Vec<u8>>>())
     }
 
-    fn unchunk(&mut self, data: &Vec<u8>) -> Result<Message> {
+    fn unchunk(&mut self, data: &[u8]) -> Result<Message> {
         let mut databuf = &data[..data.len()];
         match SimpleChunk::decode(&mut databuf) {
             Ok(chunk) => {
                 println!("decode chunk");
                 self.recv_chunk(&chunk)?;
-                return Ok(self.attempt_msg_assembly()?);
+                self.attempt_msg_assembly()
             }
             Err(e) => bail!("Failed to decode chunk {e:?}"),
         }
