@@ -1,4 +1,4 @@
-use crate::Message;
+use crate::{Message, MessageContainer};
 
 use anyhow::{bail, Result};
 use parity_scale_codec::{Decode, Encode};
@@ -85,7 +85,8 @@ impl SimpleChunker {
         let mut all_data = vec![];
         data.iter().for_each(|c| all_data.extend(c.data.clone()));
         let mut databuf = &all_data[..all_data.len()];
-        Ok(Message::decode(&mut databuf)?)
+        let container = MessageContainer::from_bytes(&mut databuf)?;
+        Ok(container.message)
     }
 }
 
@@ -93,8 +94,10 @@ impl MessageChunker for SimpleChunker {
     fn chunk(&self, message: Message) -> Result<Vec<Vec<u8>>> {
         let msg_id = rand::random::<u16>();
         let mut seq_num = 0;
-        // Convert message into raw bytes
-        let message_bytes = message.to_bytes();
+        // Create container around message
+        let container = MessageContainer::new(message);
+        // Convert container into raw bytes
+        let message_bytes = container.to_bytes();
         // Break bytes up into mtu-sized simple chunks
         let mut chunks = message_bytes
             .chunks(usize::from(self.mtu - CHUNK_OVERHEAD))
@@ -356,5 +359,28 @@ mod tests {
             }
         }
         assert_eq!(found_msgs, msgs.len());
+    }
+
+    // Testing scenario where a chunk is corrupted and verification on assembly fails
+    #[test]
+    pub fn test_corrupt_data_fails_verification() {
+        let msg = Message::ApplicationAPI(ApplicationAPI::AvailableBlocks {
+            cids: vec!["hello i am a CID".to_string(); 10],
+        });
+        let mut chunker = SimpleChunker::new(60);
+        let mut chunks = chunker.chunk(msg.clone()).unwrap();
+
+        assert_eq!(chunks.len(), 4);
+
+        let mut last_chunk = chunks.pop().unwrap();
+        // Adding corruption
+        last_chunk[10] = 0x55;
+
+        for chunk in chunks {
+            let unchunk = chunker.unchunk(&chunk).unwrap();
+            assert!(unchunk.is_none());
+        }
+        let unchunked_msg = chunker.unchunk(&last_chunk);
+        assert!(unchunked_msg.is_err());
     }
 }
