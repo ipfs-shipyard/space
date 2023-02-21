@@ -11,7 +11,7 @@ use tracing::{debug, error, info};
 
 use crate::receive::receive;
 use crate::receiver::Receiver;
-use crate::transmit::{transmit, transmit_blocks};
+use crate::transmit::transmit_blocks;
 use messages::chunking::{MessageChunker, SimpleChunker};
 use messages::{ApplicationAPI, Message};
 
@@ -54,7 +54,12 @@ pub async fn control(listen_addr: &String) -> Result<()> {
                     receive(&listen_addr).await?
                 }
                 Message::ApplicationAPI(ApplicationAPI::TransmitFile { path, target_addr }) => {
-                    transmit(&PathBuf::from(path), &target_addr).await?
+                    let cid = storage.import_path(&PathBuf::from(path.to_owned())).await?;
+                    let root_block = storage.get_block_by_cid(&cid)?;
+                    let blocks = storage.get_all_blocks_under_cid(&cid)?;
+                    let mut all_blocks = vec![root_block];
+                    all_blocks.extend(blocks);
+                    transmit_blocks(&all_blocks, &target_addr).await?;
                 }
                 Message::ApplicationAPI(ApplicationAPI::TransmitDag { cid, target_addr }) => {
                     let root_block = storage.get_block_by_cid(&cid)?;
