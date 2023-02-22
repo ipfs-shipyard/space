@@ -2,7 +2,30 @@
 
 This project isn't currently versioned, so for now each PR will act as a "version".
 
-## [ipfs-shipyard/space#21] - 2023-02-16
+## [ipfs-shipyard/space#24](https://github.com/ipfs-shipyard/space/pull/24) - 2023-02-22
+
+### Added
+
+- Created a general chunking struct, `SimpleChunker`, which handles chunking and assembly of any message of type `Message`. This includes a new `MessageContainer` struct which is used in the chunking of `Message`s. The `MessageContainer` essentially becomes an IPLD block containing a `Message`, which allows for verification using the `Cid` on assembly.
+- The `GetMissingDagBlocks` API is now implemented based on what is currently in storage.
+
+### Modified
+
+- Transmit and receive functionality has been modified to use the `SimpleChunker` for the transfer of Blocks. All other API communication has been modified to use the `SimpleChunker` for API messages.
+- The `control` functionality in the `block-streamer` server has been renamed to `server` to better reflect it's general purpose "server-like" functionality. The code was also split up a bit to improve readability and error handling.
+
+### Removed
+
+- Any transmit or receive functionality dealing directly with chunks of blocks has been removed, along with associated tests.
+- The `block-ship` functionality & crate was no longer needed after general message chunking was introduced.
+
+### Fixed
+
+- The sqlite storage provider now correctly handles importing duplicate blocks without crashing.
+- The `get_missing_cid_blocks` functionality now correctly returns an error if the requested `cid` has no associated blocks (in that case we assume we haven't encountered that block yet).
+- Fixed several cases where unwraps would crash the `block-streamer` on errors.
+
+## [ipfs-shipyard/space#21](https://github.com/ipfs-shipyard/space/pull/21) - 2023-02-16
 
 ### Added
 
