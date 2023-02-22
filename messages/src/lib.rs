@@ -67,13 +67,6 @@ impl Message {
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, ParityDecode, ParityEncode, Serialize)]
-pub struct TransmissionChunk {
-    pub cid_marker: Vec<u8>,
-    pub chunk_offset: u16,
-    pub data: Vec<u8>,
-}
-
-#[derive(Eq, PartialEq, Clone, Debug, ParityDecode, ParityEncode, Serialize)]
 pub struct TransmissionBlock {
     pub cid: Vec<u8>,
     pub data: Vec<u8>,
@@ -82,8 +75,6 @@ pub struct TransmissionBlock {
 
 #[derive(Clone, Debug, ParityDecode, ParityEncode, Serialize, Eq, PartialEq)]
 pub enum TransmissionMessage {
-    Cid(Vec<u8>),
-    Chunk(TransmissionChunk),
     Block(TransmissionBlock),
 }
 

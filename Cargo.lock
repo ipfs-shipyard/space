@@ -360,31 +360,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "block-ship"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytes",
- "cid 0.9.0",
- "futures",
- "iroh-unixfs",
- "local-storage",
- "messages",
- "parity-scale-codec",
- "parity-scale-codec-derive",
- "rand 0.8.5",
- "serde",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "block-streamer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_fs",
- "block-ship",
  "bytes",
  "cid 0.9.0",
  "clap",
