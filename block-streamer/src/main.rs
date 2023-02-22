@@ -3,10 +3,10 @@ mod receive;
 mod receiver;
 mod transmit;
 
-use crate::control::control;
 use crate::receive::receive;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use control::Server;
 use tracing::Level;
 
 #[derive(Parser, Debug, Clone)]
@@ -32,7 +32,10 @@ impl Cli {
     pub async fn run(&self) -> Result<()> {
         match &self.command {
             Commands::Receive { listen_address } => receive(listen_address).await?,
-            Commands::Control { listen_address } => control(listen_address).await?,
+            Commands::Control { listen_address } => {
+                let mut server = Server::new(listen_address).await?;
+                server.listen().await?
+            }
         }
         Ok(())
     }

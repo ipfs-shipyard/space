@@ -42,9 +42,12 @@ pub async fn transmit_blocks(blocks: &[StoredBlock], target_addr: &String) -> Re
         .collect();
 
     for block in data {
+        info!(
+            "Transmitting block {}",
+            Cid::try_from(block.cid.clone()).unwrap().to_string()
+        );
         let msg = Message::DataProtocol(TransmissionMessage::Block(block));
         for chunk in chunker.chunk(msg)? {
-            info!("Transmitting {} bytes", chunk.len());
             socket.send_to(&chunk, target_address).await?;
         }
     }

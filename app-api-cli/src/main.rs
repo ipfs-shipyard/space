@@ -3,7 +3,9 @@ use clap::{arg, Parser};
 use messages::chunking::{MessageChunker, SimpleChunker};
 use messages::{ApplicationAPI, Message};
 use std::net::SocketAddr;
+use std::time::Duration;
 use tokio::net::UdpSocket;
+use tokio::time::sleep;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(version, long_about = None, propagate_version = true)]
@@ -30,12 +32,19 @@ impl Cli {
         }
 
         if self.listen {
-            let mut buf = vec![0; 1024];
-            if socket.recv(&mut buf).await.is_ok() {
-                match chunker.unchunk(&buf) {
-                    Ok(msg) => println!("{msg:?}"),
-                    Err(e) => println!("{e:?}"),
+            loop {
+                let mut buf = vec![0; 1024];
+                if socket.recv(&mut buf).await.is_ok() {
+                    match chunker.unchunk(&buf) {
+                        Ok(Some(msg)) => {
+                            println!("{msg:?}");
+                            return Ok(());
+                        }
+                        Ok(None) => {}
+                        Err(e) => println!("{e:?}"),
+                    }
                 }
+                sleep(Duration::from_millis(10)).await;
             }
         }
         Ok(())
