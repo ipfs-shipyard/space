@@ -1,5 +1,5 @@
-use crate::control::MTU;
 use crate::receiver::Receiver;
+use crate::server::MTU;
 use anyhow::Result;
 use local_storage::{provider::SqliteStorageProvider, storage::Storage};
 use messages::Message;

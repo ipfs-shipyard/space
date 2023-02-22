@@ -75,7 +75,7 @@ impl Server {
     }
 
     async fn handle_message(&mut self, message: Message) -> Result<()> {
-        Ok(match message {
+        match message {
             Message::ApplicationAPI(ApplicationAPI::Receive { listen_addr }) => {
                 receive(&listen_addr).await?
             }
@@ -147,6 +147,7 @@ impl Server {
             message => {
                 info!("Received unhandled message: {:?}", message);
             }
-        })
+        }
+        Ok(())
     }
 }

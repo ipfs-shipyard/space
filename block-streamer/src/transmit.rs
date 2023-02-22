@@ -15,7 +15,7 @@ pub async fn transmit_blocks(blocks: &[StoredBlock], target_addr: &String) -> Re
     let target_address: SocketAddr = target_addr.parse()?;
     let bind_address: SocketAddr = "127.0.0.1:0".parse()?;
     let socket = UdpSocket::bind(&bind_address).await?;
-    let chunker = SimpleChunker::new(crate::control::MTU);
+    let chunker = SimpleChunker::new(crate::server::MTU);
 
     let data: Vec<TransmissionBlock> = blocks
         .iter()
