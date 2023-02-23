@@ -61,13 +61,24 @@ Milestone 7 focuses on implementing minimum retry methods for reliability.
 - [ ] **PoC - Implement baseline metrics** - Implement a baseline set of metrics, perhaps [this list](https://github.com/n0-computer/test-plans/tree/main/movethebytes/data-transfer#metrics) suggested by move the bytes, and build into logging of block-ship transmitter and receiver.
 - [ ] **MVP v0.7 - Demonstrate block-ship retransmit over radio** - Establish a block-ship session over the dev radio link at a speed which ensures minor packet loss and tune the re-transmission mechanism to overcome the packet loss.
 
-## Future Milestones
+## Future Epics
 
-- **PoC - Explore various satellite profiles** - Satellites operate across a variety of scenarios (earth observing, communications, navigation, weather, etc), each of which may require a different operational profile. Research these common scenarios, and their associated operational profiles, and create simulation scenarios to test against IPFS software.
-- **Poc - Explore multi-block specification techniques** - Explore how to specify multiple blocks for request/transmission, such as by CID, sub-graph, bloom filter, etc.
+- **Productionize Software** - All current milestones have been building out MVP-grade software, which will need to be made production grade. The software should be run through a profiler on several scenarios to check for excess memory usage. Memory allocation should be analyzed and optimized. All key data transfer paths should be instrumented to collect metrics and measure performance. APIs and communications interfaces need to be examined for vulnerabilities. Tests at scale should be run to determine performance limits inside of a variety of realistic simulated environments.
 
-## Future ideas
+- **Optimize Data Transfer Protocol** - Explore more sophisticated methods for exchanging data. Investigate chunking methods tuned to specific data types to increase the chance of deduplicating data or allow for meaningful partial transfers. Explore how to specify multiple blocks for request/transmission, such as by CID, sub-graph, bloom filter, etc. Intelligently plan which data to transfer based on passes within constellations.
 
-- Utilizing [testground](https://docs.testground.ai/) and [containernet](https://containernet.github.io/) for larger scale simulations
-- Explore using the [Space Packet Protocol](https://egit.irs.uni-stuttgart.de/rust/spacepackets) or [AX.25](https://github.com/thombles/ax25-rs) for payload format
-- Keep an eye on the output of the [Move the Bytes WG](https://www.notion.so/Move-the-Bytes-WG-2dc2194a004f4b72a9706ad5a150081d) and see if we can steal/borrow their protocol ideas
+- **Multi-Radio Support** - Extend the communication interface to support transmitting and receiving from multiple sources. Build out logic for routing specific message types to specific radio/comms interfaces, such as one interface for space-to-space, and one interface for space-to-ground. This may be handled transparently by some systems, and on others it may require more manual attention. This could also include support for one-way communications interfaces, such as beacon radios (transmit only).
+
+- **Satellite Constellation Support** - Extend the point-to-point functionality of space-to-ground communications to also support peer-to-peer communications within a satellite constellation. Design and implement the DHT equivalent for tracking which satellites in the constellation have which blocks. Create a discovery & transfer mechanism which can be adapted for different types inter-satellite-links and what information about peers is/isn't available.
+
+- **Integrate Space IPFS with other IPFS** - Creating an interoperability layer between the space-to-ground IPFS network and other IPFS networks. This may include extending the ground IPFS node to present as a gateway or relay to other IPFS networks. The idea here is to support easy data exchange between more standard public/private IPFS networks and the IPFS data passed between space & ground. This could be used as a backhaul between ground stations or a method for publicly exposing extra-terrestrial data.
+
+- **Groundstation data coordination** - An important aspect of using IPFS in conjunction with ground station networks is the coordination, exchange, and assembly of data transmitted by spacecraft. This could be accomplished by standing up an IPFS network for this purpose, integrating with a standard public/private IPFS network, by using a similar coordination method as the spacecraft constellation, or by a different means.
+
+- **SDK the Project** - Generalize, package, and document the project to make it easily accessible and usable in third party missions. Define and create a rich API via static library for integration into systems built in other languages. Harden CLI tool for API commands and expand functionality. Potentially generalize the UDP interface to use the [Space Packet Protocol](https://egit.irs.uni-stuttgart.de/rust/spacepackets) or [AX.25](https://github.com/thombles/ax25-rs) formats to allow for more direct link integration.
+
+- **Research broader satellite profiles** - Satellites operate across a variety of scenarios (earth observing, communications, navigation, weather, etc), each of which may require a different operational profile. Research these common scenarios, and their associated operational profiles, and create simulation scenarios to test against IPFS software. Create optimizations for constellation setup and data transfer protocol based on operational profile needs.
+
+- **Simulations and CI** - Build out a simulation environment using [testground](https://docs.testground.ai/) or [containernet](https://containernet.github.io/). Build out tests for larger scale scenarios across multiple satellites and ground stations. Build out simple scenarios which can be run regularly in CI.
+
+- **Static/human names** - Implement a a system like IPNS or DNSLink to expose static or human-readable names for singular assets or lists of assets.
