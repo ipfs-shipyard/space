@@ -63,22 +63,104 @@ Milestone seven focuses on APIs for gathering pass/connectedness info, and incor
 
 ## Future Epics
 
-- **Productionize Software** - All current milestones have been building out MVP-grade software, which will need to be made production grade. The software should be run through a profiler on several scenarios to check for excess memory usage. Memory allocation should be analyzed and optimized. All key data transfer paths should be instrumented to collect metrics and measure performance. APIs and communications interfaces need to be examined for vulnerabilities. Tests at scale should be run to determine performance limits inside of a variety of realistic simulated environments.
+These are potential future epics or topics of work which may be incorporated into the roadmap.
 
-- **Optimize Data Transfer Protocol** - Explore more sophisticated methods for exchanging data. Investigate chunking methods tuned to specific data types to increase the chance of deduplicating data or allow for meaningful partial transfers. Explore how to specify multiple blocks for request/transmission, such as by CID, sub-graph, bloom filter, etc. Intelligently plan which data to transfer based on passes within constellations.
+### Productionize Software
 
-- **Multi-Radio Support** - Extend the communication interface to support transmitting and receiving from multiple sources. Build out logic for routing specific message types to specific radio/comms interfaces, such as one interface for space-to-space, and one interface for space-to-ground. This may be handled transparently by some systems, and on others it may require more manual attention. This could also include support for one-way communications interfaces, such as beacon radios (transmit only).
+All current milestones have been building out MVP-grade software, which will need to be made production grade. 
 
-- **Satellite Constellation Support** - Extend the point-to-point functionality of space-to-ground communications to also support peer-to-peer communications within a satellite constellation. Design and implement the DHT equivalent for tracking which satellites in the constellation have which blocks. Create a discovery & transfer mechanism which can be adapted for different types inter-satellite-links and what information about peers is/isn't available.
+- All known mission related scenarios should be tested to flush out missing functionality and edge cases.
+- The software should be run through a profiler on several scenarios to check for excess memory usage. 
+- Memory allocation should be analyzed and optimized. 
+- All key data transfer paths should be instrumented to collect metrics and measure performance. 
+- APIs and communications interfaces need to be examined for vulnerabilities. 
+- Controls and constraints should be built around memory and storage usage.
+- Tests at scale should be run to determine performance limits inside of a variety of realistic simulated environments.
 
-- **Integrate Space IPFS with other IPFS** - Creating an interoperability layer between the space-to-ground IPFS network and other IPFS networks. This may include extending the ground IPFS node to present as a gateway or relay to other IPFS networks. The idea here is to support easy data exchange between more standard public/private IPFS networks and the IPFS data passed between space & ground. This could be used as a backhaul between ground stations or a method for publicly exposing extra-terrestrial data.
+### Groundstation Network Support
 
-- **Groundstation data coordination** - An important aspect of using IPFS in conjunction with ground station networks is the coordination, exchange, and assembly of data transmitted by spacecraft. This could be accomplished by standing up an IPFS network for this purpose, integrating with a standard public/private IPFS network, by using a similar coordination method as the spacecraft constellation, or by a different means.
+Implement support for ground station networks.
 
-- **SDK the Project** - Generalize, package, and document the project to make it easily accessible and usable in third party missions. Define and create a rich API via static library for integration into systems built in other languages. Harden CLI tool for API commands and expand functionality. Potentially generalize the UDP interface to use the [Space Packet Protocol](https://egit.irs.uni-stuttgart.de/rust/spacepackets) or [AX.25](https://github.com/thombles/ax25-rs) formats to allow for more direct link integration.
+- Research methods for exchanging data across ground stations in a network, such as standing up an IPFS network for this purpose, integrating with a standard public/private IPFS network, by using a similar coordination method as the satellite constellation, etc.
+- Decide on a method for tracking ground station peers and which data they have available (like a DHT).
+- Design and implement APIs for tracking ground station peers and incorporating future pass information if it can predict next ground station.
+- Implement data exchange method to support assembling data transmitted via satellite to multiple ground stations.
+- Implement coordination method to allow ground stations to intelligently plan which data to transmit to satellites across multiple passes.
 
-- **Research broader satellite profiles** - Satellites operate across a variety of scenarios (earth observing, communications, navigation, weather, etc), each of which may require a different operational profile. Research these common scenarios, and their associated operational profiles, and create simulation scenarios to test against IPFS software. Create optimizations for constellation setup and data transfer protocol based on operational profile needs.
+### Integrate Space IPFS with other IPFS
 
-- **Simulations and CI** - Build out a simulation environment using [testground](https://docs.testground.ai/) or [containernet](https://containernet.github.io/). Build out tests for larger scale scenarios across multiple satellites and ground stations. Build out simple scenarios which can be run regularly in CI.
+Create an interoperability layer between the space-to-ground IPFS network and other IPFS networks. 
 
-- **Static/human names** - Implement a a system like IPNS or DNSLink to expose static or human-readable names for singular assets or lists of assets.
+- Research IPFS gateways and relays and determine if either is an appropriate way to interface space IPFS networks with "normal" IPFS networks
+- Determine if an interop layer is better implemented as part of the ground station nodes or as a separate process
+- Implement interop layer and demonstrate exchanging data between space IPFS and "normal" IPFS
+
+### SDKify the Project
+
+Generalize, package, and document the project to make it easily accessible and usable in third party missions. 
+
+- Document all software pieces and create guides demonstrating how to setup a whole system and run various scenarios.
+- Create example code/config/setups to demonstrate functionality.
+- Define and create a rich API via static library for integration into systems built in other languages. 
+- Harden CLI tool for API commands and expand functionality. 
+- Examine the main interfaces across the project and determine which should and should not be generalized for user implementation.
+- Potentially generalize the UDP interface to use the [Space Packet Protocol](https://egit.irs.uni-stuttgart.de/rust/spacepackets) or [AX.25](https://github.com/thombles/ax25-rs) formats to allow for more direct link integration.
+
+### Optimize Data Transfer Protocol
+
+Explore more sophisticated methods for exchanging data.
+
+- Run down the protocols coming out of Move The Bytes and look for ideas which may be applicable
+- Investigate chunking methods tuned to specific data types to increase the chance of deduplicating data or allow for meaningful partial transfers.
+- Explore how to specify multiple blocks for request/transmission, such as by CID, sub-graph, bloom filter, etc.
+- Intelligently plan which data to transfer based on passes (this will be more relevant for constellations and/or ground station networks)
+
+### Multi-Radio Support
+
+Extend the communication interface to support transmitting and receiving from multiple sources.
+
+- Extend listening mode to allow for configuration of multiple listening ports and handle data appropriately
+- Expand outbound communication code to allow for configuration of multiple target addresses and routing of specific packets/data types to specific target addresses
+- Potentially extract sockets and ports into a more abstract CommunicationsInterface to better model multiple interfaces
+- Potentially support one-way communications interfaces, such as beacon radios (transmit only)
+
+### Satellite Constellation Support
+
+Extend the point-to-point functionality of space-to-ground communications to also support peer-to-peer communications within a satellite constellation. 
+
+- Decide on a method for tracking satellite peers and which data they have available (like a DHT). Likely need to support both fixed and dynamic peers.
+- Design and implement APIs for tracking satellite peers and distance to peers (if available).
+- Design and implement APIs for exchanging lists of available data.
+- Design and implement mechanism for discovering data not currently in peer<>data list.
+- Design and implement mechanism for exchange of data across constellation (assuming knowledge of distance to peers)
+- Revise mechanism for constellation data exchange for optimization when knowledge of peer distance isn't directly available
+
+### Human readable asset naming
+
+Implement a system for providing human readable and/or static names to IPFS assets
+
+- Determine if IPNS or DNSLink are suitable, or if a custom solution is needed
+- Implement system for single IPFS assets
+- Implement system for lists of IPFS assets (list of CIDs for blocks representing particular data category)
+
+### Simulations and CI
+
+Building out the ability to simulate space/ground test scenarios either for CI or testing purposes
+
+- Dockerize space and ground nodes
+- Determine whether to use [testground](https://docs.testground.ai/master/#/), [containernet](https://containernet.github.io/), or another test/simulation environment
+- Basic setup which simulates one spacecraft to one ground station without passes and create test scenario script
+- Determine which scenarios are appropriate for regular CI
+- Develop the ability to simulate passes using containernet
+- Develop the ability to simulate one satellite and a ground station network and create corresponding test scenario scripts
+- Develop the ability to simulate a satellite constellation and a single ground station and create corresponding test scenario scripts
+- Develop the ability to simulate a satellite constellation and ground station network and create corresponding test scenario scripts
+
+### Research broader satellite scenarios
+
+Research satellite operational scenarios and their impact on functionality.
+
+- Research common satellites scenarios (earth observing, communications, navigation, weather, etc), and determine their operational behavior.
+- Compare operational behavior from research against existing functionality and determine if any additional work is needed to support.
+- Create simulation scripts to exercise software across various scenarios and determine if optimizations are required.
+- Perform work to extend and optimize functionality as needed to support scenarios.
