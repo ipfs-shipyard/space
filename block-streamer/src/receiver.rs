@@ -14,14 +14,14 @@ impl Receiver {
         Receiver { storage }
     }
 
-    pub fn handle_block_msg(&mut self, block: &TransmissionBlock) -> Result<()> {
+    pub fn handle_block_msg(&mut self, block: TransmissionBlock) -> Result<()> {
         let mut links = vec![];
-        for l in &block.links {
-            links.push(Cid::try_from(l.clone())?.to_string());
+        for l in block.links {
+            links.push(Cid::try_from(l)?.to_string());
         }
         let stored_block = StoredBlock {
-            cid: Cid::try_from(block.cid.clone())?.to_string(),
-            data: block.data.clone(),
+            cid: Cid::try_from(block.cid)?.to_string(),
+            data: block.data,
             links,
         };
         self.storage.import_block(&stored_block)
@@ -29,7 +29,7 @@ impl Receiver {
 
     pub async fn handle_transmission_msg(&mut self, msg: TransmissionMessage) -> Result<()> {
         match msg {
-            TransmissionMessage::Block(block) => self.handle_block_msg(&block)?,
+            TransmissionMessage::Block(block) => self.handle_block_msg(block)?,
         }
         Ok(())
     }

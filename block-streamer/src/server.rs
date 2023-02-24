@@ -144,6 +144,7 @@ impl Server {
             Message::DataProtocol(data_msg) => {
                 self.receiver.handle_transmission_msg(data_msg).await?;
             }
+            // Default case for valid messages which don't have handling code implemented yet
             message => {
                 info!("Received unhandled message: {:?}", message);
             }

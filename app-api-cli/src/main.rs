@@ -40,6 +40,7 @@ impl Cli {
                             println!("{msg:?}");
                             return Ok(());
                         }
+                        // No assembly errors and nothing assembled yet
                         Ok(None) => {}
                         Err(e) => println!("{e:?}"),
                     }
