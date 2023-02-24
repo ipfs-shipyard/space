@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1"
-cid = {version = "0.9", features = ["scale-codec"] }
+cid = {version = "0.10", features = ["scale-codec"] }
 clap = { version = "4.0.15", features = ["derive"] }
 local-storage = { path = "../local-storage" }
 messages = { path = "../messages" }

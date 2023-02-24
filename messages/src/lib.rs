@@ -21,6 +21,7 @@ pub(crate) struct MessageContainer {
 
 impl MessageContainer {
     pub fn new(message: Message) -> Self {
+        // This hash uses a 128-bit Blake2s-128 hash, rather than the common sha2-256 to save on overhead size
         let hash = Code::Blake2s128.digest(&message.to_bytes());
         let cid = Cid::new_v1(0x55, hash);
         MessageContainer {
@@ -41,7 +42,7 @@ impl MessageContainer {
 
     pub fn verify_cid(&self) -> Result<bool> {
         let original_cid = Cid::try_from(self.cid.clone())?;
-        let regenerated_cid = MessageContainer::gen_cid(&self.message.clone().to_bytes());
+        let regenerated_cid = MessageContainer::gen_cid(&self.message.to_bytes());
         Ok(original_cid == regenerated_cid)
     }
 

@@ -46,15 +46,16 @@ impl SimpleChunker {
         }
     }
 
-    fn recv_chunk(&mut self, chunk: &SimpleChunk) -> Result<()> {
+    fn recv_chunk(&mut self, chunk: SimpleChunk) -> Result<()> {
+        self.last_recv_msg_id = chunk.message_id;
         if let Some(msg_map) = self.recv_buffer.get_mut(&chunk.message_id) {
-            msg_map.insert(chunk.sequence_number, chunk.clone());
+            msg_map.insert(chunk.sequence_number, chunk);
         } else {
             let mut msg_map: BTreeMap<u16, SimpleChunk> = BTreeMap::new();
-            msg_map.insert(chunk.sequence_number, chunk.clone());
-            self.recv_buffer.insert(chunk.message_id, msg_map);
+            msg_map.insert(chunk.sequence_number, chunk);
+            self.recv_buffer.insert(self.last_recv_msg_id, msg_map);
         }
-        self.last_recv_msg_id = chunk.message_id;
+        
 
         Ok(())
     }
@@ -64,7 +65,7 @@ impl SimpleChunker {
             // The BTreeMap docs tell us that into_values will be an iter sorted by key
             // In this case the key is the sequence_number, so in a complete set of chunks
             // that means the last item in the iter (or now vec) should be the "final chunk"
-            let chunks = msg_map.clone().into_values().collect::<Vec<SimpleChunk>>();
+            let chunks = msg_map.values().collect::<Vec<&SimpleChunk>>();
             // So to verify we have all message chunks...First grab the last chunk in the list
             if let Some(last_chunk) = chunks.last() {
                 // Second, check if the last chunk has final_chunk set
@@ -81,9 +82,9 @@ impl SimpleChunker {
         Ok(None)
     }
 
-    fn msg_unchunk(data: &[SimpleChunk]) -> Result<Message> {
+    fn msg_unchunk(data: &[&SimpleChunk]) -> Result<Message> {
         let mut all_data = vec![];
-        data.iter().for_each(|c| all_data.extend(c.data.clone()));
+        data.iter().for_each(|c| all_data.extend(&c.data));
         let mut databuf = &all_data[..all_data.len()];
         let container = MessageContainer::from_bytes(&mut databuf)?;
         Ok(container.message)
@@ -123,7 +124,7 @@ impl MessageChunker for SimpleChunker {
         let mut databuf = &data[..data.len()];
         match SimpleChunk::decode(&mut databuf) {
             Ok(chunk) => {
-                self.recv_chunk(&chunk)?;
+                self.recv_chunk(chunk)?;
                 Ok(self.attempt_msg_assembly()?)
             }
             Err(e) => bail!("Failed to decode chunk {e:?}"),
