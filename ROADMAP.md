@@ -24,18 +24,18 @@ Milestone two focuses on creating a bare minimum method of transferring a file u
 
 Milestone three focuses on exploring a basic application API.
 
-- [ ] [**PoC - Prototype application API**](https://github.com/ipfs-shipyard/space/pull/16) - Take a first pass at the application API functionality required to implement basic IPFS-in-space scenarios, such as requesting a CID from space to ground. Implement this API using JSON over UDP to get an easy sense of API usage. Implement a basic cli utility for sending API commands. Only implement actually responding to api messages to transmit and receive.
-- [ ] **PoC - Investigate binary messaging format** - The initial application API is implemented in JSON, but that format will not be suitable for real-world usage. Investigate other formats such as [cbor](https://cbor.io/) and decide which to use for all message formatting, including this API.
-- [ ] **PoC - Prototype interleaving application API and data transfer protocol** - In the initial application API the API messages and data transfer protocol messages are handled in independent messaging "sessions". This system will need the ability to handle either type of these messages at the same time on the same port. Implement a higher level message type which can support either the application API or data transfer protocol.
-- [ ] **MVP 0.3 - Demonstrate application API over radio** - Demonstrate both space & ground instances of IPFS which can receive control messages to *transmit* and *receive* files. Use these control messages to command the ground instance to transmit a file to the space instance, all using the same radio link.
+- [x] [**PoC - Prototype application API**](https://github.com/ipfs-shipyard/space/pull/16) - Take a first pass at the application API functionality required to implement basic IPFS-in-space scenarios, such as requesting a CID from space to ground. Implement this API using JSON over UDP to get an easy sense of API usage. Implement a basic cli utility for sending API commands. Only implement actually responding to api messages to transmit and receive.
+- [x] **PoC - Investigate binary messaging format** - The initial application API is implemented in JSON, but that format will not be suitable for real-world usage. Investigate other formats such as [cbor](https://cbor.io/) and decide which to use for all message formatting, including this API. _The result of this work was deciding to stick with the SCALE codec for all messaging_.
+- [x] [**PoC - Prototype interleaving application API and data transfer protocol**](https://github.com/ipfs-shipyard/space/pull/20) - In the initial application API the API messages and data transfer protocol messages are handled in independent messaging "sessions". This system will need the ability to handle either type of these messages at the same time on the same port. Implement a higher level message type which can support either the application API or data transfer protocol.
+- [x] [**MVP 0.3 - Demonstrate application API**](https://www.loom.com/share/2c56c6d4297949f4929c84f4112e4eef) - Demonstrate both space & ground instances of IPFS which can receive control messages to *transmit* and *receive* files. Use these control messages to command the ground instance to transmit a file to the space instance.
 
 ## Milestone 4
 
 Milestone four focuses on implementing basic file/CID handling APIs.
 
-- [ ] **PoC - Implement `Import File` and `Export CID` APIs** - Decide on a basic IPFS storage layer, and then implement the APIs for importing & exporting a file to/from that storage layer.
-- [ ] **PoC - Implement `Available CIDs` and `Request CID` APIs** - Building on the IPFS storage layer, and APIs for importing exporting. This exposes available CIDs via API, and allows requesting the transfer of a specific CID if available.
-- [ ] **MVP 0.4 - Demonstrate a file import and transfer request**
+- [x] [**PoC - Implement `Import File`, `Export Dag`, and `Transmit Dag` APIs**](https://github.com/ipfs-shipyard/space/pull/21) - Decide on a basic IPFS storage layer, and then implement the APIs for importing & exporting a file to/from that storage layer, as well as transmitting a DAG, and exposing which blocks are available for transmission.
+- [x] [**PoC - Implement chunking across all messages**](https://github.com/ipfs-shipyard/space/pull/24) - Some of the APIs introduced in the previous PoC result in messages which break the 60 byte MTU. Because of this, a general chunking method will need to be investigated and implemented across all messages in the system.
+- [x] [**MVP 0.4 - Demonstrate a file import and transfer request**](https://www.loom.com/share/ad5c5509ac6b4adb8734dcf54cf6b3cf)
 
 ## Milestone 5
 
