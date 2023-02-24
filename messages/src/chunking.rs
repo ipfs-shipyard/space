@@ -61,6 +61,9 @@ impl SimpleChunker {
     }
 
     fn attempt_msg_assembly(&mut self) -> Result<Option<Message>> {
+        // TODO: This needs to be expanded beyond just assembling off the last received message id
+        // TODO: Data needs to be removed from the map once the message is assembled correctly
+        // TODO: Stale data in the map needs to be cleaned up periodically
         if let Some(msg_map) = self.recv_buffer.get(&self.last_recv_msg_id) {
             // The BTreeMap docs tell us that into_values will be an iter sorted by key
             // In this case the key is the sequence_number, so in a complete set of chunks
