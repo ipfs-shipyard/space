@@ -71,7 +71,7 @@ impl SqliteStorageProvider {
 impl StorageProvider for SqliteStorageProvider {
     fn import_block(&self, block: &StoredBlock) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO blocks (cid, data) VALUES (?1, ?2)",
+            "INSERT OR IGNORE INTO blocks (cid, data) VALUES (?1, ?2)",
             (&block.cid, &block.data),
         )?;
         // TODO: Should we have another indicator for root blocks that isn't just the number of links?
@@ -87,14 +87,14 @@ impl StorageProvider for SqliteStorageProvider {
                     WHERE cid == (?1)",
                     [link_cid],
                     |row| {
-                        let id: u32 = row.get(0).unwrap();
+                        let id: u32 = row.get(0)?;
                         Ok(id)
                     },
                 ) {
                     maybe_block_id = Some(block_id);
                 }
                 self.conn.execute(
-                    "INSERT INTO links (root_cid, block_cid, block_id) VALUES(?1, ?2, ?3)",
+                    "INSERT OR IGNORE INTO links (root_cid, block_cid, block_id) VALUES(?1, ?2, ?3)",
                     (&block.cid, link_cid, maybe_block_id),
                 )?;
             }
@@ -139,8 +139,8 @@ impl StorageProvider for SqliteStorageProvider {
             WHERE cid == (?1)",
             [&cid],
             |row| {
-                let cid_str: String = row.get(0).unwrap();
-                let data: Vec<u8> = row.get(1).unwrap();
+                let cid_str: String = row.get(0)?;
+                let data: Vec<u8> = row.get(1)?;
                 Ok(StoredBlock {
                     cid: cid_str,
                     data,
@@ -171,15 +171,28 @@ impl StorageProvider for SqliteStorageProvider {
     }
 
     fn get_missing_cid_blocks(&self, cid: &str) -> Result<Vec<String>> {
-        let cids = self
+        // First get all block cid+id associated with root cid
+        let blocks: Vec<(String, Option<i32>)> = self
             .conn
-            .prepare("SELECT block_cid FROM links WHERE root_cid == (?1) AND block_id IS NULL")?
+            .prepare("SELECT block_cid, block_id FROM links WHERE root_cid == (?1)")?
             .query_map([cid], |row| {
-                let cid_str: String = row.get(0)?;
-                Ok(cid_str)
+                let block_cid: String = row.get(0)?;
+                let block_id: Option<i32> = row.get(1)?;
+                Ok((block_cid, block_id))
             })?
             // TODO: Correctly catch/log/handle errors here
             .filter_map(|cid| cid.ok())
+            .collect();
+        if blocks.is_empty() {
+            bail!("No blocks for CID {cid} found. Root block may be missing.")
+        }
+        // Then filter by those that are missing a block_id
+        let cids: Vec<String> = blocks
+            .iter()
+            .filter_map(|(cid, id)| match id {
+                Some(_) => None,
+                None => Some(cid.to_owned()),
+            })
             .collect();
         Ok(cids)
     }

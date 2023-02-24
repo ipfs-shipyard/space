@@ -7,7 +7,7 @@ use iroh_unixfs::builder::{File, FileBuilder};
 use std::path::Path;
 use tokio::fs::File as TokioFile;
 use tokio::io::AsyncWriteExt;
-use tracing::info;
+use tracing::{error, info};
 
 pub struct Storage {
     pub provider: Box<dyn StorageProvider>,
@@ -38,7 +38,9 @@ impl Storage {
                 data: b.data().to_vec(),
                 links,
             };
-            self.provider.import_block(&stored).unwrap();
+            if let Err(e) = self.provider.import_block(&stored) {
+                error!("Failed to import block {e}");
+            }
             if !stored.links.is_empty() {
                 root_cid = Some(stored.cid);
             }

@@ -1,5 +1,5 @@
-use crate::control::MTU;
 use crate::receiver::Receiver;
+use crate::server::MTU;
 use anyhow::Result;
 use local_storage::{provider::SqliteStorageProvider, storage::Storage};
 use messages::Message;
@@ -15,7 +15,7 @@ pub async fn receive(listen_addr: &String) -> Result<()> {
     info!("Listening for blocks at {}", listen_addr);
     let listen_address: SocketAddr = listen_addr.parse()?;
 
-    let mut buf = vec![0; MTU];
+    let mut buf = vec![0; usize::from(MTU)];
     let mut real_len;
 
     // Setup storage
