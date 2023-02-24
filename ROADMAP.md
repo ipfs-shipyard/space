@@ -39,27 +39,27 @@ Milestone four focuses on implementing basic file/CID handling APIs.
 
 ## Milestone 5
 
-Milestone five focuses on CID and block validation
+Milestone five focuses on DAG and block validation
 
 - [ ] **PoC - Implement block-level validation** - Implement validation on a per-block basis as they are received and assembled.
-- [ ] **PoC - Implement `Is CID Complete` and `Validate CID` APIs** - Implement an API to determine if a CID is present with all of it's children blocks, and an API to validate that CID all the way down.
-- [ ] **MVP 0.5 - Demonstrate CID complete/validate APIs after transfer**
+- [ ] **PoC - Implement `IsDagComplete`, `ValidateDag`, `ValidateBlock` APIs** - Implement an API to determine if a DAG is present with all of it's children blocks, and an API to validate that DAG or block all the way down.
+- [ ] **MVP 0.5 - Demonstrate DAG complete/validate APIs after transfer**
 
 ## Milestone 6
 
-Milestone six focuses on APIs for gathering pass/connectedness info, and incorporating that info into the transfer process.
-
-- [ ] **PoC - Implement `Is Connected` and `Next Pass Info` APIs** - Implement APIs to be used by external systems to indicate if the system is connected and to give information about the next pass.
-- [ ] **PoC - Modify data transfer protocol to account for pass/connectedness info** - Update the data transfer protocol to track pass/connectedness information and determine when it should be transmitting data based on known pass information.
-- [ ] **MVP 0.6 - Simulate a "pass" using implemented APIs and demonstrate how data transfer responds**
-
-## Milestone 7
-
-Milestone 7 focuses on implementing minimum retry methods for reliability.
+Milestone six focuses on implementing minimum retry methods for reliability.
 
 - [ ] **PoC - Define and implement block-ship re-transmissions** - The initial implementation of the block-ship protocol is a very simple one-way stream of DAG blocks. Define a mechanism for detecting missing blocks, requesting transmission of specific blocks, and responding to those requests. Implement in block-ship transmitter and receiver.
 - [ ] **PoC - Implement baseline metrics** - Implement a baseline set of metrics, perhaps [this list](https://github.com/n0-computer/test-plans/tree/main/movethebytes/data-transfer#metrics) suggested by move the bytes, and build into logging of block-ship transmitter and receiver.
-- [ ] **MVP v0.7 - Demonstrate block-ship retransmit over radio** - Establish a block-ship session over the dev radio link at a speed which ensures minor packet loss and tune the re-transmission mechanism to overcome the packet loss.
+- [ ] **MVP v0.6 - Demonstrate block-ship retransmit over radio** - Establish a block-ship session over the dev radio link at a speed which ensures minor packet loss and tune the re-transmission mechanism to overcome the packet loss.
+
+## Milestone 7
+
+Milestone seven focuses on APIs for gathering pass/connectedness info, and incorporating that info into the transfer process.
+
+- [ ] **PoC - Implement `Is Connected` and `Next Pass Info` APIs** - Implement APIs to be used by external systems to indicate if the system is connected and to give information about the next pass.
+- [ ] **PoC - Modify data transfer protocol to account for pass/connectedness info** - Update the data transfer protocol to track pass/connectedness information and determine when it should be transmitting data based on known pass information.
+- [ ] **MVP 0.7 - Simulate a "pass" using implemented APIs and demonstrate how data transfer responds**
 
 ## Future Epics
 
