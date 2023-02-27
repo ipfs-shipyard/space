@@ -172,7 +172,7 @@ sequenceDiagram
     O->>S: RequestAvailableDags
     S->>O: AvailableDags([CID, Path])
     Note over O,S: Operator requests transfer of imported DAG by CID
-    G->>S: RequestDag(CID)
+    G->>S: TransmitDag(CID)
     Note over G, S: Transfer of blocks
     loop Until DAG is complete
         Note over G,S: Operator asks ground IPFS node to verify <br/> that all CIDs are received.
@@ -180,7 +180,7 @@ sequenceDiagram
         Note over O,G: If empty response, all blocks are received
         G->>O: MissingDagBlocks(): [CID]
         Note over O,S: If blocks are missing transmission is requested
-        O->>S: RequestBlock(CID)
+        O->>S: TransmitBlock(CID)
     end
     Note over O,G: Operator asks ground IPFS to <br/> write DAG to the file system
     O->>G: ExportDag(CID, path)

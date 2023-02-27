@@ -108,10 +108,6 @@ pub enum ApplicationAPI {
         send_bytes: u32,
         receive_bytes: u32,
     },
-    /// Request for a DAG
-    RequestDag { cid: String },
-    /// Request for a block
-    RequestBlock { cid: String },
     /// Request Available Blocks
     RequestAvailableBlocks,
     /// Advertise all available blocks by CID
