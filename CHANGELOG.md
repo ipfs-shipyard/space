@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5] - Unreleased
+
+### Removed
+
+- The `RequestDag` and `RequestBlock` APIs were removed, as they were essentially equivalent to `TransmitDag` and `TransmitBlock`.
+
 ## [0.4] - 2023-02-24
 
 ### Added
