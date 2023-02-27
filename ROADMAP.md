@@ -76,10 +76,20 @@ All current milestones have been building out MVP-grade software, which will nee
 - APIs and communications interfaces need to be examined for vulnerabilities. 
 - Controls and constraints should be built around memory and storage usage.
 - Tests at scale should be run to determine performance limits inside of a variety of realistic simulated environments.
+- Gather and construct a production payload dataset for realistic ground and mission testing.
+
+### Integrate Space IPFS with other IPFS
+
+Create an interoperability layer between the space-to-ground IPFS network and other IPFS networks. 
+
+- Research IPFS gateways and relays and determine if either is an appropriate way to interface space IPFS networks with "normal" IPFS networks.
+- Determine if an interop layer is better implemented as part of the ground station nodes or as a separate process.
+- Implement interop layer and demonstrate exchanging data between space IPFS and "normal" IPFS.
+- Consider creating an adapter to a Kubo node using the [Kubo RPI API](https://docs.ipfs.tech/reference/kubo/rpc/).
 
 ### Groundstation Network Support
 
-Implement support for ground station networks.
+Implement support for ground station networks. This will likely end up producing more architectural guidelines than opinionated implementations.
 
 - Research methods for exchanging data across ground stations in a network, such as standing up an IPFS network for this purpose, integrating with a standard public/private IPFS network, by using a similar coordination method as the satellite constellation, etc.
 - Decide on a method for tracking ground station peers and which data they have available (like a DHT).
@@ -87,18 +97,11 @@ Implement support for ground station networks.
 - Implement data exchange method to support assembling data transmitted via satellite to multiple ground stations.
 - Implement coordination method to allow ground stations to intelligently plan which data to transmit to satellites across multiple passes.
 
-### Integrate Space IPFS with other IPFS
-
-Create an interoperability layer between the space-to-ground IPFS network and other IPFS networks. 
-
-- Research IPFS gateways and relays and determine if either is an appropriate way to interface space IPFS networks with "normal" IPFS networks
-- Determine if an interop layer is better implemented as part of the ground station nodes or as a separate process
-- Implement interop layer and demonstrate exchanging data between space IPFS and "normal" IPFS
-
 ### SDKify the Project
 
 Generalize, package, and document the project to make it easily accessible and usable in third party missions. 
 
+- Solicit feedback from potential space/IPFS users
 - Document all software pieces and create guides demonstrating how to setup a whole system and run various scenarios.
 - Create example code/config/setups to demonstrate functionality.
 - Define and create a rich API via static library for integration into systems built in other languages. 
