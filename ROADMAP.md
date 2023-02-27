@@ -24,50 +24,146 @@ Milestone two focuses on creating a bare minimum method of transferring a file u
 
 Milestone three focuses on exploring a basic application API.
 
-- [ ] [**PoC - Prototype application API**](https://github.com/ipfs-shipyard/space/pull/16) - Take a first pass at the application API functionality required to implement basic IPFS-in-space scenarios, such as requesting a CID from space to ground. Implement this API using JSON over UDP to get an easy sense of API usage. Implement a basic cli utility for sending API commands. Only implement actually responding to api messages to transmit and receive.
-- [ ] **PoC - Investigate binary messaging format** - The initial application API is implemented in JSON, but that format will not be suitable for real-world usage. Investigate other formats such as [cbor](https://cbor.io/) and decide which to use for all message formatting, including this API.
-- [ ] **PoC - Prototype interleaving application API and data transfer protocol** - In the initial application API the API messages and data transfer protocol messages are handled in independent messaging "sessions". This system will need the ability to handle either type of these messages at the same time on the same port. Implement a higher level message type which can support either the application API or data transfer protocol.
-- [ ] **MVP 0.3 - Demonstrate application API over radio** - Demonstrate both space & ground instances of IPFS which can receive control messages to *transmit* and *receive* files. Use these control messages to command the ground instance to transmit a file to the space instance, all using the same radio link.
+- [x] [**PoC - Prototype application API**](https://github.com/ipfs-shipyard/space/pull/16) - Take a first pass at the application API functionality required to implement basic IPFS-in-space scenarios, such as requesting a CID from space to ground. Implement this API using JSON over UDP to get an easy sense of API usage. Implement a basic cli utility for sending API commands. Only implement actually responding to api messages to transmit and receive.
+- [x] **PoC - Investigate binary messaging format** - The initial application API is implemented in JSON, but that format will not be suitable for real-world usage. Investigate other formats such as [cbor](https://cbor.io/) and decide which to use for all message formatting, including this API. _The result of this work was deciding to stick with the SCALE codec for all messaging_.
+- [x] [**PoC - Prototype interleaving application API and data transfer protocol**](https://github.com/ipfs-shipyard/space/pull/20) - In the initial application API the API messages and data transfer protocol messages are handled in independent messaging "sessions". This system will need the ability to handle either type of these messages at the same time on the same port. Implement a higher level message type which can support either the application API or data transfer protocol.
+- [x] [**MVP 0.3 - Demonstrate application API**](https://www.loom.com/share/2c56c6d4297949f4929c84f4112e4eef) - Demonstrate both space & ground instances of IPFS which can receive control messages to *transmit* and *receive* files. Use these control messages to command the ground instance to transmit a file to the space instance.
 
 ## Milestone 4
 
 Milestone four focuses on implementing basic file/CID handling APIs.
 
-- [ ] **PoC - Implement `Import File` and `Export CID` APIs** - Decide on a basic IPFS storage layer, and then implement the APIs for importing & exporting a file to/from that storage layer.
-- [ ] **PoC - Implement `Available CIDs` and `Request CID` APIs** - Building on the IPFS storage layer, and APIs for importing exporting. This exposes available CIDs via API, and allows requesting the transfer of a specific CID if available.
-- [ ] **MVP 0.4 - Demonstrate a file import and transfer request**
+- [x] [**PoC - Implement `Import File`, `Export Dag`, and `Transmit Dag` APIs**](https://github.com/ipfs-shipyard/space/pull/21) - Decide on a basic IPFS storage layer, and then implement the APIs for importing & exporting a file to/from that storage layer, as well as transmitting a DAG, and exposing which blocks are available for transmission.
+- [x] [**PoC - Implement chunking across all messages**](https://github.com/ipfs-shipyard/space/pull/24) - Some of the APIs introduced in the previous PoC result in messages which break the 60 byte MTU. Because of this, a general chunking method will need to be investigated and implemented across all messages in the system.
+- [x] [**MVP 0.4 - Demonstrate a file import and transfer request**](https://www.loom.com/share/ad5c5509ac6b4adb8734dcf54cf6b3cf)
 
 ## Milestone 5
 
-Milestone five focuses on CID and block validation
+Milestone five focuses on DAG and block validation
 
 - [ ] **PoC - Implement block-level validation** - Implement validation on a per-block basis as they are received and assembled.
-- [ ] **PoC - Implement `Is CID Complete` and `Validate CID` APIs** - Implement an API to determine if a CID is present with all of it's children blocks, and an API to validate that CID all the way down.
-- [ ] **MVP 0.5 - Demonstrate CID complete/validate APIs after transfer**
+- [ ] **PoC - Implement `IsDagComplete`, `ValidateDag`, `ValidateBlock` APIs** - Implement an API to determine if a DAG is present with all of it's children blocks, and an API to validate that DAG or block all the way down.
+- [ ] **MVP 0.5 - Demonstrate DAG complete/validate APIs after transfer**
 
 ## Milestone 6
 
-Milestone six focuses on APIs for gathering pass/connectedness info, and incorporating that info into the transfer process.
-
-- [ ] **PoC - Implement `Is Connected` and `Next Pass Info` APIs** - Implement APIs to be used by external systems to indicate if the system is connected and to give information about the next pass.
-- [ ] **PoC - Modify data transfer protocol to account for pass/connectedness info** - Update the data transfer protocol to track pass/connectedness information and determine when it should be transmitting data based on known pass information.
-- [ ] **MVP 0.6 - Simulate a "pass" using implemented APIs and demonstrate how data transfer responds**
-
-## Milestone 7
-
-Milestone 7 focuses on implementing minimum retry methods for reliability.
+Milestone six focuses on implementing minimum retry methods for reliability.
 
 - [ ] **PoC - Define and implement block-ship re-transmissions** - The initial implementation of the block-ship protocol is a very simple one-way stream of DAG blocks. Define a mechanism for detecting missing blocks, requesting transmission of specific blocks, and responding to those requests. Implement in block-ship transmitter and receiver.
 - [ ] **PoC - Implement baseline metrics** - Implement a baseline set of metrics, perhaps [this list](https://github.com/n0-computer/test-plans/tree/main/movethebytes/data-transfer#metrics) suggested by move the bytes, and build into logging of block-ship transmitter and receiver.
-- [ ] **MVP v0.7 - Demonstrate block-ship retransmit over radio** - Establish a block-ship session over the dev radio link at a speed which ensures minor packet loss and tune the re-transmission mechanism to overcome the packet loss.
+- [ ] **MVP v0.6 - Demonstrate block-ship retransmit over radio** - Establish a block-ship session over the dev radio link at a speed which ensures minor packet loss and tune the re-transmission mechanism to overcome the packet loss.
 
-## Future Milestones
+## Milestone 7
 
-- **PoC - Explore various satellite profiles** - Satellites operate across a variety of scenarios (earth observing, communications, navigation, weather, etc), each of which may require a different operational profile. Research these common scenarios, and their associated operational profiles, and create simulation scenarios to test against IPFS software.
-- **Poc - Explore multi-block specification techniques** - Explore how to specify multiple blocks for request/transmission, such as by CID, sub-graph, bloom filter, etc.
+Milestone seven focuses on APIs for gathering pass/connectedness info, and incorporating that info into the transfer process.
 
-## Future ideas
+- [ ] **PoC - Implement `Is Connected` and `Next Pass Info` APIs** - Implement APIs to be used by external systems to indicate if the system is connected and to give information about the next pass.
+- [ ] **PoC - Modify data transfer protocol to account for pass/connectedness info** - Update the data transfer protocol to track pass/connectedness information and determine when it should be transmitting data based on known pass information.
+- [ ] **MVP 0.7 - Simulate a "pass" using implemented APIs and demonstrate how data transfer responds**
 
-- Utilizing [testground](https://docs.testground.ai/) and [containernet](https://containernet.github.io/) for larger scale simulations
-- Explore using the [Space Packet Protocol](https://egit.irs.uni-stuttgart.de/rust/spacepackets) or [AX.25](https://github.com/thombles/ax25-rs) for payload format
-- Keep an eye on the output of the [Move the Bytes WG](https://www.notion.so/Move-the-Bytes-WG-2dc2194a004f4b72a9706ad5a150081d) and see if we can steal/borrow their protocol ideas
+## Future Epics
+
+These are potential future epics or topics of work which may be incorporated into the roadmap.
+
+### Productionize Software
+
+All current milestones have been building out MVP-grade software, which will need to be made production grade. 
+
+- All known mission related scenarios should be tested to flush out missing functionality and edge cases.
+- The software should be run through a profiler on several scenarios to check for excess memory usage. 
+- Memory allocation should be analyzed and optimized. 
+- All key data transfer paths should be instrumented to collect metrics and measure performance. 
+- APIs and communications interfaces need to be examined for vulnerabilities. 
+- Controls and constraints should be built around memory and storage usage.
+- Tests at scale should be run to determine performance limits inside of a variety of realistic simulated environments.
+- Gather and construct a production payload dataset for realistic ground and mission testing.
+
+### Integrate Space IPFS with other IPFS
+
+Create an interoperability layer between the space-to-ground IPFS network and other IPFS networks. 
+
+- Research IPFS gateways and relays and determine if either is an appropriate way to interface space IPFS networks with "normal" IPFS networks.
+- Determine if an interop layer is better implemented as part of the ground station nodes or as a separate process.
+- Implement interop layer and demonstrate exchanging data between space IPFS and "normal" IPFS.
+- Consider creating an adapter to a Kubo node using the [Kubo RPI API](https://docs.ipfs.tech/reference/kubo/rpc/).
+
+### Groundstation Network Support
+
+Implement support for ground station networks. This will likely end up producing more architectural guidelines than opinionated implementations.
+
+- Research methods for exchanging data across ground stations in a network, such as standing up an IPFS network for this purpose, integrating with a standard public/private IPFS network, by using a similar coordination method as the satellite constellation, etc.
+- Decide on a method for tracking ground station peers and which data they have available (like a DHT).
+- Design and implement APIs for tracking ground station peers and incorporating future pass information if it can predict next ground station.
+- Implement data exchange method to support assembling data transmitted via satellite to multiple ground stations.
+- Implement coordination method to allow ground stations to intelligently plan which data to transmit to satellites across multiple passes.
+
+### SDKify the Project
+
+Generalize, package, and document the project to make it easily accessible and usable in third party missions. 
+
+- Solicit feedback from potential space/IPFS users
+- Document all software pieces and create guides demonstrating how to setup a whole system and run various scenarios.
+- Create example code/config/setups to demonstrate functionality.
+- Define and create a rich API via static library for integration into systems built in other languages. 
+- Harden CLI tool for API commands and expand functionality. 
+- Examine the main interfaces across the project and determine which should and should not be generalized for user implementation.
+- Potentially generalize the UDP interface to use the [Space Packet Protocol](https://egit.irs.uni-stuttgart.de/rust/spacepackets) or [AX.25](https://github.com/thombles/ax25-rs) formats to allow for more direct link integration.
+
+### Optimize Data Transfer Protocol
+
+Explore more sophisticated methods for exchanging data.
+
+- Run down the protocols coming out of Move The Bytes and look for ideas which may be applicable
+- Investigate chunking methods tuned to specific data types to increase the chance of deduplicating data or allow for meaningful partial transfers.
+- Explore how to specify multiple blocks for request/transmission, such as by CID, sub-graph, bloom filter, etc.
+- Intelligently plan which data to transfer based on passes (this will be more relevant for constellations and/or ground station networks)
+
+### Multi-Radio Support
+
+Extend the communication interface to support transmitting and receiving from multiple sources.
+
+- Extend listening mode to allow for configuration of multiple listening ports and handle data appropriately
+- Expand outbound communication code to allow for configuration of multiple target addresses and routing of specific packets/data types to specific target addresses
+- Potentially extract sockets and ports into a more abstract CommunicationsInterface to better model multiple interfaces
+- Potentially support one-way communications interfaces, such as beacon radios (transmit only)
+
+### Satellite Constellation Support
+
+Extend the point-to-point functionality of space-to-ground communications to also support peer-to-peer communications within a satellite constellation. 
+
+- Decide on a method for tracking satellite peers and which data they have available (like a DHT). Likely need to support both fixed and dynamic peers.
+- Design and implement APIs for tracking satellite peers and distance to peers (if available).
+- Design and implement APIs for exchanging lists of available data.
+- Design and implement mechanism for discovering data not currently in peer<>data list.
+- Design and implement mechanism for exchange of data across constellation (assuming knowledge of distance to peers)
+- Revise mechanism for constellation data exchange for optimization when knowledge of peer distance isn't directly available
+
+### Human readable asset naming
+
+Implement a system for providing human readable and/or static names to IPFS assets
+
+- Determine if IPNS or DNSLink are suitable, or if a custom solution is needed
+- Implement system for single IPFS assets
+- Implement system for lists of IPFS assets (list of CIDs for blocks representing particular data category)
+
+### Simulations and CI
+
+Building out the ability to simulate space/ground test scenarios either for CI or testing purposes
+
+- Dockerize space and ground nodes
+- Determine whether to use [testground](https://docs.testground.ai/master/#/), [containernet](https://containernet.github.io/), or another test/simulation environment
+- Basic setup which simulates one spacecraft to one ground station without passes and create test scenario script
+- Determine which scenarios are appropriate for regular CI
+- Develop the ability to simulate passes using containernet
+- Develop the ability to simulate one satellite and a ground station network and create corresponding test scenario scripts
+- Develop the ability to simulate a satellite constellation and a single ground station and create corresponding test scenario scripts
+- Develop the ability to simulate a satellite constellation and ground station network and create corresponding test scenario scripts
+
+### Research broader satellite scenarios
+
+Research satellite operational scenarios and their impact on functionality.
+
+- Research common satellites scenarios (earth observing, communications, navigation, weather, etc), and determine their operational behavior.
+- Compare operational behavior from research against existing functionality and determine if any additional work is needed to support.
+- Create simulation scripts to exercise software across various scenarios and determine if optimizations are required.
+- Perform work to extend and optimize functionality as needed to support scenarios.
