@@ -8,8 +8,10 @@ edition = "2021"
 [dependencies]
 anyhow = "1"
 cid = "0.9"
+bytes = "1"
 futures = "0.3.21"
 iroh-unixfs = "0.2.0"
+libipld = "0.16"
 rusqlite = { version = "0.28.0", features = ["bundled"] }
 thiserror = "1"
 tokio = "1"

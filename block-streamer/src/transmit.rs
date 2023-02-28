@@ -1,6 +1,6 @@
 use anyhow::Result;
 use cid::Cid;
-use local_storage::storage::StoredBlock;
+use local_storage::block::StoredBlock;
 use messages::chunking::{MessageChunker, SimpleChunker};
 use messages::Message;
 use messages::TransmissionBlock;

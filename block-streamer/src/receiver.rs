@@ -1,6 +1,7 @@
 use anyhow::Result;
 use cid::Cid;
-use local_storage::storage::{Storage, StoredBlock};
+use local_storage::block::StoredBlock;
+use local_storage::storage::Storage;
 use messages::{TransmissionBlock, TransmissionMessage};
 use std::rc::Rc;
 
@@ -24,6 +25,7 @@ impl Receiver {
             data: block.data,
             links,
         };
+        stored_block.validate()?;
         self.storage.import_block(&stored_block)
     }
 
@@ -45,7 +47,7 @@ mod tests {
     use local_storage::provider::SqliteStorageProvider;
 
     struct TestHarness {
-        storage: Rc<Storage>,
+        _storage: Rc<Storage>,
         receiver: Receiver,
         _db_dir: TempDir,
     }
@@ -56,10 +58,10 @@ mod tests {
             let db_path = db_dir.child("storage.db");
             let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
             provider.setup().unwrap();
-            let storage = Rc::new(Storage::new(Box::new(provider)));
-            let receiver = Receiver::new(Rc::clone(&storage));
+            let _storage = Rc::new(Storage::new(Box::new(provider)));
+            let receiver = Receiver::new(Rc::clone(&_storage));
             return TestHarness {
-                storage,
+                _storage,
                 receiver,
                 _db_dir: db_dir,
             };
@@ -69,12 +71,13 @@ mod tests {
     #[tokio::test]
     pub async fn test_receive_block_msg() {
         let mut harness = TestHarness::new();
-        let cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(b"00"));
+        let data = b"1871217171".to_vec();
+        let cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(&data));
 
         let block_msg = TransmissionMessage::Block(TransmissionBlock {
             cid: cid.to_bytes(),
-            data: b"1871217171".to_vec(),
-            links: vec![cid.to_bytes()],
+            data,
+            links: vec![],
         });
 
         let res = harness.receiver.handle_transmission_msg(block_msg).await;
@@ -84,12 +87,13 @@ mod tests {
     #[tokio::test]
     pub async fn test_receive_block_msg_twice() {
         let mut harness = TestHarness::new();
-        let cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(b"00"));
+        let data = b"18712552224417171".to_vec();
+        let cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(&data));
 
         let block_msg = TransmissionMessage::Block(TransmissionBlock {
             cid: cid.to_bytes(),
-            data: b"1871217171".to_vec(),
-            links: vec![cid.to_bytes()],
+            data,
+            links: vec![],
         });
 
         let res = harness

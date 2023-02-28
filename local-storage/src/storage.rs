@@ -1,6 +1,7 @@
 use crate::error::StorageError;
 use crate::provider::StorageProvider;
 
+use crate::block::StoredBlock;
 use anyhow::{bail, Result};
 use futures::TryStreamExt;
 use iroh_unixfs::builder::{File, FileBuilder};
@@ -106,13 +107,6 @@ impl Storage {
     pub fn list_available_dags(&self) -> Result<Vec<String>> {
         self.provider.list_available_dags()
     }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct StoredBlock {
-    pub cid: String,
-    pub data: Vec<u8>,
-    pub links: Vec<String>,
 }
 
 #[cfg(test)]

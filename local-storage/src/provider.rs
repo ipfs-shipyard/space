@@ -1,4 +1,4 @@
-use crate::{error::StorageError, storage::StoredBlock};
+use crate::{block::StoredBlock, error::StorageError};
 
 use anyhow::{bail, Result};
 use rusqlite::Connection;
