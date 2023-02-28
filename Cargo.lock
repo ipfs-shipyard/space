@@ -2369,6 +2369,7 @@ dependencies = [
  "futures",
  "iroh-unixfs",
  "libipld 0.16.0",
+ "rand 0.8.5",
  "rusqlite",
  "thiserror",
  "tokio",
