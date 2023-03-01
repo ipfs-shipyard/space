@@ -48,13 +48,15 @@ pub fn validate_dag(stored_blocks: Vec<StoredBlock>) -> Result<()> {
     for block in blocks.iter() {
         block.validate()?;
     }
-    // If there is only one block and it is validate....then ok
+    // If there is only one block, and it is valid, then assume it's valid on its own
     if blocks.len() == 1 {
         return Ok(());
     }
-    // Now find the root
+    // Otherwise find the root
     let root = blocks.iter().find(|b| !b.links().is_empty());
     if let Some(root) = root {
+        // The block's validate function already tells us if the CID's hash matches the root links
+        // So now we just need compare the deduplicated sets of CIDs from the child blocks and the root links
         let child_cids = blocks
             .iter()
             .filter(|b| b.links().is_empty())
@@ -65,7 +67,6 @@ pub fn validate_dag(stored_blocks: Vec<StoredBlock>) -> Result<()> {
             .iter()
             .map(|l| l.to_string())
             .collect::<HashSet<String>>();
-
         if child_cids != linked_cids {
             bail!("Links do not match blocks");
         }
