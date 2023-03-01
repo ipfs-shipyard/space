@@ -79,11 +79,9 @@ pub fn validate_dag(stored_blocks: Vec<StoredBlock>) -> Result<()> {
 mod tests {
     use super::*;
 
-    use anyhow::anyhow;
     use cid::multihash::MultihashDigest;
     use futures::TryStreamExt;
     use iroh_unixfs::builder::{File, FileBuilder};
-    use libipld::error::InvalidMultihash;
     use rand::{thread_rng, RngCore};
 
     async fn generate_stored_blocks(num_blocks: u8) -> Result<Vec<StoredBlock>> {
@@ -136,7 +134,7 @@ mod tests {
 
         assert_eq!(
             stored_block.validate().unwrap_err().to_string(),
-            anyhow!(InvalidMultihash(stored_block.data)).to_string(),
+            "Hash of data does not match the CID."
         );
     }
 
@@ -196,7 +194,10 @@ mod tests {
 
         blocks.remove(0);
 
-        assert!(validate_dag(blocks).is_err());
+        assert_eq!(
+            validate_dag(blocks).unwrap_err().to_string(),
+            "Links do not match blocks"
+        );
     }
 
     #[tokio::test]
@@ -205,7 +206,10 @@ mod tests {
 
         blocks.pop();
 
-        assert!(validate_dag(blocks).is_err());
+        assert_eq!(
+            validate_dag(blocks).unwrap_err().to_string(),
+            "No root found"
+        );
     }
 
     #[tokio::test]
@@ -221,7 +225,10 @@ mod tests {
             links: vec![],
         });
 
-        assert!(validate_dag(blocks).is_err());
+        assert_eq!(
+            validate_dag(blocks).unwrap_err().to_string(),
+            "Links do not match blocks"
+        );
     }
 
     #[tokio::test]
@@ -239,11 +246,17 @@ mod tests {
             links: vec![],
         });
 
-        assert!(validate_dag(blocks).is_err());
+        assert_eq!(
+            validate_dag(blocks).unwrap_err().to_string(),
+            "Links do not match blocks"
+        );
     }
 
     #[tokio::test]
     pub async fn test_dag_no_blocks() {
-        assert!(validate_dag(vec![]).is_err());
+        assert_eq!(
+            validate_dag(vec![]).unwrap_err().to_string(),
+            "No blocks found in dag"
+        );
     }
 }
