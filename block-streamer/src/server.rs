@@ -12,8 +12,7 @@ use tracing::{debug, error, info};
 use crate::receive::receive;
 use crate::receiver::Receiver;
 use crate::transmit::transmit_blocks;
-use messages::chunking::{MessageChunker, SimpleChunker};
-use messages::{ApplicationAPI, Message};
+use messages::{ApplicationAPI, Message, MessageChunker, SimpleChunker};
 
 // TODO: Make this configurable
 pub const MTU: u16 = 60; // 60 for radio

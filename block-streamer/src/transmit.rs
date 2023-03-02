@@ -1,10 +1,7 @@
 use anyhow::Result;
 use cid::Cid;
 use local_storage::block::StoredBlock;
-use messages::chunking::{MessageChunker, SimpleChunker};
-use messages::Message;
-use messages::TransmissionBlock;
-use messages::TransmissionMessage;
+use messages::{DataProtocol, Message, MessageChunker, SimpleChunker, TransmissionBlock};
 use std::net::SocketAddr;
 use tokio::net::UdpSocket;
 use tracing::info;
@@ -46,7 +43,7 @@ pub async fn transmit_blocks(blocks: &[StoredBlock], target_addr: &String) -> Re
             "Transmitting block {}",
             Cid::try_from(block.cid.clone()).unwrap().to_string()
         );
-        let msg = Message::DataProtocol(TransmissionMessage::Block(block));
+        let msg = Message::DataProtocol(DataProtocol::Block(block));
         for chunk in chunker.chunk(msg)? {
             socket.send_to(&chunk, target_address).await?;
         }

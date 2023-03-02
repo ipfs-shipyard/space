@@ -1,7 +1,6 @@
 use anyhow::Result;
 use clap::{arg, Parser};
-use messages::chunking::{MessageChunker, SimpleChunker};
-use messages::{ApplicationAPI, Message};
+use messages::{ApplicationAPI, Message, MessageChunker, SimpleChunker};
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::net::UdpSocket;
