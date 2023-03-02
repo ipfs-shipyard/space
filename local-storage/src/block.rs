@@ -1,8 +1,8 @@
-use anyhow::{bail, Result};
+use crate::util::verify_dag;
+use anyhow::{anyhow, bail, Result};
 use bytes::Bytes;
 use cid::Cid;
 use iroh_unixfs::Block;
-use std::collections::HashSet;
 use std::str::FromStr;
 
 #[derive(Debug, PartialEq)]
@@ -26,53 +26,24 @@ impl TryInto<Block> for &StoredBlock {
 
     fn try_into(self) -> std::result::Result<Block, Self::Error> {
         let cid = Cid::from_str(&self.cid)?;
-        let links = self
+        let links: Result<Vec<Cid>> = self
             .links
             .iter()
-            .map(|l| Cid::from_str(l).unwrap())
-            .collect::<Vec<Cid>>();
+            .map(|l| Cid::from_str(l).map_err(|e| anyhow!(e)))
+            .collect();
         let data = Bytes::from(self.data.clone());
-        Ok(Block::new(cid, data, links))
+        Ok(Block::new(cid, data, links?))
     }
 }
 
-pub fn validate_dag(stored_blocks: Vec<StoredBlock>) -> Result<()> {
+pub fn validate_dag(stored_blocks: &[StoredBlock]) -> Result<()> {
     if stored_blocks.is_empty() {
         bail!("No blocks found in dag")
     }
-    let blocks = stored_blocks
-        .iter()
-        .map(|b| b.try_into().unwrap())
-        .collect::<Vec<Block>>();
-    // First check if all blocks are valid
-    for block in blocks.iter() {
+    for block in stored_blocks.iter() {
         block.validate()?;
     }
-    // If there is only one block, and it is valid, then assume it's valid on its own
-    if blocks.len() == 1 {
-        return Ok(());
-    }
-    // Otherwise find the root
-    let root = blocks.iter().find(|b| !b.links().is_empty());
-    if let Some(root) = root {
-        // The block's validate function already tells us if the CID's hash matches the root links
-        // So now we just need compare the deduplicated sets of CIDs from the child blocks and the root links
-        let child_cids = blocks
-            .iter()
-            .filter(|b| b.links().is_empty())
-            .map(|b| b.cid().to_string())
-            .collect::<HashSet<String>>();
-        let linked_cids = root
-            .links()
-            .iter()
-            .map(|l| l.to_string())
-            .collect::<HashSet<String>>();
-        if child_cids != linked_cids {
-            bail!("Links do not match blocks");
-        }
-    } else {
-        bail!("No root found")
-    }
+    verify_dag(stored_blocks)?;
     Ok(())
 }
 
@@ -85,7 +56,7 @@ mod tests {
     use iroh_unixfs::builder::{File, FileBuilder};
     use rand::{thread_rng, RngCore};
 
-    async fn generate_stored_blocks(num_blocks: u8) -> Result<Vec<StoredBlock>> {
+    async fn generate_stored_blocks<'a>(num_blocks: u8) -> Result<Vec<StoredBlock>> {
         const CHUNK_SIZE: u8 = 20;
         let data_size = CHUNK_SIZE * num_blocks;
         let mut data = Vec::<u8>::new();
@@ -166,14 +137,14 @@ mod tests {
     pub async fn test_valid_dag_single_block() {
         let blocks = generate_stored_blocks(1).await.unwrap();
 
-        assert!(validate_dag(blocks).is_ok());
+        assert!(validate_dag(&blocks).is_ok());
     }
 
     #[tokio::test]
     pub async fn test_valid_dag_multi_blocks() {
         let blocks = generate_stored_blocks(10).await.unwrap();
 
-        assert!(validate_dag(blocks).is_ok());
+        assert!(validate_dag(&blocks).is_ok());
     }
 
     #[tokio::test]
@@ -184,7 +155,7 @@ mod tests {
         first.data.extend(b"corruption");
 
         assert_eq!(
-            validate_dag(blocks).unwrap_err().to_string(),
+            validate_dag(&blocks).unwrap_err().to_string(),
             "Hash of data does not match the CID."
         );
     }
@@ -196,7 +167,7 @@ mod tests {
         blocks.remove(0);
 
         assert_eq!(
-            validate_dag(blocks).unwrap_err().to_string(),
+            validate_dag(&blocks).unwrap_err().to_string(),
             "Links do not match blocks"
         );
     }
@@ -208,7 +179,7 @@ mod tests {
         blocks.pop();
 
         assert_eq!(
-            validate_dag(blocks).unwrap_err().to_string(),
+            validate_dag(&blocks).unwrap_err().to_string(),
             "No root found"
         );
     }
@@ -220,15 +191,18 @@ mod tests {
         let data = b"1871217171".to_vec();
         let cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(&data));
 
-        blocks.push(StoredBlock {
-            cid: cid.to_string(),
-            data,
-            links: vec![],
-        });
+        blocks.insert(
+            1,
+            StoredBlock {
+                cid: cid.to_string(),
+                data,
+                links: vec![],
+            },
+        );
 
         assert_eq!(
-            validate_dag(blocks).unwrap_err().to_string(),
-            "Links do not match blocks"
+            validate_dag(&blocks).unwrap_err().to_string(),
+            "No root found"
         );
     }
 
@@ -248,15 +222,29 @@ mod tests {
         });
 
         assert_eq!(
-            validate_dag(blocks).unwrap_err().to_string(),
+            validate_dag(&blocks).unwrap_err().to_string(),
             "Links do not match blocks"
+        );
+    }
+
+    #[tokio::test]
+    pub async fn test_dag_with_two_roots() {
+        let mut blocks = generate_stored_blocks(9).await.unwrap();
+
+        let other_blocks = generate_stored_blocks(2).await.unwrap();
+
+        blocks.extend(other_blocks);
+
+        assert_eq!(
+            validate_dag(&blocks).unwrap_err().to_string(),
+            "No root found"
         );
     }
 
     #[tokio::test]
     pub async fn test_dag_no_blocks() {
         assert_eq!(
-            validate_dag(vec![]).unwrap_err().to_string(),
+            validate_dag(&vec![]).unwrap_err().to_string(),
             "No blocks found in dag"
         );
     }
