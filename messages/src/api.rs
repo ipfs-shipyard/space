@@ -12,8 +12,10 @@ pub enum ApplicationAPI {
     ExportDag { cid: String, path: String },
     /// Tells IPFS instance whether comms are connected or not
     IsConnected { is_connected: bool },
-    /// Asks IPFS instance if it has a DAG corresponding to the CID and all its child data
-    IsDagComplete { cid: String },
+    /// Asks IPFS instance if it has a valid DAG corresponding to the CID and all its child data
+    ValidateDag { cid: String },
+    /// Response to ValidateDag request, contains requested CID and a text response
+    ValidateDagResponse { cid: String, result: String },
     /// Chunks and initiates transmission of a file path to destination IP
     TransmitFile { path: String, target_addr: String },
     /// Initiates transmission of DAG corresponding to the given CID
@@ -22,8 +24,6 @@ pub enum ApplicationAPI {
     TransmitBlock { cid: String, target_addr: String },
     /// Listens on address for data and writes out files received
     Receive { listen_addr: String },
-    /// Verify that a block exists on the system and is valid
-    ValidateBlack { cid: String },
     /// Information about the next pass used for calculating
     /// data transfer parameters
     NextPassInfo {

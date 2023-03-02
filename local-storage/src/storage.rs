@@ -95,6 +95,18 @@ impl Storage {
         Ok(child_blocks)
     }
 
+    pub fn get_dag_blocks(&self, cid: &str) -> Result<Vec<StoredBlock>> {
+        // Get StoredBlock by cid and check for links
+        let root_block = self.provider.get_block_by_cid(cid)?;
+        // If links, grab all appropriate StoredBlocks
+        let mut blocks = vec![];
+        for link in &root_block.links {
+            blocks.push(self.provider.get_block_by_cid(link)?);
+        }
+        blocks.push(root_block);
+        Ok(blocks)
+    }
+
     pub fn import_block(&self, block: &StoredBlock) -> Result<()> {
         info!("Importing block {}", block.cid);
         self.provider.import_block(block)

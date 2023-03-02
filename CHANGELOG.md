@@ -6,10 +6,12 @@
 
 - Added `validate` for `StoredBlock` to leverage the validation functionality built into `beetle::iroh_unixfs::Block`.
 - Added `local_storage::block::validate_dag` which determines if a list of `StoredBlock`s constitute a complete and valid DAG.
+- Implemented `ValidateDag` API and added `ValidateDagResponse`. The unimplemented `ValidateBlock` was removed, as `ValidateDag` can also validate individual blocks.
 
 ### Changed
 
 - Moved `StoredBlock` and associated implementation/tests out of the `storage` mod into a `block` mod within `local-storage`.
+- Some refactoring was started in `block_streamer::server` to make testing of server functionality much easier.
 
 ### Removed
 
