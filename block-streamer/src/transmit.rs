@@ -6,7 +6,7 @@ use std::net::SocketAddr;
 use tokio::net::UdpSocket;
 use tracing::info;
 
-pub async fn transmit_blocks(blocks: &[StoredBlock], target_addr: &String) -> Result<()> {
+pub async fn transmit_blocks(blocks: &[StoredBlock], target_addr: &str) -> Result<()> {
     info!("Transmitting {} blocks to {}", blocks.len(), target_addr);
 
     let target_address: SocketAddr = target_addr.parse()?;
