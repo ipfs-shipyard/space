@@ -365,6 +365,8 @@ dependencies = [
  "assert_fs",
  "cid 0.10.1",
  "clap",
+ "futures",
+ "iroh-unixfs",
  "local-storage",
  "messages",
  "names",
