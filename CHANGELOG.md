@@ -10,12 +10,15 @@
 
 ### Changed
 
+- Renamed `block-streamer` to `myceli` and `server` to `listener`.
 - Moved `StoredBlock` and associated implementation/tests out of the `storage` mod into a `block` mod within `local-storage`.
-- Some refactoring was started in `block_streamer::server` to make testing of server functionality much easier.
+- Reorganized the functionality in `block_streamer::server` to make functional testing much easier/possible.
+- Small refactor of `transmit_blocks`.
 
 ### Removed
 
 - The `RequestDag` and `RequestBlock` APIs were removed, as they were essentially equivalent to `TransmitDag` and `TransmitBlock`.
+- Removed the `receive` mode from `block-streamer/myceli`, as it was already covered by the `listener/server` functionality.
 
 ## [0.4] - 2023-02-24
 

@@ -1,15 +1,15 @@
 mod handlers;
+mod listener;
 mod receiver;
-mod server;
 mod transmit;
 
 use anyhow::Result;
 use clap::Parser;
-use server::Server;
+use listener::Listener;
 use tracing::Level;
 
 #[derive(Parser, Debug)]
-#[clap(about = "Spacey IPFS Node")]
+#[clap(about = "Myceli, a spacey IPFS node")]
 struct Args {
     listen_address: String,
 }
@@ -19,12 +19,12 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
     let args = Args::parse();
-    let mut server = Server::new(&args.listen_address)
+    let mut listener = Listener::new(&args.listen_address)
         .await
-        .expect("Server creation failed");
-    server
+        .expect("Listener creation failed");
+    listener
         .listen()
         .await
-        .expect("Error encountered in server operation");
+        .expect("Error encountered in listener operation");
     Ok(())
 }

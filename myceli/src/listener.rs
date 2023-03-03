@@ -16,7 +16,7 @@ use messages::{ApplicationAPI, Message, MessageChunker, SimpleChunker};
 // TODO: Make this configurable
 pub const MTU: u16 = 60; // 60 for radio
 
-pub struct Server {
+pub struct Listener {
     storage: Rc<Storage>,
     sender_addr: Option<SocketAddr>,
     chunker: SimpleChunker,
@@ -24,7 +24,7 @@ pub struct Server {
     socket: Rc<UdpSocket>,
 }
 
-impl Server {
+impl Listener {
     pub async fn new(listen_address: &str) -> Result<Self> {
         let provider = SqliteStorageProvider::new("storage.db")?;
         provider.setup()?;
@@ -32,7 +32,7 @@ impl Server {
         let socket = UdpSocket::bind(&listen_address).await?;
         info!("Listening for messages on {}", listen_address);
         let receiver = Receiver::new(Rc::clone(&storage));
-        Ok(Server {
+        Ok(Listener {
             storage,
             sender_addr: None,
             chunker: SimpleChunker::new(MTU),

@@ -358,26 +358,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "block-streamer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "assert_fs",
- "cid 0.10.1",
- "clap",
- "futures",
- "iroh-unixfs",
- "local-storage",
- "messages",
- "names",
- "parity-scale-codec",
- "rand 0.8.5",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "bs58"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2705,6 +2685,26 @@ dependencies = [
  "pin-project",
  "smallvec",
  "unsigned-varint",
+]
+
+[[package]]
+name = "myceli"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "assert_fs",
+ "cid 0.10.1",
+ "clap",
+ "futures",
+ "iroh-unixfs",
+ "local-storage",
+ "messages",
+ "names",
+ "parity-scale-codec",
+ "rand 0.8.5",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
