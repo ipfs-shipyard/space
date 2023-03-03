@@ -10,7 +10,6 @@ use tokio::time::sleep;
 use tracing::{debug, error, info};
 
 use crate::handlers;
-use crate::receive::receive;
 use crate::receiver::Receiver;
 use messages::{ApplicationAPI, Message, MessageChunker, SimpleChunker};
 
@@ -67,7 +66,7 @@ impl Server {
                     debug!("No msg found yet");
                 }
                 Err(err) => {
-                    error!("{err}");
+                    error!("Message parse failed: {err}");
                 }
             }
         }
@@ -75,10 +74,6 @@ impl Server {
 
     async fn handle_message(&mut self, message: Message) -> Result<Option<Message>> {
         let resp = match message {
-            Message::ApplicationAPI(ApplicationAPI::Receive { listen_addr }) => {
-                receive(&listen_addr).await?;
-                None
-            }
             Message::ApplicationAPI(ApplicationAPI::TransmitFile { path, target_addr }) => {
                 handlers::transmit_file(&path, &target_addr, self.storage.clone()).await?;
                 None
@@ -88,7 +83,7 @@ impl Server {
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::ImportFile { path }) => {
-                handlers::import_file(&path, self.storage.clone()).await?
+                Some(handlers::import_file(&path, self.storage.clone()).await?)
             }
             Message::ApplicationAPI(ApplicationAPI::ExportDag { cid, path }) => {
                 self.storage.export_cid(&cid, &PathBuf::from(path)).await?;

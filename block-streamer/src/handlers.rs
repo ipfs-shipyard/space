@@ -24,14 +24,12 @@ pub async fn transmit_dag(cid: &str, target_addr: &str, storage: Rc<Storage>) ->
     Ok(())
 }
 
-pub async fn import_file(path: &str, storage: Rc<Storage>) -> Result<Option<Message>> {
+pub async fn import_file(path: &str, storage: Rc<Storage>) -> Result<Message> {
     let root_cid = storage.import_path(&PathBuf::from(path.to_owned())).await?;
-    Ok(Some(Message::ApplicationAPI(
-        ApplicationAPI::FileImported {
-            path: path.to_string(),
-            cid: root_cid,
-        },
-    )))
+    Ok(Message::ApplicationAPI(ApplicationAPI::FileImported {
+        path: path.to_string(),
+        cid: root_cid,
+    }))
 }
 
 pub fn validate_dag(cid: &str, storage: Rc<Storage>) -> Result<Message> {
@@ -137,7 +135,7 @@ pub mod tests {
         let test_file_path = harness.generate_file().unwrap();
 
         let imported_file_cid = match import_file(&test_file_path, harness.storage.clone()).await {
-            Ok(Some(Message::ApplicationAPI(ApplicationAPI::FileImported { cid, .. }))) => cid,
+            Ok(Message::ApplicationAPI(ApplicationAPI::FileImported { cid, .. })) => cid,
             other => panic!("ImportFile returned wrong response {other:?}"),
         };
 
@@ -161,7 +159,7 @@ pub mod tests {
         let test_file_path = harness.generate_file().unwrap();
 
         let imported_file_cid = match import_file(&test_file_path, harness.storage.clone()).await {
-            Ok(Some(Message::ApplicationAPI(ApplicationAPI::FileImported { cid, .. }))) => cid,
+            Ok(Message::ApplicationAPI(ApplicationAPI::FileImported { cid, .. })) => cid,
             other => panic!("ImportFile returned wrong response {other:?}"),
         };
 
@@ -213,7 +211,7 @@ pub mod tests {
         let test_file_path = harness.generate_file().unwrap();
 
         let imported_file_cid = match import_file(&test_file_path, harness.storage.clone()).await {
-            Ok(Some(Message::ApplicationAPI(ApplicationAPI::FileImported { cid, .. }))) => cid,
+            Ok(Message::ApplicationAPI(ApplicationAPI::FileImported { cid, .. })) => cid,
             other => panic!("ImportFile returned wrong response {other:?}"),
         };
 

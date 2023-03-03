@@ -1,51 +1,30 @@
 mod handlers;
-mod receive;
 mod receiver;
 mod server;
 mod transmit;
 
-use crate::receive::receive;
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use server::Server;
 use tracing::Level;
 
-#[derive(Parser, Debug, Clone)]
-#[clap(version, long_about = None, propagate_version = true)]
-#[clap(about = "Transmit/Receive IPFS block stream")]
-pub struct Cli {
-    #[clap(subcommand)]
-    command: Commands,
+#[derive(Parser, Debug)]
+#[clap(about = "Spacey IPFS Node")]
+struct Args {
+    listen_address: String,
 }
 
-#[derive(Subcommand, Debug, Clone)]
-enum Commands {
-    #[clap(about = "Receive files")]
-    Receive {
-        /// The address to listen for the file data on
-        listen_address: String,
-    },
-    #[clap(about = "Server mode")]
-    Server { listen_address: String },
-}
-
-impl Cli {
-    pub async fn run(&self) -> Result<()> {
-        match &self.command {
-            Commands::Receive { listen_address } => receive(listen_address).await?,
-            Commands::Server { listen_address } => {
-                let mut server = Server::new(listen_address).await?;
-                server.listen().await?
-            }
-        }
-        Ok(())
-    }
-}
-
-#[tokio::main(flavor = "multi_thread")]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
-    let cli = Cli::parse();
-    cli.run().await
+    let args = Args::parse();
+    let mut server = Server::new(&args.listen_address)
+        .await
+        .expect("Server creation failed");
+    server
+        .listen()
+        .await
+        .expect("Error encountered in server operation");
+    Ok(())
 }
