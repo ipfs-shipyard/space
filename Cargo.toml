@@ -2,10 +2,10 @@
 
 members = [
     "app-api-cli",
-    "block-streamer",
     "car-utility",
-    "local-dev-environment/desktop/radio-service",
-    "messages",
     "cpp-transmit-example",
-    "local-storage"
+    "local-dev-environment/desktop/radio-service",
+    "local-storage",
+    "messages",
+    "myceli"
 ]
