@@ -1,8 +1,12 @@
 use messages::{ApplicationAPI, Message};
 use std::ffi::{c_char, c_int, c_uchar, CStr};
 
+/// # Safety
+///
+/// The caller of this function needs to ensure that buffer, path, and addr are not null
+/// and that buffer has sufficient space for a message to be written into it.
 #[no_mangle]
-pub extern "C" fn generate_transmit_msg(
+pub unsafe extern "C" fn generate_transmit_msg(
     buffer: *mut c_uchar,
     path: *const c_char,
     addr: *const c_char,
