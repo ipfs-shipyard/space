@@ -2,7 +2,7 @@ use anyhow::Result;
 use cid::Cid;
 use local_storage::block::StoredBlock;
 use local_storage::storage::Storage;
-use messages::{TransmissionBlock, TransmissionMessage};
+use messages::{DataProtocol, TransmissionBlock};
 use std::rc::Rc;
 
 pub struct Receiver {
@@ -29,9 +29,9 @@ impl Receiver {
         self.storage.import_block(&stored_block)
     }
 
-    pub async fn handle_transmission_msg(&mut self, msg: TransmissionMessage) -> Result<()> {
+    pub async fn handle_transmission_msg(&mut self, msg: DataProtocol) -> Result<()> {
         match msg {
-            TransmissionMessage::Block(block) => self.handle_block_msg(block)?,
+            DataProtocol::Block(block) => self.handle_block_msg(block)?,
         }
         Ok(())
     }
@@ -74,7 +74,7 @@ mod tests {
         let data = b"1871217171".to_vec();
         let cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(&data));
 
-        let block_msg = TransmissionMessage::Block(TransmissionBlock {
+        let block_msg = DataProtocol::Block(TransmissionBlock {
             cid: cid.to_bytes(),
             data,
             links: vec![],
@@ -90,7 +90,7 @@ mod tests {
         let data = b"18712552224417171".to_vec();
         let cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(&data));
 
-        let block_msg = TransmissionMessage::Block(TransmissionBlock {
+        let block_msg = DataProtocol::Block(TransmissionBlock {
             cid: cid.to_bytes(),
             data,
             links: vec![],

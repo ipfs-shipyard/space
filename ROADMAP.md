@@ -41,8 +41,8 @@ Milestone four focuses on implementing basic file/CID handling APIs.
 
 Milestone five focuses on DAG and block validation
 
-- [ ] **PoC - Implement block-level validation** - Implement validation on a per-block basis as they are received and assembled.
-- [ ] **PoC - Implement `IsDagComplete`, `ValidateDag`, `ValidateBlock` APIs** - Implement an API to determine if a DAG is present with all of it's children blocks, and an API to validate that DAG or block all the way down.
+- [x] [**PoC - Implement block-level validation**](https://github.com/ipfs-shipyard/space/pull/33) - Implement validation on a per-block basis as they are received and assembled.
+- [x] [**PoC - Implement `IsDagComplete`, `ValidateDag`, `ValidateBlock` APIs**](https://github.com/ipfs-shipyard/space/pull/34) - Implement an API to determine if a DAG is present with all of it's children blocks, and an API to validate that DAG or block all the way down.
 - [ ] **MVP 0.5 - Demonstrate DAG complete/validate APIs after transfer**
 
 ## Milestone 6

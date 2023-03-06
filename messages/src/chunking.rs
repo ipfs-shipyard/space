@@ -1,4 +1,4 @@
-use crate::{Message, MessageContainer};
+use crate::message::{Message, MessageContainer};
 
 use anyhow::{bail, Result};
 use parity_scale_codec::{Decode, Encode};
