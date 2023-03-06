@@ -1,8 +1,5 @@
 name: CI Unit Testing
-on:
-  pull_request:
-    types:
-      - opened
+on: [pull_request]
 jobs:
   build_and_test:
     name: Build and test rust
