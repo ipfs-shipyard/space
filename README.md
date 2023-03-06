@@ -12,7 +12,7 @@ The work and communications for this project will be coordinated through the [ip
 - [x] [v0.2 - Generate DAG, transmit & receive over Radio](https://github.com/ipfs-shipyard/space/pull/15)
 - [x] [v0.3 - Transmit & receive triggered by application API](https://www.loom.com/share/2c56c6d4297949f4929c84f4112e4eef)
 - [x] [v0.4 - IPFS storage, CID advertisements and requests](https://www.loom.com/share/ad5c5509ac6b4adb8734dcf54cf6b3cf)
-- [ ] v0.5 - Block validation and CID validation APIs
+- [x] [v0.5 - Block validation and CID validation APIs](https://youtu.be/gyed10oWHk0)
 - [ ] v0.6 - Pass-aware data transfer protocol
 - [ ] v0.7 - Block and chunk requests and re-transmissions
 
