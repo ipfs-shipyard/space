@@ -7,6 +7,7 @@
 - Added `validate` for `StoredBlock` to leverage the validation functionality built into `beetle::iroh_unixfs::Block`.
 - Added `local_storage::block::validate_dag` which determines if a list of `StoredBlock`s constitute a complete and valid DAG.
 - Implemented `ValidateDag` API and added `ValidateDagResponse`. The unimplemented `ValidateBlock` was removed, as `ValidateDag` can also validate individual blocks.
+- Added CI workflows for running clippy and tests.
 
 ### Changed
 
