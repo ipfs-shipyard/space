@@ -31,7 +31,7 @@ Navigate to the `space/myceli` directory and run the following build command:
 
 This will kick off the cross-compiling process for the `myceli` project. After it has completed, you will find the finished binary at `space/target/armv7-unknown-linux-gnueabihf/debug/myceli`. This binary can now be transferred to the raspberry-pi for usage. A typical way to transfer this binary is with `scpp`, like so:
 
-    $ scp target/armv7-unknown-linux-gnueabihf/debug/myceli` pi@pi-address:/home/pi/
+    $ scp target/armv7-unknown-linux-gnueabihf/debug/myceli pi@pi-address:/home/pi/
 
 ### Building for the local computer
 
