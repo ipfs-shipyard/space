@@ -1,4 +1,4 @@
-# Overview
+# Local Environment Setup Guide
 
 This folder contains instructions and tools for setting up a local development environment. Specifically one involving raspberrypi-based satellites and RFM69 radio links. This readme will go over the instructions for setting up a UDP-to-radio link between a computer and a raspberry pi.
 
