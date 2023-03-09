@@ -55,7 +55,6 @@ impl SimpleChunker {
             msg_map.insert(chunk.sequence_number, chunk);
             self.recv_buffer.insert(self.last_recv_msg_id, msg_map);
         }
-        
 
         Ok(())
     }
@@ -72,9 +71,10 @@ impl SimpleChunker {
             // So to verify we have all message chunks...First grab the last chunk in the list
             if let Some(last_chunk) = chunks.last() {
                 // Second, check if the last chunk has final_chunk set
-                if last_chunk.final_chunk 
+                if last_chunk.final_chunk
                 // Lastly, check if the final chunk's sequence number matches the number of chunks
-                && (usize::from(last_chunk.sequence_number) == (chunks.len() - 1)) {
+                && (usize::from(last_chunk.sequence_number) == (chunks.len() - 1))
+                {
                     // If all those checks pass, then we *should* have all the chunks in order
                     // Now we attempt to assemble the message
                     return Ok(Some(SimpleChunker::msg_unchunk(&chunks)?));
@@ -117,8 +117,9 @@ impl MessageChunker for SimpleChunker {
             })
             .collect::<Vec<SimpleChunk>>();
         // Set final to true in last chunk
-        let mut last_chunk = chunks.last_mut().unwrap();
-        last_chunk.final_chunk = true;
+        if let Some(mut last_chunk) = chunks.last_mut() {
+            last_chunk.final_chunk = true;
+        }
         // Encode all the chunks
         Ok(chunks.iter().map(|c| c.encode()).collect::<Vec<Vec<u8>>>())
     }
@@ -168,6 +169,7 @@ mod tests {
         for mtu in mtu_list {
             let chunker = SimpleChunker::new(mtu);
             let msg = Message::ApplicationAPI(ApplicationAPI::MissingDagBlocks {
+                cid: "notarealcid".to_string(),
                 blocks: vec!["data".to_string(); 10240],
             });
 
@@ -255,10 +257,16 @@ mod tests {
         let msg_one_chunks = chunker.chunk(msg_one.clone()).unwrap();
         let msg_two_chunks = chunker.chunk(msg_two.clone()).unwrap();
 
-        let unchunked_message = chunker.unchunk(msg_one_chunks.first().unwrap()).unwrap().unwrap();
+        let unchunked_message = chunker
+            .unchunk(msg_one_chunks.first().unwrap())
+            .unwrap()
+            .unwrap();
         assert_eq!(msg_one, unchunked_message);
 
-        let unchunked_message = chunker.unchunk(msg_two_chunks.first().unwrap()).unwrap().unwrap();
+        let unchunked_message = chunker
+            .unchunk(msg_two_chunks.first().unwrap())
+            .unwrap()
+            .unwrap();
         assert_eq!(msg_two, unchunked_message);
     }
 
@@ -284,9 +292,9 @@ mod tests {
             match chunker.unchunk(&chunk) {
                 Ok(Some(msg)) => {
                     assert!([&msg_one, &msg_two].contains(&&msg));
-                    found_msgs = found_msgs + 1;
-                },
-                Ok(None) => {},
+                    found_msgs += 1;
+                }
+                Ok(None) => {}
                 Err(_) => {}
             }
         }
@@ -317,7 +325,7 @@ mod tests {
             match chunker.unchunk(&chunk) {
                 Ok(Some(msg)) => {
                     assert!([&msg_one, &msg_two].contains(&&msg));
-                    found_msgs = found_msgs + 1;
+                    found_msgs += 1;
                 }
                 Ok(None) => {}
                 Err(_) => {}
@@ -356,7 +364,7 @@ mod tests {
             match chunker.unchunk(&chunk) {
                 Ok(Some(msg)) => {
                     assert!(msgs.contains(&msg));
-                    found_msgs = found_msgs + 1;
+                    found_msgs += 1;
                 }
                 Ok(None) => {}
                 Err(_) => {}
@@ -372,7 +380,7 @@ mod tests {
             cids: vec!["hello i am a CID".to_string(); 10],
         });
         let mut chunker = SimpleChunker::new(60);
-        let mut chunks = chunker.chunk(msg.clone()).unwrap();
+        let mut chunks = chunker.chunk(msg).unwrap();
 
         assert_eq!(chunks.len(), 4);
 

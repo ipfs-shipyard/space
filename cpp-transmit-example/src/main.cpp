@@ -8,10 +8,10 @@ int main(int argc, char *argv[])
 {
     if (argc != 4)
     {
-        printf("Please provide three arguments: [ipfs_addr] [path_to_transmit] [destination_addr]\n");
+        printf("Please provide three arguments: [ipfs_addr] [dag_cid_to_transmit] [destination_addr]\n");
         return -1;
     }
-    printf("Sending {\"Transmit\": {\"path\": %s, \"addr\": %s}} to %s\n", argv[2], argv[3], argv[1]);
+    printf("Sending {\"Transmit\": {\"dag\": %s, \"addr\": %s}} to %s\n", argv[2], argv[3], argv[1]);
 
     // Parse out network address
     std::string addr(argv[1]);

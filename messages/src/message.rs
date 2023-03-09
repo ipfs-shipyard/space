@@ -1,5 +1,6 @@
 use crate::api::ApplicationAPI;
 use crate::protocol::DataProtocol;
+use crate::TransmissionBlock;
 
 use anyhow::{bail, Result};
 use cid::multihash::{Code, MultihashDigest};
@@ -59,6 +60,7 @@ impl MessageContainer {
 pub enum Message {
     DataProtocol(DataProtocol),
     ApplicationAPI(ApplicationAPI),
+    Error(String),
 }
 
 impl Message {
@@ -80,10 +82,11 @@ impl Message {
         })
     }
 
-    pub fn transmit_dag(cid: &str, target_addr: &str) -> Self {
+    pub fn transmit_dag(cid: &str, target_addr: &str, retries: u8) -> Self {
         Message::ApplicationAPI(ApplicationAPI::TransmitDag {
             cid: cid.to_string(),
             target_addr: target_addr.to_string(),
+            retries,
         })
     }
 
@@ -97,6 +100,29 @@ impl Message {
         Message::ApplicationAPI(ApplicationAPI::ExportDag {
             cid: cid.to_string(),
             path: path.to_string(),
+        })
+    }
+
+    pub fn get_missing_dag_blocks(cid: &str) -> Self {
+        Message::ApplicationAPI(ApplicationAPI::GetMissingDagBlocks {
+            cid: cid.to_string(),
+        })
+    }
+
+    pub fn data_block(block: TransmissionBlock) -> Self {
+        Message::DataProtocol(DataProtocol::Block(block))
+    }
+
+    pub fn request_missing_dag_blocks(cid: &str) -> Self {
+        Message::DataProtocol(DataProtocol::RequestMissingDagBlocks {
+            cid: cid.to_owned(),
+        })
+    }
+
+    pub fn missing_dag_blocks(cid: &str, blocks: Vec<String>) -> Self {
+        Message::DataProtocol(DataProtocol::MissingDagBlocks {
+            cid: cid.to_owned(),
+            blocks,
         })
     }
 }

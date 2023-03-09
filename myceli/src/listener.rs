@@ -1,52 +1,66 @@
+use crate::handlers;
+use crate::shipper::Shipper;
 use anyhow::Result;
 use local_storage::provider::SqliteStorageProvider;
 use local_storage::storage::Storage;
+use messages::{ApplicationAPI, DataProtocol, Message, MessageChunker, SimpleChunker};
 use std::net::SocketAddr;
+use std::net::UdpSocket;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::mpsc::{self, Sender};
+use std::thread::{sleep, spawn};
 use std::time::Duration;
-use tokio::net::UdpSocket;
-use tokio::time::sleep;
 use tracing::{debug, error, info};
-
-use crate::handlers;
-use crate::receiver::Receiver;
-use messages::{ApplicationAPI, Message, MessageChunker, SimpleChunker};
 
 // TODO: Make this configurable
 pub const MTU: u16 = 60; // 60 for radio
 
 pub struct Listener {
+    storage_path: String,
     storage: Rc<Storage>,
     sender_addr: Option<SocketAddr>,
     chunker: SimpleChunker,
-    receiver: Receiver,
     socket: Rc<UdpSocket>,
 }
 
 impl Listener {
-    pub async fn new(listen_address: &str, storage_path: &str) -> Result<Self> {
+    pub fn new(listen_address: &str, storage_path: &str) -> Result<Self> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
         let storage = Rc::new(Storage::new(Box::new(provider)));
-        let std_socket = std::net::UdpSocket::bind(listen_address)?;
-        let socket = UdpSocket::from_std(std_socket)?;
-        let receiver = Receiver::new(Rc::clone(&storage));
+        info!("Listening on {listen_address}");
+        let socket = UdpSocket::bind(listen_address)?;
         Ok(Listener {
+            storage_path: storage_path.to_string(),
             storage,
             sender_addr: None,
             chunker: SimpleChunker::new(MTU),
-            receiver,
             socket: Rc::new(socket),
         })
     }
 
-    pub async fn listen(&mut self) -> Result<()> {
+    pub fn start(&mut self, shipper_timeout_duration: u32) -> Result<()> {
+        // First setup the shipper and its pieces
+        let (shipper_sender, shipper_receiver) = mpsc::channel();
+        let shipper_storage_path = self.storage_path.to_string();
+        let shipper_sender_clone = shipper_sender.clone();
+        spawn(move || {
+            let mut shipper = Shipper::new(
+                &shipper_storage_path,
+                shipper_receiver,
+                shipper_sender_clone,
+                shipper_timeout_duration,
+            )
+            .expect("Shipper creation failed");
+            shipper.receive_msg_loop();
+        });
+
         let mut buf = vec![0; usize::from(MTU)];
         loop {
             {
                 loop {
-                    match self.socket.recv_from(&mut buf).await {
+                    match self.socket.recv_from(&mut buf) {
                         Ok((len, sender)) => {
                             if len > 0 {
                                 self.sender_addr = Some(sender);
@@ -57,15 +71,24 @@ impl Listener {
                             error!("Recv failed {e}");
                         }
                     }
-                    sleep(Duration::from_millis(10)).await;
+                    sleep(Duration::from_millis(10));
                 }
             }
 
             match self.chunker.unchunk(&buf) {
-                Ok(Some(msg)) => match self.handle_message(msg).await {
-                    Ok(Some(resp)) => self.transmit_response(resp).await.unwrap(),
+                Ok(Some(msg)) => match self.handle_message(msg, shipper_sender.clone()) {
+                    Ok(Some(resp)) => {
+                        if let Err(e) = self.transmit_response(resp) {
+                            error!("TransmitResponse error: {e}");
+                        }
+                    }
                     Ok(None) => {}
-                    Err(e) => error!("{e}"),
+                    Err(e) => {
+                        if let Err(e) = self.transmit_response(Message::Error(e.to_string())) {
+                            error!("TransmitResponse error: {e}");
+                        }
+                        error!("MessageHandlerError: {e}");
+                    }
                 },
                 Ok(None) => {
                     debug!("No msg found yet");
@@ -77,26 +100,45 @@ impl Listener {
         }
     }
 
-    async fn handle_message(&mut self, message: Message) -> Result<Option<Message>> {
+    fn handle_message(
+        &mut self,
+        message: Message,
+        shipper_sender: Sender<(DataProtocol, String)>,
+    ) -> Result<Option<Message>> {
         info!("Handling {message:?}");
         let resp = match message {
-            Message::ApplicationAPI(ApplicationAPI::TransmitFile { path, target_addr }) => {
-                handlers::transmit_file(&path, &target_addr, self.storage.clone()).await?;
-                None
-            }
-            Message::ApplicationAPI(ApplicationAPI::TransmitDag { cid, target_addr }) => {
-                handlers::transmit_dag(&cid, &target_addr, self.storage.clone()).await?;
+            Message::ApplicationAPI(ApplicationAPI::TransmitDag {
+                cid,
+                target_addr,
+                retries,
+            }) => {
+                shipper_sender.send((
+                    DataProtocol::RequestTransmitDag {
+                        cid,
+                        target_addr,
+                        retries,
+                    },
+                    self.sender_addr
+                        .map(|s| s.to_string())
+                        .unwrap_or("".to_string()),
+                ))?;
+
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::TransmitBlock { cid, target_addr }) => {
-                handlers::transmit_block(&cid, &target_addr, self.storage.clone()).await?;
+                shipper_sender.send((
+                    DataProtocol::RequestTransmitBlock { cid, target_addr },
+                    self.sender_addr
+                        .map(|s| s.to_string())
+                        .unwrap_or("".to_string()),
+                ))?;
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::ImportFile { path }) => {
-                Some(handlers::import_file(&path, self.storage.clone()).await?)
+                Some(handlers::import_file(&path, self.storage.clone())?)
             }
             Message::ApplicationAPI(ApplicationAPI::ExportDag { cid, path }) => {
-                self.storage.export_cid(&cid, &PathBuf::from(path)).await?;
+                self.storage.export_cid(&cid, &PathBuf::from(path))?;
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::RequestAvailableBlocks) => {
@@ -109,7 +151,12 @@ impl Listener {
                 Some(handlers::validate_dag(&cid, self.storage.clone())?)
             }
             Message::DataProtocol(data_msg) => {
-                self.receiver.handle_transmission_msg(data_msg).await?;
+                shipper_sender.send((
+                    data_msg,
+                    self.sender_addr
+                        .map(|s| s.to_string())
+                        .unwrap_or("".to_string()),
+                ))?;
                 None
             }
             // Default case for valid messages which don't have handling code implemented yet
@@ -121,11 +168,16 @@ impl Listener {
         Ok(resp)
     }
 
-    async fn transmit_response(&self, message: Message) -> Result<()> {
+    fn transmit_msg(&self, message: Message, target_addr: SocketAddr) -> Result<()> {
+        for chunk in self.chunker.chunk(message)? {
+            self.socket.send_to(&chunk, target_addr)?;
+        }
+        Ok(())
+    }
+
+    fn transmit_response(&self, message: Message) -> Result<()> {
         if let Some(sender_addr) = self.sender_addr {
-            for chunk in self.chunker.chunk(message)? {
-                self.socket.send_to(&chunk, sender_addr).await?;
-            }
+            self.transmit_msg(message, sender_addr)?;
         }
         Ok(())
     }

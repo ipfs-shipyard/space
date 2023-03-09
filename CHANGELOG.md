@@ -7,10 +7,21 @@
 - Added integration tests for `myceli` which get pretty close to end-to-end testing.
 - Added helper functions to `Message` enum for generating specific messages.
 - Implemented `TransmitBlock` API for transmitting a single block.
+- Added retries to the `TransmitDag` API and timeout-based mechanism for retrying dag transmission, this included adding retry duration as a CLI arg to `myceli`.
+- Added protocol messages for requesting missing dag blocks, requesting transmission of dags & blocks, and retrying dag transmission.
+- Added a basic Dockerfile for building and running `myceli`.
+- Added `shipper` struct to `myceli` which consolidates all data exchange code and adds state necessary to support timeout-based retries during DAG transmission.
 
 ### Changed
 
 - Reworked `myceli` crate a bit to expose internal library in binary crate.
+- Reworked `myceli` to operate in the traditional multi-threaded fashion instead of using async. This included reworking `myceli::Listener` to spawn `shipper` in a separate thread and pass along messages via channel.
+- Updated logging in the desktop `radio-service` to use `tracing`.
+- Moved `transmit_dag` and `transmit_block` functionality from handlers to `shipper`.
+
+### Removed
+
+- Removed the `TransmitFile` API, all files to be transmitted should be imported and then transmitted to support retransmission of blocks.
 
 ## [0.5] - 2023-03-06
 

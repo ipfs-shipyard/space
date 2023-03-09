@@ -9,3 +9,5 @@ edition = "2021"
 clap = { version = "4.0", features = ["derive"] }
 tokio = { version = "1.8", features = ["macros", "rt", "rt-multi-thread"] }
 tokio-serial = "5.4"
+tracing = "0.1"
+tracing-subscriber = "0.3"

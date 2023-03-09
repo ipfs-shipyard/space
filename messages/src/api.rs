@@ -16,10 +16,12 @@ pub enum ApplicationAPI {
     ValidateDag { cid: String },
     /// Response to ValidateDag request, contains requested CID and a text response
     ValidateDagResponse { cid: String, result: String },
-    /// Chunks and initiates transmission of a file path to destination IP
-    TransmitFile { path: String, target_addr: String },
-    /// Initiates transmission of DAG corresponding to the given CID
-    TransmitDag { cid: String, target_addr: String },
+    /// Initiates transmission of DAG corresponding to the given CID, with a given number of retries
+    TransmitDag {
+        cid: String,
+        target_addr: String,
+        retries: u8,
+    },
     /// Initiates transmission of block corresponding to the given CID
     TransmitBlock { cid: String, target_addr: String },
     /// Listens on address for data and writes out files received
@@ -45,6 +47,6 @@ pub enum ApplicationAPI {
     DeleteBlock { cid: String },
     /// Request missing DAG blocks
     GetMissingDagBlocks { cid: String },
-    /// List of missing block CIDs
-    MissingDagBlocks { blocks: Vec<String> },
+    /// List of missing blocks and associated DAG's CID
+    MissingDagBlocks { cid: String, blocks: Vec<String> },
 }
