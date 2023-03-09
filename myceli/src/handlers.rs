@@ -24,6 +24,12 @@ pub async fn transmit_dag(cid: &str, target_addr: &str, storage: Rc<Storage>) ->
     Ok(())
 }
 
+pub async fn transmit_block(cid: &str, target_addr: &str, storage: Rc<Storage>) -> Result<()> {
+    let block = storage.get_block_by_cid(cid)?;
+    transmit_blocks(&vec![block], target_addr).await?;
+    Ok(())
+}
+
 pub async fn import_file(path: &str, storage: Rc<Storage>) -> Result<Message> {
     let root_cid = storage.import_path(&PathBuf::from(path.to_owned())).await?;
     Ok(Message::ApplicationAPI(ApplicationAPI::FileImported {

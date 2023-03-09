@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
     let args = Args::parse();
-    let mut listener = Listener::new(&args.listen_address)
+    let mut listener = Listener::new(&args.listen_address, "storage.db")
         .await
         .expect("Listener creation failed");
     listener

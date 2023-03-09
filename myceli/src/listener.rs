@@ -25,12 +25,12 @@ pub struct Listener {
 }
 
 impl Listener {
-    pub async fn new(listen_address: &str) -> Result<Self> {
-        let provider = SqliteStorageProvider::new("storage.db")?;
+    pub async fn new(listen_address: &str, storage_path: &str) -> Result<Self> {
+        let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
         let storage = Rc::new(Storage::new(Box::new(provider)));
-        let socket = UdpSocket::bind(&listen_address).await?;
-        info!("Listening for messages on {}", listen_address);
+        let std_socket = std::net::UdpSocket::bind(&listen_address)?;
+        let socket = UdpSocket::from_std(std_socket)?;
         let receiver = Receiver::new(Rc::clone(&storage));
         Ok(Listener {
             storage,
@@ -46,10 +46,15 @@ impl Listener {
         loop {
             {
                 loop {
-                    if let Ok((len, sender)) = self.socket.try_recv_from(&mut buf) {
-                        if len > 0 {
-                            self.sender_addr = Some(sender);
-                            break;
+                    match self.socket.recv_from(&mut buf).await {
+                        Ok((len, sender)) => {
+                            if len > 0 {
+                                self.sender_addr = Some(sender);
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            error!("Recv failed {e}");
                         }
                     }
                     sleep(Duration::from_millis(10)).await;
@@ -73,6 +78,7 @@ impl Listener {
     }
 
     async fn handle_message(&mut self, message: Message) -> Result<Option<Message>> {
+        info!("Handling {message:?}");
         let resp = match message {
             Message::ApplicationAPI(ApplicationAPI::TransmitFile { path, target_addr }) => {
                 handlers::transmit_file(&path, &target_addr, self.storage.clone()).await?;
@@ -80,6 +86,10 @@ impl Listener {
             }
             Message::ApplicationAPI(ApplicationAPI::TransmitDag { cid, target_addr }) => {
                 handlers::transmit_dag(&cid, &target_addr, self.storage.clone()).await?;
+                None
+            }
+            Message::ApplicationAPI(ApplicationAPI::TransmitBlock { cid, target_addr }) => {
+                handlers::transmit_block(&cid, &target_addr, self.storage.clone()).await?;
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::ImportFile { path }) => {
@@ -118,5 +128,184 @@ impl Listener {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    use anyhow::bail;
+    use assert_fs::fixture::ChildPath;
+    use assert_fs::{fixture::FileWriteBin, fixture::PathChild, TempDir};
+    use rand::{thread_rng, RngCore};
+    use std::thread;
+    use tokio::time::sleep;
+
+    struct TestListener {
+        listen_addr: String,
+        db_dir: TempDir,
+    }
+
+    impl TestListener {
+        pub fn new(listen_addr: &str) -> TestListener {
+            let db_dir = TempDir::new().unwrap();
+
+            return TestListener {
+                listen_addr: listen_addr.to_string(),
+                db_dir,
+            };
+        }
+
+        pub async fn start(&self) -> Result<()> {
+            let thread_listen_addr = self.listen_addr.to_owned();
+            let thread_db_path = self.db_dir.child("storage.db");
+
+            thread::spawn(move || start_listener_thread(thread_listen_addr, thread_db_path));
+
+            // A little wait so the listener can get listening
+            sleep(Duration::from_millis(50)).await;
+            Ok(())
+        }
+
+        pub fn generate_file(&self) -> Result<String> {
+            let mut data = Vec::<u8>::new();
+            data.resize(256, 1);
+            thread_rng().fill_bytes(&mut data);
+
+            let tmp_file = self.db_dir.child("test.file");
+            tmp_file.write_binary(&data)?;
+            Ok(tmp_file.path().to_str().unwrap().to_owned())
+        }
+    }
+
+    #[tokio::main]
+    async fn start_listener_thread(listen_addr: String, db_path: ChildPath) {
+        let db_path = db_path.path().to_str().unwrap();
+        let mut listener = Listener::new(&listen_addr, &db_path).await.unwrap();
+        listener
+            .listen()
+            .await
+            .expect("Error encountered in listener");
+    }
+
+    struct TestController {
+        socket: UdpSocket,
+        chunker: SimpleChunker,
+    }
+
+    impl TestController {
+        pub async fn new() -> Self {
+            let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+            let chunker = SimpleChunker::new(60);
+            TestController { socket, chunker }
+        }
+
+        pub async fn send_msg(&self, message: Message, target_addr: &str) -> Result<()> {
+            for chunk in self.chunker.chunk(message).unwrap() {
+                self.socket.send_to(&chunk, target_addr).await.unwrap();
+            }
+            Ok(())
+        }
+
+        pub async fn recv_msg(&mut self) -> Result<Message> {
+            let mut tries = 0;
+            loop {
+                let mut buf = vec![0; 128];
+                if self.socket.try_recv_from(&mut buf).is_ok() {
+                    match self.chunker.unchunk(&buf) {
+                        Ok(Some(msg)) => return Ok(msg),
+                        Ok(None) => {}
+                        Err(e) => bail!("Error found {e:?}"),
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                tries += 1;
+                if tries > 5 {
+                    bail!("Listen tries exceeded");
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    pub async fn test_verify_listener_alive() {
+        let listener = TestListener::new("127.0.0.1:8080");
+        listener.start().await.unwrap();
+
+        let mut controller = TestController::new().await;
+
+        controller
+            .send_msg(
+                Message::ApplicationAPI(ApplicationAPI::RequestAvailableBlocks),
+                &listener.listen_addr,
+            )
+            .await
+            .unwrap();
+
+        let response = controller.recv_msg().await.unwrap();
+        assert_eq!(
+            response,
+            Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids: vec![] })
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    pub async fn test_transmit_receive_block() {
+        let transmitter = TestListener::new("127.0.0.1:8080");
+        let receiver = TestListener::new("127.0.0.1:8081");
+        let mut controller = TestController::new().await;
+
+        transmitter.start().await.unwrap();
+        receiver.start().await.unwrap();
+
+        let test_file_path = transmitter.generate_file().unwrap();
+        controller
+            .send_msg(
+                Message::ApplicationAPI(ApplicationAPI::ImportFile {
+                    path: test_file_path,
+                }),
+                &transmitter.listen_addr,
+            )
+            .await
+            .unwrap();
+        let root_cid =
+            if let Message::ApplicationAPI(ApplicationAPI::FileImported { path: _, cid }) =
+                controller.recv_msg().await.unwrap()
+            {
+                cid
+            } else {
+                panic!("failed to recv cid");
+            };
+
+        controller
+            .send_msg(
+                Message::ApplicationAPI(ApplicationAPI::TransmitBlock {
+                    cid: root_cid.to_string(),
+                    target_addr: receiver.listen_addr.to_string(),
+                }),
+                &transmitter.listen_addr,
+            )
+            .await
+            .unwrap();
+
+        sleep(Duration::from_millis(50)).await;
+
+        controller
+            .send_msg(
+                Message::ApplicationAPI(ApplicationAPI::RequestAvailableBlocks),
+                &receiver.listen_addr,
+            )
+            .await
+            .unwrap();
+
+        let resp = controller.recv_msg().await.unwrap();
+        println!("{resp:?}");
+        assert_eq!(
+            resp,
+            Message::ApplicationAPI(ApplicationAPI::AvailableBlocks {
+                cids: vec![root_cid]
+            })
+        );
     }
 }
