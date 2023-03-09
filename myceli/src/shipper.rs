@@ -8,8 +8,8 @@ use messages::Message;
 use messages::{DataProtocol, TransmissionBlock};
 use messages::{MessageChunker, SimpleChunker};
 use std::collections::BTreeMap;
-use std::net::SocketAddr;
 use std::net::UdpSocket;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{sleep, spawn};
@@ -28,7 +28,7 @@ pub struct Shipper {
     receiver: Receiver<(DataProtocol, String)>,
     sender: Sender<(DataProtocol, String)>,
     // Retry timeout in milliseconds
-    retry_timeout_duration: u32,
+    retry_timeout_duration: u64,
 }
 
 impl Shipper {
@@ -36,7 +36,7 @@ impl Shipper {
         storage_path: &str,
         receiver: Receiver<(DataProtocol, String)>,
         sender: Sender<(DataProtocol, String)>,
-        retry_timeout_duration: u32,
+        retry_timeout_duration: u64,
     ) -> Result<Shipper> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
@@ -118,7 +118,7 @@ impl Shipper {
         let sender_clone = self.sender.clone();
         let cid_str = cid.to_string();
         let target_addr_str = target_addr.to_string();
-        let timeout_duration = Duration::from_millis(self.retry_timeout_duration.into());
+        let timeout_duration = Duration::from_millis(self.retry_timeout_duration);
         spawn(move || {
             sleep(timeout_duration);
             sender_clone
@@ -155,12 +155,13 @@ impl Shipper {
     }
 
     fn transmit_msg(&mut self, msg: Message, target_addr: &str) -> Result<()> {
-        info!("sending {msg:?} to {target_addr}");
+        let resolved_target_addr = target_addr.to_socket_addrs().unwrap().next().unwrap();
+        info!("sending {msg:?} to {resolved_target_addr}");
         let bind_address: SocketAddr = "127.0.0.1:0".parse()?;
         let socket = UdpSocket::bind(bind_address)?;
         let chunker = SimpleChunker::new(crate::listener::MTU);
         for chunk in chunker.chunk(msg)? {
-            socket.send_to(&chunk, target_addr)?;
+            socket.send_to(&chunk, resolved_target_addr)?;
         }
         Ok(())
     }
