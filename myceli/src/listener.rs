@@ -29,7 +29,7 @@ impl Listener {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
         let storage = Rc::new(Storage::new(Box::new(provider)));
-        let std_socket = std::net::UdpSocket::bind(&listen_address)?;
+        let std_socket = std::net::UdpSocket::bind(listen_address)?;
         let socket = UdpSocket::from_std(std_socket)?;
         let receiver = Receiver::new(Rc::clone(&storage));
         Ok(Listener {

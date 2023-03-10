@@ -26,7 +26,7 @@ pub async fn transmit_dag(cid: &str, target_addr: &str, storage: Rc<Storage>) ->
 
 pub async fn transmit_block(cid: &str, target_addr: &str, storage: Rc<Storage>) -> Result<()> {
     let block = storage.get_block_by_cid(cid)?;
-    transmit_blocks(&vec![block], target_addr).await?;
+    transmit_blocks(&[block], target_addr).await?;
     Ok(())
 }
 
