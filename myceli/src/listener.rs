@@ -201,6 +201,15 @@ pub mod tests {
             TestController { socket, chunker }
         }
 
+        pub async fn send_and_recv(
+            &mut self,
+            target_addr: &str,
+            message: Message,
+        ) -> Result<Message> {
+            self.send_msg(message, target_addr).await?;
+            self.recv_msg().await
+        }
+
         pub async fn send_msg(&self, message: Message, target_addr: &str) -> Result<()> {
             for chunk in self.chunker.chunk(message).unwrap() {
                 self.socket.send_to(&chunk, target_addr).await.unwrap();
@@ -235,19 +244,12 @@ pub mod tests {
 
         let mut controller = TestController::new().await;
 
-        controller
-            .send_msg(
-                Message::ApplicationAPI(ApplicationAPI::RequestAvailableBlocks),
-                &listener.listen_addr,
-            )
+        let response = controller
+            .send_and_recv(&listener.listen_addr, Message::request_available_blocks())
             .await
             .unwrap();
 
-        let response = controller.recv_msg().await.unwrap();
-        assert_eq!(
-            response,
-            Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids: vec![] })
-        );
+        assert_eq!(response, Message::available_blocks(vec![]));
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -260,52 +262,33 @@ pub mod tests {
         receiver.start().await.unwrap();
 
         let test_file_path = transmitter.generate_file().unwrap();
-        controller
-            .send_msg(
-                Message::ApplicationAPI(ApplicationAPI::ImportFile {
-                    path: test_file_path,
-                }),
+        let resp = controller
+            .send_and_recv(
                 &transmitter.listen_addr,
+                Message::import_file(&test_file_path),
             )
             .await
             .unwrap();
-        let root_cid =
-            if let Message::ApplicationAPI(ApplicationAPI::FileImported { path: _, cid }) =
-                controller.recv_msg().await.unwrap()
-            {
-                cid
-            } else {
-                panic!("failed to recv cid");
-            };
+        let root_cid = match resp {
+            Message::ApplicationAPI(ApplicationAPI::FileImported { cid, .. }) => cid,
+            other => panic!("Failed to receive FileImported msg {other:?}"),
+        };
 
         controller
             .send_msg(
-                Message::ApplicationAPI(ApplicationAPI::TransmitBlock {
-                    cid: root_cid.to_string(),
-                    target_addr: receiver.listen_addr.to_string(),
-                }),
+                Message::transmit_block(&root_cid, &receiver.listen_addr),
                 &transmitter.listen_addr,
             )
             .await
             .unwrap();
 
-        sleep(Duration::from_millis(50)).await;
+        sleep(Duration::from_millis(100)).await;
 
-        controller
-            .send_msg(
-                Message::ApplicationAPI(ApplicationAPI::RequestAvailableBlocks),
-                &receiver.listen_addr,
-            )
+        let resp = controller
+            .send_and_recv(&receiver.listen_addr, Message::request_available_blocks())
             .await
             .unwrap();
 
-        let resp = controller.recv_msg().await.unwrap();
-        println!("{resp:?}");
-        assert_eq!(
-            resp,
-            Message::ApplicationAPI(ApplicationAPI::AvailableBlocks {
-                cids: vec![root_cid]
-            })
-        );
+        assert_eq!(resp, Message::available_blocks(vec![root_cid]));
     }
 }

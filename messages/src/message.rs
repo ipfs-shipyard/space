@@ -65,4 +65,24 @@ impl Message {
     pub fn to_bytes(&self) -> Vec<u8> {
         self.encode()
     }
+
+    pub fn available_blocks(cids: Vec<String>) -> Self {
+        Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids })
+    }
+    pub fn request_available_blocks() -> Self {
+        Message::ApplicationAPI(ApplicationAPI::RequestAvailableBlocks)
+    }
+
+    pub fn transmit_block(cid: &str, target_addr: &str) -> Self {
+        Message::ApplicationAPI(ApplicationAPI::TransmitBlock {
+            cid: cid.to_string(),
+            target_addr: target_addr.to_string(),
+        })
+    }
+
+    pub fn import_file(path: &str) -> Self {
+        Message::ApplicationAPI(ApplicationAPI::ImportFile {
+            path: path.to_string(),
+        })
+    }
 }
