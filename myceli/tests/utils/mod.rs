@@ -1,33 +1,39 @@
 use super::*;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use assert_fs::fixture::ChildPath;
 use assert_fs::{fixture::FileWriteBin, fixture::PathChild, TempDir};
+use blake2::{Blake2s256, Digest};
+use file_hashing::get_hash_file;
 use messages::{MessageChunker, SimpleChunker};
 use myceli::listener::Listener;
-use rand::{thread_rng, RngCore};
+use rand::{thread_rng, Rng, RngCore};
+use std::path::PathBuf;
 use std::thread;
 use tokio::net::UdpSocket;
 use tokio::time::sleep;
 
 pub struct TestListener {
     pub listen_addr: String,
-    pub db_dir: TempDir,
+    pub test_dir: TempDir,
 }
 
 impl TestListener {
-    pub fn new(listen_addr: &str) -> TestListener {
-        let db_dir = TempDir::new().unwrap();
+    pub fn new() -> TestListener {
+        let test_dir = TempDir::new().unwrap();
+        let mut rng = thread_rng();
+        let port_num = rng.gen_range(6000..9000);
+        let listen_addr = format!("127.0.0.1:{port_num}");
 
         return TestListener {
-            listen_addr: listen_addr.to_string(),
-            db_dir,
+            listen_addr,
+            test_dir,
         };
     }
 
     pub async fn start(&self) -> Result<()> {
         let thread_listen_addr = self.listen_addr.to_owned();
-        let thread_db_path = self.db_dir.child("storage.db");
+        let thread_db_path = self.test_dir.child("storage.db");
 
         thread::spawn(move || start_listener_thread(thread_listen_addr, thread_db_path));
 
@@ -41,7 +47,7 @@ impl TestListener {
         data.resize(256, 1);
         thread_rng().fill_bytes(&mut data);
 
-        let tmp_file = self.db_dir.child("test.file");
+        let tmp_file = self.test_dir.child("test.file");
         tmp_file.write_binary(&data)?;
         Ok(tmp_file.path().to_str().unwrap().to_owned())
     }
@@ -69,34 +75,39 @@ impl TestController {
         TestController { socket, chunker }
     }
 
-    pub async fn send_and_recv(&mut self, target_addr: &str, message: Message) -> Result<Message> {
-        self.send_msg(message, target_addr).await?;
+    pub async fn send_and_recv(&mut self, target_addr: &str, message: Message) -> Message {
+        self.send_msg(message, target_addr).await;
         self.recv_msg().await
     }
 
-    pub async fn send_msg(&self, message: Message, target_addr: &str) -> Result<()> {
+    pub async fn send_msg(&self, message: Message, target_addr: &str) {
         for chunk in self.chunker.chunk(message).unwrap() {
             self.socket.send_to(&chunk, target_addr).await.unwrap();
         }
-        Ok(())
     }
 
-    pub async fn recv_msg(&mut self) -> Result<Message> {
+    pub async fn recv_msg(&mut self) -> Message {
         let mut tries = 0;
         loop {
             let mut buf = vec![0; 128];
             if self.socket.try_recv_from(&mut buf).is_ok() {
                 match self.chunker.unchunk(&buf) {
-                    Ok(Some(msg)) => return Ok(msg),
+                    Ok(Some(msg)) => return msg,
                     Ok(None) => {}
-                    Err(e) => bail!("Error found {e:?}"),
+                    Err(e) => panic!("Error found {e:?}"),
                 }
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
             tries += 1;
-            if tries > 5 {
-                bail!("Listen tries exceeded");
+            if tries > 20 {
+                panic!("Listen tries exceeded");
             }
         }
     }
+}
+
+pub fn hash_file(path_str: &str) -> String {
+    let path = PathBuf::from(path_str);
+    let mut hash = Blake2s256::new();
+    get_hash_file(path, &mut hash).unwrap()
 }

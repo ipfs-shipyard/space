@@ -305,6 +305,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "blake2"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe"
+dependencies = [
+ "digest 0.10.6",
+]
+
+[[package]]
 name = "blake2b_simd"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -874,6 +883,7 @@ checksum = "8168378f4e5023e7218c89c891c0fd8ecdb5e5e4f18cb78f38cf245dd021e76f"
 dependencies = [
  "block-buffer 0.10.3",
  "crypto-common",
+ "subtle",
 ]
 
 [[package]]
@@ -1023,6 +1033,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7a407cfaa3385c4ae6b23e84623d48c2798d06e3e6a1878f7f59f17b3f86499"
 dependencies = [
  "instant",
+]
+
+[[package]]
+name = "file-hashing"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77ad8e0086197e90a6582b00067f5dff327e96117a1bbcba58dd3974c982ccea"
+dependencies = [
+ "assert_fs",
+ "data-encoding",
+ "digest 0.10.6",
+ "rand 0.8.5",
+ "rayon",
+ "walkdir",
 ]
 
 [[package]]
@@ -2693,8 +2717,10 @@ version = "0.5.0"
 dependencies = [
  "anyhow",
  "assert_fs",
+ "blake2",
  "cid 0.10.1",
  "clap",
+ "file-hashing",
  "futures",
  "iroh-unixfs",
  "local-storage",

@@ -80,8 +80,22 @@ impl Message {
         })
     }
 
+    pub fn transmit_dag(cid: &str, target_addr: &str) -> Self {
+        Message::ApplicationAPI(ApplicationAPI::TransmitDag {
+            cid: cid.to_string(),
+            target_addr: target_addr.to_string(),
+        })
+    }
+
     pub fn import_file(path: &str) -> Self {
         Message::ApplicationAPI(ApplicationAPI::ImportFile {
+            path: path.to_string(),
+        })
+    }
+
+    pub fn export_dag(cid: &str, path: &str) -> Self {
+        Message::ApplicationAPI(ApplicationAPI::ExportDag {
+            cid: cid.to_string(),
             path: path.to_string(),
         })
     }
