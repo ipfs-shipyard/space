@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6] - Unreleased
+
+### Added
+
+- Added integration tests for `myceli` which get pretty close to end-to-end testing.
+- Added helper functions to `Message` enum for generating specific messages.
+- Implemented `TransmitBlock` API for transmitting a single block.
+
+### Changed
+
+- Reworked `myceli` crate a bit to expose internal library in binary crate.
+
 ## [0.5] - 2023-03-06
 
 ### Added
