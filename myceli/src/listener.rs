@@ -25,12 +25,12 @@ pub struct Listener {
 }
 
 impl Listener {
-    pub async fn new(listen_address: &str) -> Result<Self> {
-        let provider = SqliteStorageProvider::new("storage.db")?;
+    pub async fn new(listen_address: &str, storage_path: &str) -> Result<Self> {
+        let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
         let storage = Rc::new(Storage::new(Box::new(provider)));
-        let socket = UdpSocket::bind(&listen_address).await?;
-        info!("Listening for messages on {}", listen_address);
+        let std_socket = std::net::UdpSocket::bind(listen_address)?;
+        let socket = UdpSocket::from_std(std_socket)?;
         let receiver = Receiver::new(Rc::clone(&storage));
         Ok(Listener {
             storage,
@@ -46,10 +46,15 @@ impl Listener {
         loop {
             {
                 loop {
-                    if let Ok((len, sender)) = self.socket.try_recv_from(&mut buf) {
-                        if len > 0 {
-                            self.sender_addr = Some(sender);
-                            break;
+                    match self.socket.recv_from(&mut buf).await {
+                        Ok((len, sender)) => {
+                            if len > 0 {
+                                self.sender_addr = Some(sender);
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            error!("Recv failed {e}");
                         }
                     }
                     sleep(Duration::from_millis(10)).await;
@@ -73,6 +78,7 @@ impl Listener {
     }
 
     async fn handle_message(&mut self, message: Message) -> Result<Option<Message>> {
+        info!("Handling {message:?}");
         let resp = match message {
             Message::ApplicationAPI(ApplicationAPI::TransmitFile { path, target_addr }) => {
                 handlers::transmit_file(&path, &target_addr, self.storage.clone()).await?;
@@ -80,6 +86,10 @@ impl Listener {
             }
             Message::ApplicationAPI(ApplicationAPI::TransmitDag { cid, target_addr }) => {
                 handlers::transmit_dag(&cid, &target_addr, self.storage.clone()).await?;
+                None
+            }
+            Message::ApplicationAPI(ApplicationAPI::TransmitBlock { cid, target_addr }) => {
+                handlers::transmit_block(&cid, &target_addr, self.storage.clone()).await?;
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::ImportFile { path }) => {
