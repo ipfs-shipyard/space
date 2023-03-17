@@ -18,6 +18,10 @@ The work and communications for this project will be coordinated through the [ip
 
 A more detailed roadmap can be found [here](https://github.com/ipfs-shipyard/space/blob/main/ROADMAP.md).
 
+### Getting Started
+
+Check out the [local environment guide](docs/setup-local-environment.md) and [myceli setup guide](docs/myceli-basic-setup.md) to get started building and using this project.
+
 ## Objectives
 
 1. Demonstrate the utility of content addressable protocols in the context of space-to-ground and space-to-space communications.
