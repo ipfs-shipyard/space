@@ -1,0 +1,15 @@
+name: release
+
+on: [pull_request]
+
+jobs:
+  build_release:
+    name: build_release
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: myceli raspi build
+        run: CROSS_CONFIG=Cross.toml cross build --bin myceli --target armv7-unknown-linux-gnueabihf
