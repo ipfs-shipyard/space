@@ -7,19 +7,19 @@ use tracing::Level;
 #[clap(about = "Myceli, a spacey IPFS node")]
 struct Args {
     listen_address: String,
+    #[arg(short, long, default_value_t = 100)]
+    retry_timeout_duration: u32,
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
     let args = Args::parse();
-    let mut listener = Listener::new(&args.listen_address, "storage.db")
-        .await
-        .expect("Listener creation failed");
+
+    let mut listener =
+        Listener::new(&args.listen_address, "storage.db").expect("Listener creation failed");
     listener
-        .listen()
-        .await
+        .start(args.retry_timeout_duration)
         .expect("Error encountered in listener operation");
     Ok(())
 }

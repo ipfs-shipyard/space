@@ -8,6 +8,7 @@ use std::thread;
 use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio_serial::SerialPortBuilderExt;
+use tracing::{info, Level};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -26,6 +27,8 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> tokio_serial::Result<()> {
+    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+
     let args = Args::parse();
 
     let uplink_addr: SocketAddr = args
@@ -38,9 +41,9 @@ async fn main() -> tokio_serial::Result<()> {
         .expect("Failed to parse downlink address");
 
     let socket = UdpSocket::bind(&uplink_addr).await?;
-    println!("UDP Uplink on:  {}", args.uplink_address);
-    println!("UPD Downlink on: {}", args.downlink_address);
-    println!("Serial radio on: {}", args.serial_device);
+    info!("UDP Uplink on:  {}", args.uplink_address);
+    info!("UPD Downlink on: {}", args.downlink_address);
+    info!("Serial radio on: {}", args.serial_device);
 
     let (serial_queue_writer, serial_queue_reader): (Sender<Vec<u8>>, Receiver<Vec<u8>>) =
         mpsc::channel();
@@ -58,7 +61,7 @@ async fn main() -> tokio_serial::Result<()> {
 
     thread::spawn(move || loop {
         if let Ok(data) = serial_queue_reader.recv() {
-            println!("Found {} bytes to send over serial", data.len());
+            info!("Found {} bytes to send over serial", data.len());
             let mut ser = thread_serial.lock().unwrap();
             let _ = ser.write(&data).unwrap();
         }
@@ -70,7 +73,7 @@ async fn main() -> tokio_serial::Result<()> {
     loop {
         if let Ok(len) = socket.try_recv(&mut buf) {
             if len > 0 {
-                println!("Received {len} bytes over udp, queueing for serial");
+                info!("Received {len} bytes over udp, queueing for serial");
                 serial_queue_writer
                     .send(buf[..len].to_vec())
                     .expect("Failed to send??");
@@ -83,7 +86,7 @@ async fn main() -> tokio_serial::Result<()> {
         };
         if let Ok(serial_len) = len {
             if serial_len > 0 {
-                println!("Received {serial_len} bytes over serial, sending over udp");
+                info!("Received {serial_len} bytes over serial, sending over udp");
                 socket.send_to(&buf[..serial_len], downlink_addr).await?;
             }
         }

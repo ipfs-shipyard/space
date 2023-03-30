@@ -4,10 +4,13 @@ use crate::provider::StorageProvider;
 use crate::block::StoredBlock;
 use anyhow::{bail, Result};
 use futures::TryStreamExt;
-use iroh_unixfs::builder::{File, FileBuilder};
+use iroh_unixfs::{
+    builder::{File, FileBuilder},
+    Block,
+};
+use std::fs::File as FsFile;
+use std::io::Write;
 use std::path::Path;
-use tokio::fs::File as TokioFile;
-use tokio::io::AsyncWriteExt;
 use tracing::{error, info};
 
 pub struct Storage {
@@ -19,13 +22,18 @@ impl Storage {
         Storage { provider }
     }
 
-    pub async fn import_path(&self, path: &Path) -> Result<String> {
-        let file: File = FileBuilder::new()
-            .path(path)
-            .fixed_chunker(50)
-            .build()
-            .await?;
-        let blocks: Vec<_> = file.encode().await?.try_collect().await?;
+    pub fn import_path(&self, path: &Path) -> Result<String> {
+        let rt = tokio::runtime::Runtime::new()?;
+        let blocks: Result<Vec<Block>> = rt.block_on(async {
+            let file: File = FileBuilder::new()
+                .path(path)
+                .fixed_chunker(50)
+                .build()
+                .await?;
+            let blocks: Vec<_> = file.encode().await?.try_collect().await?;
+            Ok(blocks)
+        });
+        let blocks = blocks?;
         let mut root_cid: Option<String> = None;
 
         blocks.iter().for_each(|b| {
@@ -54,7 +62,7 @@ impl Storage {
         }
     }
 
-    pub async fn export_cid(&self, cid: &str, path: &Path) -> Result<()> {
+    pub fn export_cid(&self, cid: &str, path: &Path) -> Result<()> {
         info!("Exporting {cid} to {}", path.display());
         let check_missing_blocks = self.get_missing_dag_blocks(cid)?;
         if !check_missing_blocks.is_empty() {
@@ -63,12 +71,12 @@ impl Storage {
         // Fetch all blocks tied to links under given cid
         let child_blocks = self.get_all_blocks_under_cid(cid)?;
         // Open up file path for writing
-        let mut output_file = TokioFile::create(path).await?;
+        let mut output_file = FsFile::create(path)?;
         // Walk the StoredBlocks and write out to path
         for block in child_blocks {
-            output_file.write_all(&block.data).await?;
+            output_file.write_all(&block.data)?;
         }
-        output_file.flush().await?;
+        output_file.sync_all()?;
         Ok(())
     }
 
@@ -139,15 +147,15 @@ pub mod tests {
             let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
             provider.setup().unwrap();
             let storage = Storage::new(Box::new(provider));
-            return TestHarness {
+            TestHarness {
                 storage,
                 _db_dir: db_dir,
-            };
+            }
         }
     }
 
-    #[tokio::test]
-    pub async fn test_import_path_to_storage() {
+    #[test]
+    pub fn test_import_path_to_storage() {
         let harness = TestHarness::new();
 
         let temp_dir = assert_fs::TempDir::new().unwrap();
@@ -157,15 +165,15 @@ pub mod tests {
                 b"654684646847616846846876168468416874616846416846846186468464684684648684684",
             )
             .unwrap();
-        let root_cid = harness.storage.import_path(test_file.path()).await.unwrap();
+        let root_cid = harness.storage.import_path(test_file.path()).unwrap();
 
         let available_cids = harness.storage.list_available_cids().unwrap();
 
         assert!(available_cids.contains(&root_cid));
     }
 
-    #[tokio::test]
-    pub async fn export_path_from_storage() {
+    #[test]
+    pub fn export_path_from_storage() {
         let harness = TestHarness::new();
 
         let temp_dir = assert_fs::TempDir::new().unwrap();
@@ -175,13 +183,12 @@ pub mod tests {
                 b"654684646847616846846876168468416874616846416846846186468464684684648684684",
             )
             .unwrap();
-        let cid = harness.storage.import_path(test_file.path()).await.unwrap();
+        let cid = harness.storage.import_path(test_file.path()).unwrap();
 
         let next_test_file = temp_dir.child("output.txt");
         harness
             .storage
             .export_cid(&cid, next_test_file.path())
-            .await
             .unwrap();
 
         let test_file_contents = std::fs::read_to_string(test_file.path()).unwrap();

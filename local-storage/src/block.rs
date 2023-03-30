@@ -56,20 +56,25 @@ mod tests {
     use iroh_unixfs::builder::{File, FileBuilder};
     use rand::{thread_rng, RngCore};
 
-    async fn generate_stored_blocks<'a>(num_blocks: u8) -> Result<Vec<StoredBlock>> {
+    fn generate_stored_blocks(num_blocks: u8) -> Result<Vec<StoredBlock>> {
         const CHUNK_SIZE: u8 = 20;
         let data_size = CHUNK_SIZE * num_blocks;
         let mut data = Vec::<u8>::new();
         data.resize(data_size.into(), 1);
         thread_rng().fill_bytes(&mut data);
 
-        let file: File = FileBuilder::new()
-            .content_bytes(data)
-            .name("testfile")
-            .fixed_chunker(CHUNK_SIZE.into())
-            .build()
-            .await?;
-        let blocks: Vec<_> = file.encode().await?.try_collect().await?;
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let blocks = rt.block_on(async {
+            let file: File = FileBuilder::new()
+                .content_bytes(data)
+                .name("testfile")
+                .fixed_chunker(CHUNK_SIZE.into())
+                .build()
+                .await
+                .unwrap();
+            let blocks: Vec<_> = file.encode().await.unwrap().try_collect().await.unwrap();
+            blocks
+        });
         let mut stored_blocks = vec![];
 
         blocks.iter().for_each(|b| {
@@ -90,17 +95,17 @@ mod tests {
         Ok(stored_blocks)
     }
 
-    #[tokio::test]
-    pub async fn test_valid_block_no_links() {
-        let blocks = generate_stored_blocks(1).await.unwrap();
+    #[test]
+    pub fn test_valid_block_no_links() {
+        let blocks = generate_stored_blocks(1).unwrap();
         let stored_block = blocks.first().unwrap();
 
         assert!(stored_block.validate().is_ok());
     }
 
-    #[tokio::test]
-    pub async fn test_invalid_block_no_links() {
-        let mut blocks = generate_stored_blocks(1).await.unwrap();
+    #[test]
+    pub fn test_invalid_block_no_links() {
+        let mut blocks = generate_stored_blocks(1).unwrap();
         let mut stored_block = blocks.pop().unwrap();
         stored_block.data.extend(b"corruption");
 
@@ -110,46 +115,46 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    pub async fn test_valid_block_with_links() {
-        let blocks = generate_stored_blocks(5).await.unwrap();
+    #[test]
+    pub fn test_valid_block_with_links() {
+        let blocks = generate_stored_blocks(5).unwrap();
         let stored_block = blocks.last().unwrap();
 
-        assert!(stored_block.links.len() > 0);
+        assert!(!stored_block.links.is_empty());
         assert!(stored_block.validate().is_ok());
     }
 
-    #[tokio::test]
-    pub async fn test_valid_block_with_invalid_links() {
-        let mut blocks = generate_stored_blocks(7).await.unwrap();
+    #[test]
+    pub fn test_valid_block_with_invalid_links() {
+        let mut blocks = generate_stored_blocks(7).unwrap();
         let stored_block = blocks.last_mut().unwrap();
 
         stored_block.links.pop();
 
-        assert!(stored_block.links.len() > 0);
+        assert!(!stored_block.links.is_empty());
         assert_eq!(
             stored_block.validate().unwrap_err().to_string(),
             "links do not match"
         );
     }
 
-    #[tokio::test]
-    pub async fn test_valid_dag_single_block() {
-        let blocks = generate_stored_blocks(1).await.unwrap();
+    #[test]
+    pub fn test_valid_dag_single_block() {
+        let blocks = generate_stored_blocks(1).unwrap();
 
         assert!(validate_dag(&blocks).is_ok());
     }
 
-    #[tokio::test]
-    pub async fn test_valid_dag_multi_blocks() {
-        let blocks = generate_stored_blocks(10).await.unwrap();
+    #[test]
+    pub fn test_valid_dag_multi_blocks() {
+        let blocks = generate_stored_blocks(10).unwrap();
 
         assert!(validate_dag(&blocks).is_ok());
     }
 
-    #[tokio::test]
-    pub async fn test_dag_with_corrupt_block() {
-        let mut blocks = generate_stored_blocks(4).await.unwrap();
+    #[test]
+    pub fn test_dag_with_corrupt_block() {
+        let mut blocks = generate_stored_blocks(4).unwrap();
 
         let first = blocks.first_mut().unwrap();
         first.data.extend(b"corruption");
@@ -160,9 +165,9 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    pub async fn test_dag_missing_block() {
-        let mut blocks = generate_stored_blocks(12).await.unwrap();
+    #[test]
+    pub fn test_dag_missing_block() {
+        let mut blocks = generate_stored_blocks(12).unwrap();
 
         blocks.remove(0);
 
@@ -172,9 +177,9 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    pub async fn test_dag_missing_root() {
-        let mut blocks = generate_stored_blocks(7).await.unwrap();
+    #[test]
+    pub fn test_dag_missing_root() {
+        let mut blocks = generate_stored_blocks(7).unwrap();
 
         blocks.pop();
 
@@ -184,9 +189,9 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    pub async fn test_dag_extra_block() {
-        let mut blocks = generate_stored_blocks(6).await.unwrap();
+    #[test]
+    pub fn test_dag_extra_block() {
+        let mut blocks = generate_stored_blocks(6).unwrap();
 
         let data = b"1871217171".to_vec();
         let cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(&data));
@@ -206,9 +211,9 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    pub async fn test_dag_with_wrong_block() {
-        let mut blocks = generate_stored_blocks(9).await.unwrap();
+    #[test]
+    pub fn test_dag_with_wrong_block() {
+        let mut blocks = generate_stored_blocks(9).unwrap();
 
         let data = b"1871217171".to_vec();
         let cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(&data));
@@ -227,11 +232,11 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    pub async fn test_dag_with_two_roots() {
-        let mut blocks = generate_stored_blocks(9).await.unwrap();
+    #[test]
+    pub fn test_dag_with_two_roots() {
+        let mut blocks = generate_stored_blocks(9).unwrap();
 
-        let other_blocks = generate_stored_blocks(2).await.unwrap();
+        let other_blocks = generate_stored_blocks(2).unwrap();
 
         blocks.extend(other_blocks);
 
@@ -241,10 +246,10 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    pub async fn test_dag_no_blocks() {
+    #[test]
+    pub fn test_dag_no_blocks() {
         assert_eq!(
-            validate_dag(&vec![]).unwrap_err().to_string(),
+            validate_dag(&[]).unwrap_err().to_string(),
             "No blocks found in dag"
         );
     }

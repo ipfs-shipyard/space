@@ -1,6 +1,6 @@
 use super::*;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use assert_fs::fixture::ChildPath;
 use assert_fs::{fixture::FileWriteBin, fixture::PathChild, TempDir};
 use blake2::{Blake2s256, Digest};
@@ -8,10 +8,9 @@ use file_hashing::get_hash_file;
 use messages::{MessageChunker, SimpleChunker};
 use myceli::listener::Listener;
 use rand::{thread_rng, Rng, RngCore};
+use std::net::UdpSocket;
 use std::path::PathBuf;
-use std::thread;
-use tokio::net::UdpSocket;
-use tokio::time::sleep;
+use std::thread::{sleep, spawn};
 
 pub struct TestListener {
     pub listen_addr: String,
@@ -25,20 +24,20 @@ impl TestListener {
         let port_num = rng.gen_range(6000..9000);
         let listen_addr = format!("127.0.0.1:{port_num}");
 
-        return TestListener {
+        TestListener {
             listen_addr,
             test_dir,
-        };
+        }
     }
 
-    pub async fn start(&self) -> Result<()> {
+    pub fn start(&self) -> Result<()> {
         let thread_listen_addr = self.listen_addr.to_owned();
         let thread_db_path = self.test_dir.child("storage.db");
 
-        thread::spawn(move || start_listener_thread(thread_listen_addr, thread_db_path));
+        spawn(move || start_listener_thread(thread_listen_addr, thread_db_path));
 
         // A little wait so the listener can get listening
-        sleep(Duration::from_millis(50)).await;
+        sleep(Duration::from_millis(50));
         Ok(())
     }
 
@@ -53,14 +52,10 @@ impl TestListener {
     }
 }
 
-#[tokio::main]
-async fn start_listener_thread(listen_addr: String, db_path: ChildPath) {
+fn start_listener_thread(listen_addr: String, db_path: ChildPath) {
     let db_path = db_path.path().to_str().unwrap();
-    let mut listener = Listener::new(&listen_addr, &db_path).await.unwrap();
-    listener
-        .listen()
-        .await
-        .expect("Error encountered in listener");
+    let mut listener = Listener::new(&listen_addr, db_path).unwrap();
+    listener.start(10).expect("Error encountered in listener");
 }
 
 pub struct TestController {
@@ -69,38 +64,41 @@ pub struct TestController {
 }
 
 impl TestController {
-    pub async fn new() -> Self {
-        let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    pub fn new() -> Self {
+        let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+        socket
+            .set_read_timeout(Some(Duration::from_millis(10)))
+            .unwrap();
         let chunker = SimpleChunker::new(60);
         TestController { socket, chunker }
     }
 
-    pub async fn send_and_recv(&mut self, target_addr: &str, message: Message) -> Message {
-        self.send_msg(message, target_addr).await;
-        self.recv_msg().await
+    pub fn send_and_recv(&mut self, target_addr: &str, message: Message) -> Message {
+        self.send_msg(message, target_addr);
+        self.recv_msg().unwrap()
     }
 
-    pub async fn send_msg(&self, message: Message, target_addr: &str) {
+    pub fn send_msg(&self, message: Message, target_addr: &str) {
         for chunk in self.chunker.chunk(message).unwrap() {
-            self.socket.send_to(&chunk, target_addr).await.unwrap();
+            self.socket.send_to(&chunk, target_addr).unwrap();
         }
     }
 
-    pub async fn recv_msg(&mut self) -> Message {
+    pub fn recv_msg(&mut self) -> Result<Message> {
         let mut tries = 0;
         loop {
             let mut buf = vec![0; 128];
-            if self.socket.try_recv_from(&mut buf).is_ok() {
+            if self.socket.recv_from(&mut buf).is_ok() {
                 match self.chunker.unchunk(&buf) {
-                    Ok(Some(msg)) => return msg,
+                    Ok(Some(msg)) => return Ok(msg),
                     Ok(None) => {}
-                    Err(e) => panic!("Error found {e:?}"),
+                    Err(e) => bail!("Error found {e:?}"),
                 }
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            sleep(Duration::from_millis(10));
             tries += 1;
-            if tries > 20 {
-                panic!("Listen tries exceeded");
+            if tries > 10 {
+                bail!("Listen tries exceeded");
             }
         }
     }

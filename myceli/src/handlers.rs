@@ -1,37 +1,11 @@
-use crate::transmit::transmit_blocks;
 use anyhow::Result;
 use local_storage::storage::Storage;
 use messages::{ApplicationAPI, Message};
 use std::path::PathBuf;
 use std::rc::Rc;
 
-pub async fn transmit_file(path: &str, target_addr: &str, storage: Rc<Storage>) -> Result<()> {
-    let cid = storage.import_path(&PathBuf::from(path.to_owned())).await?;
-    let root_block = storage.get_block_by_cid(&cid)?;
-    let blocks = storage.get_all_blocks_under_cid(&cid)?;
-    let mut all_blocks = vec![root_block];
-    all_blocks.extend(blocks);
-    transmit_blocks(&all_blocks, target_addr).await?;
-    Ok(())
-}
-
-pub async fn transmit_dag(cid: &str, target_addr: &str, storage: Rc<Storage>) -> Result<()> {
-    let root_block = storage.get_block_by_cid(cid)?;
-    let blocks = storage.get_all_blocks_under_cid(cid)?;
-    let mut all_blocks = vec![root_block];
-    all_blocks.extend(blocks);
-    transmit_blocks(&all_blocks, target_addr).await?;
-    Ok(())
-}
-
-pub async fn transmit_block(cid: &str, target_addr: &str, storage: Rc<Storage>) -> Result<()> {
-    let block = storage.get_block_by_cid(cid)?;
-    transmit_blocks(&[block], target_addr).await?;
-    Ok(())
-}
-
-pub async fn import_file(path: &str, storage: Rc<Storage>) -> Result<Message> {
-    let root_cid = storage.import_path(&PathBuf::from(path.to_owned())).await?;
+pub fn import_file(path: &str, storage: Rc<Storage>) -> Result<Message> {
+    let root_cid = storage.import_path(&PathBuf::from(path.to_owned()))?;
     Ok(Message::ApplicationAPI(ApplicationAPI::FileImported {
         path: path.to_string(),
         cid: root_cid,
@@ -66,8 +40,18 @@ pub fn request_available_blocks(storage: Rc<Storage>) -> Result<Message> {
 pub fn get_missing_dag_blocks(cid: &str, storage: Rc<Storage>) -> Result<Message> {
     let blocks = storage.get_missing_dag_blocks(cid)?;
     Ok(Message::ApplicationAPI(ApplicationAPI::MissingDagBlocks {
+        cid: cid.to_string(),
         blocks,
     }))
+}
+
+pub fn get_missing_dag_blocks_protocol(cid: &str, storage: Rc<Storage>) -> Result<Message> {
+    if storage.get_block_by_cid(cid).is_ok() {
+        let blocks = storage.get_missing_dag_blocks(cid)?;
+        Ok(Message::missing_dag_blocks(cid, blocks))
+    } else {
+        Ok(Message::missing_dag_blocks(cid, vec![cid.to_string()]))
+    }
 }
 
 #[cfg(test)]
@@ -93,7 +77,7 @@ pub mod tests {
             let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
             provider.setup().unwrap();
             let storage = Rc::new(Storage::new(Box::new(provider)));
-            return TestHarness { storage, db_dir };
+            TestHarness { storage, db_dir }
         }
 
         pub fn generate_file(&self) -> Result<String> {
@@ -107,13 +91,18 @@ pub mod tests {
         }
     }
 
-    async fn file_to_blocks(path: &str) -> Result<Vec<StoredBlock>> {
-        let file: File = FileBuilder::new()
-            .path(path)
-            .fixed_chunker(50)
-            .build()
-            .await?;
-        let blocks: Vec<_> = file.encode().await?.try_collect().await?;
+    fn file_to_blocks(path: &str) -> Result<Vec<StoredBlock>> {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let blocks = rt.block_on(async {
+            let file: File = FileBuilder::new()
+                .path(path)
+                .fixed_chunker(50)
+                .build()
+                .await
+                .unwrap();
+            let blocks: Vec<_> = file.encode().await.unwrap().try_collect().await.unwrap();
+            blocks
+        });
         let mut stored_blocks = vec![];
 
         blocks.iter().for_each(|b| {
@@ -134,37 +123,35 @@ pub mod tests {
         Ok(stored_blocks)
     }
 
-    #[tokio::test]
-    pub async fn test_import_file_validate_dag() {
+    #[test]
+    pub fn test_import_file_validate_dag() {
         let harness = TestHarness::new();
 
         let test_file_path = harness.generate_file().unwrap();
 
-        let imported_file_cid = match import_file(&test_file_path, harness.storage.clone()).await {
+        let imported_file_cid = match import_file(&test_file_path, harness.storage.clone()) {
             Ok(Message::ApplicationAPI(ApplicationAPI::FileImported { cid, .. })) => cid,
             other => panic!("ImportFile returned wrong response {other:?}"),
         };
 
-        let (validated_cid, result) =
-            match validate_dag(&imported_file_cid, harness.storage.clone()) {
-                Ok(Message::ApplicationAPI(ApplicationAPI::ValidateDagResponse {
-                    cid,
-                    result,
-                })) => (cid, result),
-                other => panic!("ValidateDag returned wrong response {other:?}"),
-            };
+        let (validated_cid, result) = match validate_dag(&imported_file_cid, harness.storage) {
+            Ok(Message::ApplicationAPI(ApplicationAPI::ValidateDagResponse { cid, result })) => {
+                (cid, result)
+            }
+            other => panic!("ValidateDag returned wrong response {other:?}"),
+        };
 
         assert_eq!(imported_file_cid, validated_cid);
         assert_eq!(result, "Dag is valid");
     }
 
-    #[tokio::test]
-    pub async fn test_import_file_validate_blocks() {
+    #[test]
+    pub fn test_import_file_validate_blocks() {
         let harness = TestHarness::new();
 
         let test_file_path = harness.generate_file().unwrap();
 
-        let imported_file_cid = match import_file(&test_file_path, harness.storage.clone()).await {
+        let imported_file_cid = match import_file(&test_file_path, harness.storage.clone()) {
             Ok(Message::ApplicationAPI(ApplicationAPI::FileImported { cid, .. })) => cid,
             other => panic!("ImportFile returned wrong response {other:?}"),
         };
@@ -187,8 +174,8 @@ pub mod tests {
         }
     }
 
-    #[tokio::test]
-    pub async fn test_available_blocks() {
+    #[test]
+    pub fn test_available_blocks() {
         let harness = TestHarness::new();
 
         let available_blocks = match request_available_blocks(harness.storage.clone()) {
@@ -198,9 +185,7 @@ pub mod tests {
         assert!(available_blocks.is_empty());
 
         let test_file_path = harness.generate_file().unwrap();
-        import_file(&test_file_path, harness.storage.clone())
-            .await
-            .unwrap();
+        import_file(&test_file_path, harness.storage.clone()).unwrap();
 
         let available_blocks = match request_available_blocks(harness.storage.clone()) {
             Ok(Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids })) => cids,
@@ -210,32 +195,31 @@ pub mod tests {
         assert_eq!(available_blocks, storage_available_blocks);
     }
 
-    #[tokio::test]
-    pub async fn test_get_missing_blocks_none_missing() {
+    #[test]
+    pub fn test_get_missing_blocks_none_missing() {
         let harness = TestHarness::new();
 
         let test_file_path = harness.generate_file().unwrap();
 
-        let imported_file_cid = match import_file(&test_file_path, harness.storage.clone()).await {
+        let imported_file_cid = match import_file(&test_file_path, harness.storage.clone()) {
             Ok(Message::ApplicationAPI(ApplicationAPI::FileImported { cid, .. })) => cid,
             other => panic!("ImportFile returned wrong response {other:?}"),
         };
 
-        let missing_blocks =
-            match get_missing_dag_blocks(&imported_file_cid, harness.storage.clone()) {
-                Ok(Message::ApplicationAPI(ApplicationAPI::MissingDagBlocks { blocks })) => blocks,
-                other => panic!("GetMissingDagBlocks returned wrong response: {other:?}"),
-            };
+        let missing_blocks = match get_missing_dag_blocks(&imported_file_cid, harness.storage) {
+            Ok(Message::ApplicationAPI(ApplicationAPI::MissingDagBlocks { blocks, .. })) => blocks,
+            other => panic!("GetMissingDagBlocks returned wrong response: {other:?}"),
+        };
 
         assert!(missing_blocks.is_empty());
     }
 
-    #[tokio::test]
-    pub async fn test_get_missing_blocks_one_missing() {
+    #[test]
+    pub fn test_get_missing_blocks_one_missing() {
         let harness = TestHarness::new();
 
         let test_file_path = harness.generate_file().unwrap();
-        let mut file_blocks = file_to_blocks(&test_file_path).await.unwrap();
+        let mut file_blocks = file_to_blocks(&test_file_path).unwrap();
         let missing_block = file_blocks.remove(0);
         let root_cid = file_blocks.last().unwrap().cid.to_owned();
 
@@ -243,8 +227,8 @@ pub mod tests {
             harness.storage.import_block(&block).unwrap();
         }
 
-        let missing_blocks = match get_missing_dag_blocks(&root_cid, harness.storage.clone()) {
-            Ok(Message::ApplicationAPI(ApplicationAPI::MissingDagBlocks { blocks })) => blocks,
+        let missing_blocks = match get_missing_dag_blocks(&root_cid, harness.storage) {
+            Ok(Message::ApplicationAPI(ApplicationAPI::MissingDagBlocks { blocks, .. })) => blocks,
             other => panic!("GetMissingDagBlocks returned wrong response: {other:?}"),
         };
 

@@ -217,10 +217,10 @@ pub mod tests {
             let db_path = db_dir.child("storage.db");
             let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
             provider.setup().unwrap();
-            return TestHarness {
+            TestHarness {
                 provider,
                 _db_dir: db_dir,
-            };
+            }
         }
     }
 
