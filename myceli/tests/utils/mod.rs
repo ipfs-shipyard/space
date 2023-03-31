@@ -8,7 +8,7 @@ use file_hashing::get_hash_file;
 use messages::{MessageChunker, SimpleChunker};
 use myceli::listener::Listener;
 use rand::{thread_rng, Rng, RngCore};
-use std::net::UdpSocket;
+use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::path::PathBuf;
 use std::thread::{sleep, spawn};
 
@@ -31,7 +31,12 @@ impl TestListener {
     }
 
     pub fn start(&self) -> Result<()> {
-        let thread_listen_addr = self.listen_addr.to_owned();
+        let thread_listen_addr = self
+            .listen_addr
+            .to_owned()
+            .to_socket_addrs()
+            .map(|mut i| i.next().unwrap())
+            .unwrap();
         let thread_db_path = self.test_dir.child("storage.db");
 
         spawn(move || start_listener_thread(thread_listen_addr, thread_db_path));
@@ -52,7 +57,7 @@ impl TestListener {
     }
 }
 
-fn start_listener_thread(listen_addr: String, db_path: ChildPath) {
+fn start_listener_thread(listen_addr: SocketAddr, db_path: ChildPath) {
     let db_path = db_path.path().to_str().unwrap();
     let mut listener = Listener::new(&listen_addr, db_path).unwrap();
     listener.start(10).expect("Error encountered in listener");

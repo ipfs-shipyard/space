@@ -25,7 +25,7 @@ pub struct Listener {
 }
 
 impl Listener {
-    pub fn new(listen_address: &str, storage_path: &str) -> Result<Self> {
+    pub fn new(listen_address: &SocketAddr, storage_path: &str) -> Result<Self> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
         let storage = Rc::new(Storage::new(Box::new(provider)));
@@ -40,7 +40,7 @@ impl Listener {
         })
     }
 
-    pub fn start(&mut self, shipper_timeout_duration: u32) -> Result<()> {
+    pub fn start(&mut self, shipper_timeout_duration: u64) -> Result<()> {
         // First setup the shipper and its pieces
         let (shipper_sender, shipper_receiver) = mpsc::channel();
         let shipper_storage_path = self.storage_path.to_string();

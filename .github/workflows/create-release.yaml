@@ -1,0 +1,75 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  start_release:
+    name: build_release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Create release
+        uses: actions/create-release@v1
+        id: create_release
+        with:
+          draft: true
+          prerelease: false
+          release_name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+  build_upload_artifacts:
+    needs: [start_release]
+    name: build_upload_artifacts
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          [
+            armv7-unknown-linux-gnueabihf,
+            aarch64-unknown-linux-gnu,
+            x86_64-unknown-linux-gnu,
+          ]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+      - name: clean cargo
+        run: cargo clean
+      - name: myceli build
+        run: CROSS_CONFIG=Cross.toml cross build --bin myceli --target ${{ matrix.target }} --release
+      - name: upload myceli binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ needs.start_release.outputs.upload_url }}
+          asset_path: ./target/${{ matrix.target }}/release/myceli
+          asset_name: myceli-${{ matrix.target }}
+          asset_content_type: application
+  build_upload_docker:
+    needs: [start_release]
+    name: build_upload_docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Login to Github Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish myceli docker
+        run: |
+          docker build -f myceli.Dockerfile . --tag ghcr.io/ipfs-shipyard/myceli:latest
+          docker build -f myceli.Dockerfile . --tag ghcr.io/ipfs-shipyard/myceli:${{ github.ref_name }}
+          docker push ghcr.io/ipfs-shipyard/myceli:latest
+          docker push ghcr.io/ipfs-shipyard/myceli:${{ github.ref_name }}

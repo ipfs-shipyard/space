@@ -12,8 +12,8 @@ RUN cp ./target/debug/myceli /usr/bin/myceli
 
 # Extras stage
 FROM debian:bullseye-slim
-ENV LISTEN_ADDR=0.0.0.0:8080
+LABEL org.opencontainers.image.source="https://github.com/ipfs-shipyard/space"
 RUN apt update && apt -y install --no-install-recommends iproute2
 COPY --from=builder /usr/bin/myceli /usr/bin/myceli
 COPY --from=builder Cargo.toml /usr/local/Cargo.toml
-ENTRYPOINT myceli $LISTEN_ADDR
+ENTRYPOINT myceli $CONFIG_PATH

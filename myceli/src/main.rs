@@ -1,14 +1,14 @@
 use anyhow::Result;
 use clap::Parser;
+use myceli::config::MyceliConfig;
 use myceli::listener::Listener;
+use std::net::ToSocketAddrs;
 use tracing::Level;
-
 #[derive(Parser, Debug)]
 #[clap(about = "Myceli, a spacey IPFS node")]
 struct Args {
-    listen_address: String,
-    #[arg(short, long, default_value_t = 100)]
-    retry_timeout_duration: u32,
+    /// Path to config file
+    config_path: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -16,10 +16,24 @@ fn main() -> Result<()> {
 
     let args = Args::parse();
 
+    let cfg: MyceliConfig = MyceliConfig::parse(args.config_path);
+
+    let mut resolved_listen_addr = cfg
+        .listen_address
+        .to_socket_addrs()
+        .expect("Unable to resolve socket address");
+    let resolved_listen_addr = resolved_listen_addr
+        .next()
+        .expect("Unable to resolve socket addr");
+
+    std::fs::create_dir_all(&cfg.storage_path).expect("Failed to create storage dir");
+
+    let db_path = format!("{}/storage.db", cfg.storage_path);
+
     let mut listener =
-        Listener::new(&args.listen_address, "storage.db").expect("Listener creation failed");
+        Listener::new(&resolved_listen_addr, &db_path).expect("Listener creation failed");
     listener
-        .start(args.retry_timeout_duration)
+        .start(cfg.retry_timeout_duration)
         .expect("Error encountered in listener operation");
     Ok(())
 }
