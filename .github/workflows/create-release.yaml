@@ -1,6 +1,9 @@
 name: release
 
-on: [pull_request]
+on:
+  push:
+    tags:
+      - "*"
 
 jobs:
   start_release:
@@ -10,17 +13,13 @@ jobs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
       - uses: actions/checkout@v2
-      - name: Create release info
-        id: create_name
-        run: tag=$(basename "{{ github.ref }}")
-          echo "tag=$tag" >> $GITHUB_OUTPUT
       - name: Create release
         uses: actions/create-release@v1
         id: create_release
         with:
           draft: true
           prerelease: false
-          release_name: ${{ steps.create_tag.outputs.tag }}
+          release_name: ${{ github.ref_name }}
           tag_name: ${{ github.ref }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
