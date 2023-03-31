@@ -9,6 +9,7 @@ use std::net::UdpSocket;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::{self, Sender};
+use std::sync::Arc;
 use std::thread::{sleep, spawn};
 use std::time::Duration;
 use tracing::{debug, error, info};
@@ -21,7 +22,7 @@ pub struct Listener {
     storage: Rc<Storage>,
     sender_addr: Option<SocketAddr>,
     chunker: SimpleChunker,
-    socket: Rc<UdpSocket>,
+    socket: Arc<UdpSocket>,
 }
 
 impl Listener {
@@ -36,7 +37,7 @@ impl Listener {
             storage,
             sender_addr: None,
             chunker: SimpleChunker::new(MTU),
-            socket: Rc::new(socket),
+            socket: Arc::new(socket),
         })
     }
 
@@ -45,12 +46,14 @@ impl Listener {
         let (shipper_sender, shipper_receiver) = mpsc::channel();
         let shipper_storage_path = self.storage_path.to_string();
         let shipper_sender_clone = shipper_sender.clone();
+        let shipper_socket = Arc::clone(&self.socket);
         spawn(move || {
             let mut shipper = Shipper::new(
                 &shipper_storage_path,
                 shipper_receiver,
                 shipper_sender_clone,
                 shipper_timeout_duration,
+                shipper_socket,
             )
             .expect("Shipper creation failed");
             shipper.receive_msg_loop();
