@@ -12,6 +12,7 @@ RUN cp ./target/debug/myceli /usr/bin/myceli
 
 # Extras stage
 FROM debian:bullseye-slim
+LABEL org.opencontainers.image.source="https://github.com/ipfs-shipyard/space"
 RUN apt update && apt -y install --no-install-recommends iproute2
 COPY --from=builder /usr/bin/myceli /usr/bin/myceli
 COPY --from=builder Cargo.toml /usr/local/Cargo.toml
