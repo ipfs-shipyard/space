@@ -8,10 +8,11 @@ use messages::Message;
 use messages::{DataProtocol, TransmissionBlock};
 use messages::{MessageChunker, SimpleChunker};
 use std::collections::BTreeMap;
+use std::net::ToSocketAddrs;
 use std::net::UdpSocket;
-use std::net::{SocketAddr, ToSocketAddrs};
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender};
+use std::sync::Arc;
 use std::thread::{sleep, spawn};
 use std::time::Duration;
 use tracing::{error, info};
@@ -29,6 +30,8 @@ pub struct Shipper {
     sender: Sender<(DataProtocol, String)>,
     // Retry timeout in milliseconds
     retry_timeout_duration: u64,
+    // Socket shared between listener and shipper for a consistent listening socket
+    socket: Arc<UdpSocket>,
 }
 
 impl Shipper {
@@ -37,6 +40,7 @@ impl Shipper {
         receiver: Receiver<(DataProtocol, String)>,
         sender: Sender<(DataProtocol, String)>,
         retry_timeout_duration: u64,
+        socket: Arc<UdpSocket>,
     ) -> Result<Shipper> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
@@ -48,6 +52,7 @@ impl Shipper {
             receiver,
             sender,
             retry_timeout_duration,
+            socket,
         })
     }
 
@@ -100,9 +105,11 @@ impl Shipper {
                 }
             }
             DataProtocol::RetryDagSession { cid, target_addr } => {
-                info!("Received retry dag session, sending get missing req to {target_addr}");
-                self.transmit_msg(Message::request_missing_dag_blocks(&cid), &target_addr)?;
-                self.retry_dag_session(&cid, &target_addr);
+                if self.sessions.contains_key(&cid) {
+                    info!("Received retry dag session, sending get missing req to {target_addr}");
+                    self.transmit_msg(Message::request_missing_dag_blocks(&cid), &target_addr)?;
+                    self.retry_dag_session(&cid, &target_addr);
+                }
             }
         }
         Ok(())
@@ -157,11 +164,11 @@ impl Shipper {
     fn transmit_msg(&mut self, msg: Message, target_addr: &str) -> Result<()> {
         let resolved_target_addr = target_addr.to_socket_addrs().unwrap().next().unwrap();
         info!("sending {msg:?} to {resolved_target_addr}");
-        let bind_address: SocketAddr = "127.0.0.1:0".parse()?;
-        let socket = UdpSocket::bind(bind_address)?;
+        // let bind_address: SocketAddr = "127.0.0.1:0".parse()?;
+        // let socket = UdpSocket::bind(bind_address)?;
         let chunker = SimpleChunker::new(crate::listener::MTU);
         for chunk in chunker.chunk(msg)? {
-            socket.send_to(&chunk, resolved_target_addr)?;
+            self.socket.send_to(&chunk, resolved_target_addr)?;
         }
         Ok(())
     }
@@ -240,11 +247,12 @@ mod tests {
     use rand::{thread_rng, Rng, RngCore};
     use std::path::PathBuf;
     use std::sync::mpsc;
+    use std::sync::Arc;
     use std::time::Duration;
 
     struct TestShipper {
         listen_addr: String,
-        listen_socket: UdpSocket,
+        listen_socket: Arc<UdpSocket>,
         _storage: Rc<Storage>,
         shipper: Shipper,
         test_dir: TempDir,
@@ -255,10 +263,11 @@ mod tests {
             let mut rng = thread_rng();
             let port_num = rng.gen_range(6000..9000);
             let listen_addr = format!("127.0.0.1:{port_num}");
-            let listen_socket = UdpSocket::bind(listen_addr.to_owned()).unwrap();
+            let listen_socket = Arc::new(UdpSocket::bind(listen_addr.to_owned()).unwrap());
             listen_socket
                 .set_read_timeout(Some(Duration::from_millis(10)))
                 .unwrap();
+            let shipper_socket = Arc::clone(&listen_socket);
 
             let test_dir = TempDir::new().unwrap();
             let db_path = test_dir.child("storage.db");
@@ -266,11 +275,13 @@ mod tests {
             provider.setup().unwrap();
             let _storage = Rc::new(Storage::new(Box::new(provider)));
             let (shipper_sender, shipper_receiver) = mpsc::channel();
+
             let shipper = Shipper::new(
                 db_path.to_str().unwrap(),
                 shipper_receiver,
                 shipper_sender,
                 10,
+                shipper_socket,
             )
             .unwrap();
             TestShipper {

@@ -49,17 +49,23 @@ Milestone five focuses on DAG and block validation
 
 Milestone six focuses on implementing minimum retry methods for reliability.
 
-- [ ] **PoC - Define and implement block-ship re-transmissions** - The initial implementation of the block-ship protocol is a very simple one-way stream of DAG blocks. Define a mechanism for detecting missing blocks, requesting transmission of specific blocks, and responding to those requests. Implement in block-ship transmitter and receiver.
-- [ ] **PoC - Implement baseline metrics** - Implement a baseline set of metrics, perhaps [this list](https://github.com/n0-computer/test-plans/tree/main/movethebytes/data-transfer#metrics) suggested by move the bytes, and build into logging of block-ship transmitter and receiver.
-- [ ] **MVP v0.6 - Demonstrate block-ship retransmit over radio** - Establish a block-ship session over the dev radio link at a speed which ensures minor packet loss and tune the re-transmission mechanism to overcome the packet loss.
+- [x] [**PoC - Define and implement block re-transmissions**](https://github.com/ipfs-shipyard/space/pull/40) - The initial implementation of the block transfer protocol is a very simple one-way stream of DAG blocks. Define a mechanism for detecting missing blocks, requesting transmission of specific blocks, and responding to those requests. Implement in myceli both transmissions and responses.
+- [ ] **MVP v0.6 - Demonstrate block retransmit over radio** - Establish a myceli session over the dev radio link at a speed which ensures minor packet loss and tune the re-transmission mechanism to overcome the packet loss.
 
 ## Milestone 7
+
+Milestone seven focuses beginning integrating myceli with kubo.
+
+- [ ] **PoC - Implement initial myceli to kubo bridge** - Utilize the kubo rpc api to implement a bridge process which syncs blocks received by a myceli node into a kubo node.
+- [ ] **MVP 0.7 - Demonstrate first myceli to kubo integration** - Demonstrate downlinking a dag over the radio to a myceli ground node, syncing that dag to a kubo node, and then viewing the representative file hosted on IPFS.
+## Milestone 8
 
 Milestone seven focuses on APIs for gathering pass/connectedness info, and incorporating that info into the transfer process.
 
 - [ ] **PoC - Implement `Is Connected` and `Next Pass Info` APIs** - Implement APIs to be used by external systems to indicate if the system is connected and to give information about the next pass.
 - [ ] **PoC - Modify data transfer protocol to account for pass/connectedness info** - Update the data transfer protocol to track pass/connectedness information and determine when it should be transmitting data based on known pass information.
-- [ ] **MVP 0.7 - Simulate a "pass" using implemented APIs and demonstrate how data transfer responds**
+- [ ] **PoC - Implement baseline metrics** - Implement a baseline set of metrics, perhaps [this list](https://github.com/n0-computer/test-plans/tree/main/movethebytes/data-transfer#metrics) suggested by move the bytes, and build into logging of block-ship transmitter and receiver.
+- [ ] **MVP 0.8 - Simulate a "pass" using implemented APIs and demonstrate how data transfer responds**
 
 ## Future Epics
 

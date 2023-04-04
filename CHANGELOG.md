@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.6] - Unreleased
+## [0.6] - 2023-04-04
 
 ### Added
 
@@ -11,6 +11,10 @@
 - Added protocol messages for requesting missing dag blocks, requesting transmission of dags & blocks, and retrying dag transmission.
 - Added a basic Dockerfile for building and running `myceli`.
 - Added `shipper` struct to `myceli` which consolidates all data exchange code and adds state necessary to support timeout-based retries during DAG transmission.
+- Extracted `myceli` config values into config file with reasonable defaults.
+- CI based docker builds and binary releases.
+- Basic general testing plan in [testing/testing-plan.md](testing/testing-plan.md).
+- Added basic for for building/running `myceli` in Docker.
 
 ### Changed
 
@@ -18,6 +22,7 @@
 - Reworked `myceli` to operate in the traditional multi-threaded fashion instead of using async. This included reworking `myceli::Listener` to spawn `shipper` in a separate thread and pass along messages via channel.
 - Updated logging in the desktop `radio-service` to use `tracing`.
 - Moved `transmit_dag` and `transmit_block` functionality from handlers to `shipper`.
+- Updated docs/readme to reflect new `myceli` configuration file.
 
 ### Removed
 
