@@ -125,4 +125,8 @@ impl Message {
             blocks,
         })
     }
+
+    pub fn request_version() -> Self {
+        Message::ApplicationAPI(ApplicationAPI::RequestVersion)
+    }
 }

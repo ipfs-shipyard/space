@@ -162,6 +162,11 @@ impl Listener {
                 ))?;
                 None
             }
+            Message::ApplicationAPI(ApplicationAPI::RequestVersion) => {
+                Some(Message::ApplicationAPI(ApplicationAPI::Version {
+                    version: env!("CARGO_PKG_VERSION").to_string(),
+                }))
+            }
             // Default case for valid messages which don't have handling code implemented yet
             message => {
                 info!("Received unhandled message: {:?}", message);
