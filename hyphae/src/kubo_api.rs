@@ -1,6 +1,10 @@
 use anyhow::Result;
+use messages::TransmissionBlock;
+use reqwest::blocking::multipart;
 use reqwest::blocking::Client;
-use serde_json::Value;
+use serde_json::{Deserializer, Value};
+use std::collections::HashSet;
+use std::time::Duration;
 use tracing::info;
 
 pub struct KuboApi {
@@ -10,7 +14,10 @@ pub struct KuboApi {
 
 impl KuboApi {
     pub fn new(address: &str) -> Self {
-        let client = Client::new();
+        let client = Client::builder()
+            .timeout(Duration::from_millis(5000))
+            .build()
+            .expect("Failed to build reqwest client");
         KuboApi {
             address: format!("http://{}/api/v0", address),
             client,
@@ -21,6 +28,39 @@ impl KuboApi {
         let ping_addr = format!("{}/version", self.address);
         let resp: Value = self.client.post(ping_addr).send()?.json()?;
         info!("Found Kubo version {}", resp["Version"]);
+        Ok(())
+    }
+
+    pub fn get_local_blocks(&self) -> Result<HashSet<String>> {
+        let local_refs_addr = format!("{}/refs/local", self.address);
+        let resp: String = self.client.post(local_refs_addr).send()?.text()?;
+        let de = Deserializer::from_str(&resp);
+        let mut de_stream = de.into_iter::<Value>();
+        let mut cids = HashSet::new();
+        while let Some(Ok(next)) = de_stream.next() {
+            if let Some(cid) = next.get("Ref") {
+                cids.insert(cid.as_str().unwrap().to_owned());
+            }
+        }
+        Ok(cids)
+    }
+
+    pub fn put_block(&self, cid: &str, block: &TransmissionBlock) -> Result<()> {
+        let put_block_url = if cid.starts_with("bafybei") {
+            info!("putting a dag-pb block");
+            format!("{}/block/put?cid-codec=dag-pb", self.address)
+        } else {
+            format!("{}/block/put", self.address)
+        };
+        let form_part = multipart::Part::bytes(block.data.to_owned());
+        let form = multipart::Form::new().part("data", form_part);
+        let resp = self
+            .client
+            .post(put_block_url)
+            .multipart(form)
+            .send()?
+            .bytes()?;
+        println!("{:#?}", resp);
         Ok(())
     }
 }

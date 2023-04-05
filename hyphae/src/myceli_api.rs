@@ -1,32 +1,41 @@
 use anyhow::{bail, Result};
-use messages::{ApplicationAPI, Message, MessageChunker, SimpleChunker};
+use messages::{
+    ApplicationAPI, DataProtocol, Message, MessageChunker, SimpleChunker, TransmissionBlock,
+};
+use std::collections::HashSet;
 use std::net::{ToSocketAddrs, UdpSocket};
 use std::rc::Rc;
 use std::thread::sleep;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
+const MTU: u16 = 60;
+
 pub struct MyceliApi {
     address: String,
     socket: Rc<UdpSocket>,
+    listen_address: String,
 }
 
 impl MyceliApi {
     pub fn new(address: &str) -> Self {
         let socket = Rc::new(UdpSocket::bind("127.0.0.1:0").unwrap());
         socket
-            .set_read_timeout(Some(Duration::from_millis(10)))
+            .set_read_timeout(Some(Duration::from_millis(500)))
             .unwrap();
+        let listen_address = socket.local_addr().unwrap().to_string();
         MyceliApi {
             address: address.to_string(),
             socket,
+            listen_address,
         }
     }
 
     fn send_msg(&self, msg: Message) -> Result<()> {
+        info!("Sending msg {msg:?}");
         let resolved_target_addr = self.address.to_socket_addrs().unwrap().next().unwrap();
 
-        let chunker = SimpleChunker::new(1024);
+        let chunker = SimpleChunker::new(MTU);
         for chunk in chunker.chunk(msg)? {
             self.socket.send_to(&chunk, resolved_target_addr)?;
         }
@@ -34,8 +43,8 @@ impl MyceliApi {
     }
 
     fn recv_msg(&self) -> Result<Message> {
-        let mut chunker = SimpleChunker::new(1024);
-        let mut buf = vec![0; 1024];
+        let mut chunker = SimpleChunker::new(MTU);
+        let mut buf = vec![0; MTU.into()];
         loop {
             {
                 loop {
@@ -74,6 +83,30 @@ impl MyceliApi {
             Ok(())
         } else {
             bail!("Recv message failed");
+        }
+    }
+
+    pub fn get_available_blocks(&self) -> Result<HashSet<String>> {
+        self.send_msg(Message::request_available_blocks())?;
+        match self.recv_msg() {
+            Ok(Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids })) => {
+                Ok(HashSet::from_iter(cids.into_iter()))
+            }
+            other => {
+                warn!("Received wrong resp for RequestAvailableBlocks: {other:?}");
+                bail!("Received wrong resp for RequestAvailableBlocks: {other:?}")
+            }
+        }
+    }
+
+    pub fn get_block(&self, cid: &str) -> Result<TransmissionBlock> {
+        self.send_msg(Message::transmit_block(cid, &self.listen_address))?;
+        match self.recv_msg() {
+            Ok(Message::DataProtocol(DataProtocol::Block(block))) => Ok(block),
+            other => {
+                warn!("Received wrong resp for RequestBlock: {other:?}");
+                bail!("Received wrong resp for RequestBlock: {other:?}")
+            }
         }
     }
 }

@@ -2,7 +2,9 @@ mod config;
 mod kubo_api;
 mod myceli_api;
 
-use anyhow::Result;
+use std::ops::Sub;
+
+use anyhow::{anyhow, Result};
 use clap::Parser;
 use config::Config;
 use kubo_api::KuboApi;
@@ -14,6 +16,29 @@ use tracing::{info, warn, Level};
 struct Args {
     /// Path to config file
     config_path: Option<String>,
+}
+
+fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi) -> Result<()> {
+    info!("Begin syncing myceli blocks to kubo");
+    let myceli_blocks = myceli.get_available_blocks()?;
+    let kubo_blocks = kubo.get_local_blocks()?;
+
+    println!("myceli {:#?}", myceli_blocks);
+    println!("kubo {:#?}", kubo_blocks);
+
+    let missing_blocks = myceli_blocks.sub(&kubo_blocks);
+    println!("miss {:#?}", missing_blocks);
+    for cid in missing_blocks {
+        info!("Syncing block {cid} from myceli to kubo");
+        let block = myceli
+            .get_block(&cid)
+            .map_err(|e| anyhow!("Error getting block {e}"))?;
+        kubo.put_block(&cid, &block)?;
+    }
+
+    info!("All myceli blocks are synced");
+
+    Ok(())
 }
 
 fn main() -> Result<()> {
@@ -37,6 +62,8 @@ fn main() -> Result<()> {
     if myceli.check_alive().is_err() {
         warn!("Could not contact Myceli at this time");
     }
+
+    sync_blocks(&kubo, &myceli)?;
 
     Ok(())
 }

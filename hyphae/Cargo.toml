@@ -10,7 +10,7 @@ anyhow = "1"
 clap = { version = "4.0.15", features = ["derive"] }
 figment = { version = "0.10", features = ["toml"] }
 messages = { path = "../messages" }
-reqwest = { version = "0.11", features = ["blocking", "json"] }
+reqwest = { version = "0.11", features = ["blocking", "json", "multipart"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
