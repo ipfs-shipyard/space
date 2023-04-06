@@ -86,12 +86,10 @@ impl MyceliApi {
         }
     }
 
-    pub fn get_available_blocks(&self) -> Result<HashSet<String>> {
+    pub fn get_available_blocks(&self) -> Result<Vec<String>> {
         self.send_msg(Message::request_available_blocks())?;
         match self.recv_msg() {
-            Ok(Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids })) => {
-                Ok(HashSet::from_iter(cids.into_iter()))
-            }
+            Ok(Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids })) => Ok(cids),
             other => {
                 warn!("Received wrong resp for RequestAvailableBlocks: {other:?}");
                 bail!("Received wrong resp for RequestAvailableBlocks: {other:?}")
