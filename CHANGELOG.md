@@ -6,6 +6,7 @@
 ## Added
 
 - Added `hyphae`, a block syncing bridge between `myceli` and `kubo`.
+- Added `RequestVersion` API to `myceli`.
 
 ## [0.6] - 2023-04-04
 
