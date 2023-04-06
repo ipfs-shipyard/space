@@ -1,5 +1,12 @@
 # Changelog
 
+
+## [0.7] - Unrelease
+
+## Added
+
+- Added `hyphae`, a block syncing bridge between `myceli` and `kubo`.
+
 ## [0.6] - 2023-04-04
 
 ### Added
