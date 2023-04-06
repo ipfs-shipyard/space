@@ -4,12 +4,14 @@ mod myceli_api;
 
 use std::ops::Sub;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use clap::Parser;
 use config::Config;
 use kubo_api::KuboApi;
 use myceli_api::MyceliApi;
 use std::collections::HashSet;
+use std::thread::sleep;
+use std::time::Duration;
 use tracing::{error, info, warn, Level};
 
 const raw_cid: &str = "bafkrei";
@@ -86,15 +88,12 @@ fn main() -> Result<()> {
     let kubo = KuboApi::new(&cfg.kubo_address);
     let myceli = MyceliApi::new(&cfg.myceli_address);
 
-    if kubo.check_alive().is_err() {
-        warn!("Could not contact Kubo at this time");
+    loop {
+        if kubo.check_alive() && myceli.check_alive() {
+            if let Err(e) = sync_blocks(&kubo, &myceli) {
+                error!("Error during blocks sync: {e}");
+            }
+        }
+        sleep(Duration::from_millis(cfg.sync_interval));
     }
-
-    if myceli.check_alive().is_err() {
-        warn!("Could not contact Myceli at this time");
-    }
-
-    sync_blocks(&kubo, &myceli)?;
-
-    Ok(())
 }

@@ -76,13 +76,23 @@ impl MyceliApi {
         }
     }
 
-    pub fn check_alive(&self) -> Result<()> {
-        self.send_msg(Message::request_version())?;
-        if let Ok(Message::ApplicationAPI(ApplicationAPI::Version { version })) = self.recv_msg() {
-            info!("Found myceli version {version}");
-            Ok(())
-        } else {
-            bail!("Recv message failed");
+    pub fn check_alive(&self) -> bool {
+        match self
+            .send_msg(Message::request_version())
+            .and_then(|_| self.recv_msg())
+        {
+            Ok(Message::ApplicationAPI(ApplicationAPI::Version { version })) => {
+                info!("Found myceli version {version}");
+                true
+            }
+            Ok(other_msg) => {
+                warn!("Myceli returned wrong version message: {other_msg:?}");
+                false
+            }
+            Err(e) => {
+                warn!("Could not contact myceli at this time: {e}");
+                false
+            }
         }
     }
 

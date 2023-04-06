@@ -5,7 +5,7 @@ use reqwest::blocking::Client;
 use serde_json::{Deserializer, Value};
 use std::collections::HashSet;
 use std::time::Duration;
-use tracing::info;
+use tracing::{info, warn};
 
 pub struct KuboApi {
     address: String,
@@ -24,11 +24,23 @@ impl KuboApi {
         }
     }
 
-    pub fn check_alive(&self) -> Result<()> {
-        let ping_addr = format!("{}/version", self.address);
-        let resp: Value = self.client.post(ping_addr).send()?.json()?;
-        info!("Found Kubo version {}", resp["Version"]);
-        Ok(())
+    pub fn check_alive(&self) -> bool {
+        let version_url = format!("{}/version", self.address);
+        match self
+            .client
+            .post(version_url)
+            .send()
+            .and_then(|resp| resp.json::<Value>())
+        {
+            Ok(resp) => {
+                info!("Found Kubo version {}", resp["Version"]);
+                true
+            }
+            Err(e) => {
+                warn!("Could not contact Kubo at this time: {e}");
+                false
+            }
+        }
     }
 
     pub fn get_local_blocks(&self) -> Result<HashSet<String>> {
