@@ -2,7 +2,6 @@ use anyhow::{bail, Result};
 use messages::{
     ApplicationAPI, DataProtocol, Message, MessageChunker, SimpleChunker, TransmissionBlock,
 };
-use std::collections::HashSet;
 use std::net::{ToSocketAddrs, UdpSocket};
 use std::rc::Rc;
 use std::thread::sleep;

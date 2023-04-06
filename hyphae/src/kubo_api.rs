@@ -7,6 +7,8 @@ use std::collections::HashSet;
 use std::time::Duration;
 use tracing::{info, warn};
 
+use crate::DAG_PB_CID_PREFIX;
+
 pub struct KuboApi {
     address: String,
     client: Client,
@@ -58,21 +60,18 @@ impl KuboApi {
     }
 
     pub fn put_block(&self, cid: &str, block: &TransmissionBlock) -> Result<()> {
-        let put_block_url = if cid.starts_with("bafybei") {
-            info!("putting a dag-pb block");
+        let put_block_url = if cid.starts_with(DAG_PB_CID_PREFIX) {
             format!("{}/block/put?cid-codec=dag-pb", self.address)
         } else {
             format!("{}/block/put", self.address)
         };
         let form_part = multipart::Part::bytes(block.data.to_owned());
         let form = multipart::Form::new().part("data", form_part);
-        let resp = self
-            .client
+        self.client
             .post(put_block_url)
             .multipart(form)
             .send()?
             .bytes()?;
-        println!("{:#?}", resp);
         Ok(())
     }
 }

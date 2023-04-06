@@ -12,45 +12,52 @@ use myceli_api::MyceliApi;
 use std::collections::HashSet;
 use std::thread::sleep;
 use std::time::Duration;
-use tracing::{error, info, warn, Level};
+use tracing::{error, info, Level};
 
-const raw_cid: &str = "bafkrei";
-const dag_pb_cid: &str = "bafybei";
+pub const RAW_CID_PREFIX: &str = "bafkrei";
+pub const DAG_PB_CID_PREFIX: &str = "bafybei";
 
 #[derive(Parser, Debug)]
-#[clap(about = "Hyphae, a filament between Mycelie and Kubo")]
+#[clap(about = "Hyphae, a filament between Myceli and Kubo")]
 struct Args {
     /// Path to config file
     config_path: Option<String>,
 }
 
-fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi) -> Result<()> {
-    info!("Begin syncing myceli blocks to kubo");
-    let mut myceli_blocks = myceli.get_available_blocks()?;
-    let kubo_blocks = kubo.get_local_blocks()?;
-
-    // Kubo will take blocks with the dag-pb codec
-    // and convert them to raw blocks, which throws off the sync.
-    // So we will replace any cids with the dag-pb codec with a raw codec
-    // for the purposes of the sync comparison, but the actual sync will be done
-    // on the dag-pb cids.
+fn get_missing_blocks(
+    mut myceli_blocks: Vec<String>,
+    kubo_blocks: HashSet<String>,
+) -> HashSet<String> {
+    // Kubo will take blocks with the dag-pb codec and convert them to raw blocks, which throws off the diff.
+    // So we will replace any cids with the dag-pb codec with a raw codec for the purposes of the diff,
+    // but the actual sync will be done on the dag-pb cids.
     let mut raw_from_dag_pb_blocks: Vec<String> = vec![];
     for block in myceli_blocks.iter_mut() {
-        if block.starts_with(dag_pb_cid) {
-            let pb_to_raw_cid = block.replace(dag_pb_cid, raw_cid);
+        if block.starts_with(DAG_PB_CID_PREFIX) {
+            let pb_to_raw_cid = block.replace(DAG_PB_CID_PREFIX, RAW_CID_PREFIX);
             raw_from_dag_pb_blocks.push(pb_to_raw_cid.to_string());
             *block = pb_to_raw_cid.to_string();
         }
     }
 
     let myceli_blocks = HashSet::from_iter(myceli_blocks.into_iter());
-    let missing_blocks = myceli_blocks.sub(&kubo_blocks);
+    let mut missing_blocks = myceli_blocks.sub(&kubo_blocks);
+    for cid in raw_from_dag_pb_blocks {
+        if missing_blocks.contains(&cid) {
+            missing_blocks.remove(&cid);
+            missing_blocks.insert(cid.replace(RAW_CID_PREFIX, DAG_PB_CID_PREFIX));
+        }
+    }
+    missing_blocks
+}
+
+fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi) -> Result<()> {
+    info!("Begin syncing myceli blocks to kubo");
+    let myceli_blocks = myceli.get_available_blocks()?;
+    let kubo_blocks = kubo.get_local_blocks()?;
+    let missing_blocks = get_missing_blocks(myceli_blocks, kubo_blocks);
+
     for cid in missing_blocks {
-        let cid = if raw_from_dag_pb_blocks.contains(&cid) {
-            cid.replace(raw_cid, dag_pb_cid)
-        } else {
-            cid
-        };
         info!("Syncing block {cid} from myceli to kubo");
         let block = match myceli.get_block(&cid) {
             Ok(block) => block,
@@ -73,7 +80,6 @@ fn main() -> Result<()> {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
     let args = Args::parse();
-
     let cfg: Config = Config::parse(args.config_path).expect("Configuration parsing failed");
 
     info!("Hyphae starting");
