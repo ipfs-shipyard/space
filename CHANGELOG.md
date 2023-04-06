@@ -1,7 +1,7 @@
 # Changelog
 
 
-## [0.7] - Unrelease
+## [0.7] - Unreleased
 
 ## Added
 
