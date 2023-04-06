@@ -32,7 +32,6 @@ impl MyceliApi {
     }
 
     fn send_msg(&self, msg: Message) -> Result<()> {
-        info!("Sending msg {msg:?}");
         let resolved_target_addr = self.address.to_socket_addrs().unwrap().next().unwrap();
 
         let chunker = SimpleChunker::new(MTU);

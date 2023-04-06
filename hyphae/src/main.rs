@@ -44,12 +44,7 @@ fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi) -> Result<()> {
     }
 
     let myceli_blocks = HashSet::from_iter(myceli_blocks.into_iter());
-
-    println!("myceli {:#?}", myceli_blocks);
-    println!("kubo {:#?}", kubo_blocks);
-
     let missing_blocks = myceli_blocks.sub(&kubo_blocks);
-    println!("miss {:#?}", missing_blocks);
     for cid in missing_blocks {
         let cid = if raw_from_dag_pb_blocks.contains(&cid) {
             cid.replace(raw_cid, dag_pb_cid)
