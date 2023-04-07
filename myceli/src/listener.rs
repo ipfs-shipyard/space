@@ -14,19 +14,17 @@ use std::thread::{sleep, spawn};
 use std::time::Duration;
 use tracing::{debug, error, info};
 
-// TODO: Make this configurable
-pub const MTU: u16 = 60; // 60 for radio
-
 pub struct Listener {
     storage_path: String,
     storage: Rc<Storage>,
     sender_addr: Option<SocketAddr>,
     chunker: SimpleChunker,
     socket: Arc<UdpSocket>,
+    mtu: u16,
 }
 
 impl Listener {
-    pub fn new(listen_address: &SocketAddr, storage_path: &str) -> Result<Self> {
+    pub fn new(listen_address: &SocketAddr, storage_path: &str, mtu: u16) -> Result<Self> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
         let storage = Rc::new(Storage::new(Box::new(provider)));
@@ -36,8 +34,9 @@ impl Listener {
             storage_path: storage_path.to_string(),
             storage,
             sender_addr: None,
-            chunker: SimpleChunker::new(MTU),
+            chunker: SimpleChunker::new(mtu),
             socket: Arc::new(socket),
+            mtu,
         })
     }
 
@@ -47,6 +46,7 @@ impl Listener {
         let shipper_storage_path = self.storage_path.to_string();
         let shipper_sender_clone = shipper_sender.clone();
         let shipper_socket = Arc::clone(&self.socket);
+        let shipper_mtu = self.mtu;
         spawn(move || {
             let mut shipper = Shipper::new(
                 &shipper_storage_path,
@@ -54,12 +54,13 @@ impl Listener {
                 shipper_sender_clone,
                 shipper_timeout_duration,
                 shipper_socket,
+                shipper_mtu,
             )
             .expect("Shipper creation failed");
             shipper.receive_msg_loop();
         });
 
-        let mut buf = vec![0; usize::from(MTU)];
+        let mut buf = vec![0; usize::from(self.mtu)];
         loop {
             {
                 loop {
@@ -161,6 +162,11 @@ impl Listener {
                         .unwrap_or("".to_string()),
                 ))?;
                 None
+            }
+            Message::ApplicationAPI(ApplicationAPI::RequestVersion) => {
+                Some(Message::ApplicationAPI(ApplicationAPI::Version {
+                    version: env!("CARGO_PKG_VERSION").to_string(),
+                }))
             }
             // Default case for valid messages which don't have handling code implemented yet
             message => {

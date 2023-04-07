@@ -6,12 +6,14 @@ struct RawMyceliConfig {
     pub listen_address: Option<String>,
     pub retry_timeout_duration: Option<u64>,
     pub storage_path: Option<String>,
+    pub mtu: Option<u16>,
 }
 
 pub struct MyceliConfig {
     pub listen_address: String,
     pub retry_timeout_duration: u64,
     pub storage_path: String,
+    pub mtu: u16,
 }
 
 impl MyceliConfig {
@@ -33,6 +35,7 @@ impl MyceliConfig {
                 storage_path: parsed_cfg
                     .storage_path
                     .unwrap_or(default_config.storage_path),
+                mtu: parsed_cfg.mtu.unwrap_or(default_config.mtu),
             };
         } else {
             info!("Myceli running default config values");
@@ -50,6 +53,8 @@ impl std::default::Default for MyceliConfig {
             retry_timeout_duration: 120_000,
             // Default storage dir
             storage_path: "storage".to_string(),
+            // Default MTU appropriate for dev radio
+            mtu: 60,
         }
     }
 }

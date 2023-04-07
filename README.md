@@ -81,7 +81,7 @@ These are assumptions we are establishing to 1) limit scope and 2) establish rea
 ```mermaid
 flowchart TD
     subgraph Spacecraft
-        A[Application] -- ApplicationAPI/UDP --> B[IPFS]
+        A[Application] -- ApplicationAPI/UDP --> B[Myceli/IPFS]
         B <-- CommsAPI/UDP --> C[Comms]
     end
 
@@ -90,8 +90,10 @@ flowchart TD
     end
 
     subgraph Ground
-        F[Service] -- ApplicationAPI/UDP --> E[IPFS]
+        F[Service] -- ApplicationAPI/UDP --> E[Myceli/IPFS]
         E <-- CommsAPI/UDP --> G[Comms]
+        H[Hyphae] -- ApplicationAPI/UDP --> E[Myceli/IPFS]
+        H[Hyphae] -- RPC/HTTP --> I[Kubo]
     end
 
     C <--> Z

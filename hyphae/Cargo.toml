@@ -1,0 +1,17 @@
+[package]
+name = "hyphae"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.0.15", features = ["derive"] }
+figment = { version = "0.10", features = ["toml"] }
+messages = { path = "../messages" }
+reqwest = { version = "0.11", features = ["blocking", "json", "multipart"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = "0.3"

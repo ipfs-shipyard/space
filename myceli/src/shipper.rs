@@ -32,6 +32,7 @@ pub struct Shipper {
     retry_timeout_duration: u64,
     // Socket shared between listener and shipper for a consistent listening socket
     socket: Arc<UdpSocket>,
+    mtu: u16,
 }
 
 impl Shipper {
@@ -41,6 +42,7 @@ impl Shipper {
         sender: Sender<(DataProtocol, String)>,
         retry_timeout_duration: u64,
         socket: Arc<UdpSocket>,
+        mtu: u16,
     ) -> Result<Shipper> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
@@ -53,6 +55,7 @@ impl Shipper {
             sender,
             retry_timeout_duration,
             socket,
+            mtu,
         })
     }
 
@@ -166,7 +169,7 @@ impl Shipper {
         info!("sending {msg:?} to {resolved_target_addr}");
         // let bind_address: SocketAddr = "127.0.0.1:0".parse()?;
         // let socket = UdpSocket::bind(bind_address)?;
-        let chunker = SimpleChunker::new(crate::listener::MTU);
+        let chunker = SimpleChunker::new(self.mtu);
         for chunk in chunker.chunk(msg)? {
             self.socket.send_to(&chunk, resolved_target_addr)?;
         }
@@ -282,6 +285,7 @@ mod tests {
                 shipper_sender,
                 10,
                 shipper_socket,
+                60,
             )
             .unwrap();
             TestShipper {

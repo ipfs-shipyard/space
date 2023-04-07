@@ -1,5 +1,17 @@
 # Changelog
 
+
+## [0.7] - Unreleased
+
+### Added
+
+- Added `hyphae`, a block syncing bridge between `myceli` and `kubo`.
+- Added `RequestVersion` API to `myceli`.
+
+### Changed
+
+- Added `mtu` config parameter to `myceli`.
+
 ## [0.6] - 2023-04-04
 
 ### Added

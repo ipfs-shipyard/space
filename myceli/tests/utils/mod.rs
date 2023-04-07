@@ -59,7 +59,7 @@ impl TestListener {
 
 fn start_listener_thread(listen_addr: SocketAddr, db_path: ChildPath) {
     let db_path = db_path.path().to_str().unwrap();
-    let mut listener = Listener::new(&listen_addr, db_path).unwrap();
+    let mut listener = Listener::new(&listen_addr, db_path, 60).unwrap();
     listener.start(10).expect("Error encountered in listener");
 }
 
