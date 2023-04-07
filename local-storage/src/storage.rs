@@ -27,7 +27,7 @@ impl Storage {
         let blocks: Result<Vec<Block>> = rt.block_on(async {
             let file: File = FileBuilder::new()
                 .path(path)
-                .fixed_chunker(50)
+                .fixed_chunker(256)
                 .build()
                 .await?;
             let blocks: Vec<_> = file.encode().await?.try_collect().await?;

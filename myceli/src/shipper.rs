@@ -166,7 +166,7 @@ impl Shipper {
 
     fn transmit_msg(&mut self, msg: Message, target_addr: &str) -> Result<()> {
         let resolved_target_addr = target_addr.to_socket_addrs().unwrap().next().unwrap();
-        info!("sending {msg:?} to {resolved_target_addr}");
+        info!("Transmitting {msg:?} to {resolved_target_addr}");
         // let bind_address: SocketAddr = "127.0.0.1:0".parse()?;
         // let socket = UdpSocket::bind(bind_address)?;
         let chunker = SimpleChunker::new(self.mtu);

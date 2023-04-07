@@ -1,11 +1,27 @@
+use cid::Cid;
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
 use serde::Serialize;
+use std::fmt;
 
-#[derive(Eq, PartialEq, Clone, Debug, ParityDecode, ParityEncode, Serialize)]
+#[derive(Eq, PartialEq, Clone, ParityDecode, ParityEncode, Serialize)]
 pub struct TransmissionBlock {
     pub cid: Vec<u8>,
     pub data: Vec<u8>,
     pub links: Vec<Vec<u8>>,
+}
+
+impl fmt::Debug for TransmissionBlock {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let cid_str = Cid::try_from(self.cid.clone())
+            .and_then(|c| Ok(c.to_string()))
+            .unwrap();
+
+        f.debug_struct("TransmissionBlock")
+            .field("cid", &cid_str)
+            .field("data", &self.data.len())
+            .field("links", &self.links.len())
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, ParityDecode, ParityEncode, Serialize, Eq, PartialEq)]
