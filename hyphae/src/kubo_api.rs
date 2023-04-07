@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use std::time::Duration;
 use tracing::{info, warn};
 
-use crate::DAG_PB_CID_PREFIX;
+use crate::DAG_PB_CODEC_PREFIX;
 
 pub struct KuboApi {
     address: String,
@@ -52,15 +52,15 @@ impl KuboApi {
         let mut de_stream = de.into_iter::<Value>();
         let mut cids = HashSet::new();
         while let Some(Ok(next)) = de_stream.next() {
-            if let Some(cid) = next.get("Ref") {
-                cids.insert(cid.as_str().unwrap().to_owned());
+            if let Some(cid) = next.get("Ref").and_then(|c| c.as_str()) {
+                cids.insert(cid.to_owned());
             }
         }
         Ok(cids)
     }
 
     pub fn put_block(&self, cid: &str, block: &TransmissionBlock) -> Result<()> {
-        let put_block_url = if cid.starts_with(DAG_PB_CID_PREFIX) {
+        let put_block_url = if cid.starts_with(DAG_PB_CODEC_PREFIX) {
             format!("{}/block/put?cid-codec=dag-pb", self.address)
         } else {
             format!("{}/block/put", self.address)

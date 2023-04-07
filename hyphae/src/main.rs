@@ -12,10 +12,10 @@ use myceli_api::MyceliApi;
 use std::collections::HashSet;
 use std::thread::sleep;
 use std::time::Duration;
-use tracing::{error, info, Level};
+use tracing::{error, info, warn, Level};
 
-pub const RAW_CID_PREFIX: &str = "bafkrei";
-pub const DAG_PB_CID_PREFIX: &str = "bafybei";
+pub const RAW_CODEC_PREFIX: &str = "bafkrei";
+pub const DAG_PB_CODEC_PREFIX: &str = "bafybei";
 
 #[derive(Parser, Debug)]
 #[clap(about = "Hyphae, a filament between Myceli and Kubo")]
@@ -33,8 +33,8 @@ fn get_missing_blocks(
     // but the actual sync will be done on the dag-pb cids.
     let mut raw_from_dag_pb_blocks: Vec<String> = vec![];
     for block in myceli_blocks.iter_mut() {
-        if block.starts_with(DAG_PB_CID_PREFIX) {
-            let pb_to_raw_cid = block.replace(DAG_PB_CID_PREFIX, RAW_CID_PREFIX);
+        if block.starts_with(DAG_PB_CODEC_PREFIX) {
+            let pb_to_raw_cid = block.replace(DAG_PB_CODEC_PREFIX, RAW_CODEC_PREFIX);
             raw_from_dag_pb_blocks.push(pb_to_raw_cid.to_string());
             *block = pb_to_raw_cid.to_string();
         }
@@ -45,7 +45,7 @@ fn get_missing_blocks(
     for cid in raw_from_dag_pb_blocks {
         if missing_blocks.contains(&cid) {
             missing_blocks.remove(&cid);
-            missing_blocks.insert(cid.replace(RAW_CID_PREFIX, DAG_PB_CID_PREFIX));
+            missing_blocks.insert(cid.replace(RAW_CODEC_PREFIX, DAG_PB_CODEC_PREFIX));
         }
     }
     missing_blocks
@@ -56,22 +56,30 @@ fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi) -> Result<()> {
     let myceli_blocks = myceli.get_available_blocks()?;
     let kubo_blocks = kubo.get_local_blocks()?;
     let missing_blocks = get_missing_blocks(myceli_blocks, kubo_blocks);
+    let mut all_blocks_synced = true;
 
     for cid in missing_blocks {
         info!("Syncing block {cid} from myceli to kubo");
         let block = match myceli.get_block(&cid) {
             Ok(block) => block,
             Err(e) => {
+                // TODO: Surface more error info here. Connection error vs internal myceli error?
                 error!("Error retrieving block {cid} from myceli: {e}");
+                all_blocks_synced = false;
                 continue;
             }
         };
         if let Err(e) = kubo.put_block(&cid, &block) {
             error!("Error sending block {cid} to kubo: {e}");
+            all_blocks_synced = false;
         }
     }
 
-    info!("All myceli blocks are synced");
+    if all_blocks_synced {
+        info!("All myceli blocks are synced");
+    } else {
+        warn!("Not all myceli blocks were able to sync, check logs for specific errors");
+    }
 
     Ok(())
 }
@@ -87,7 +95,7 @@ fn main() -> Result<()> {
     info!("Connecting to kubo@{}", cfg.kubo_address);
 
     let kubo = KuboApi::new(&cfg.kubo_address);
-    let myceli = MyceliApi::new(&cfg.myceli_address);
+    let myceli = MyceliApi::new(&cfg.myceli_address, cfg.mtu);
 
     loop {
         if kubo.check_alive() && myceli.check_alive() {

@@ -10,6 +10,7 @@ pub struct Config {
     pub myceli_address: String,
     pub kubo_address: String,
     pub sync_interval: u64,
+    pub mtu: u16,
 }
 
 impl Default for Config {
@@ -18,6 +19,7 @@ impl Default for Config {
             myceli_address: "127.0.0.1:8080".to_string(),
             kubo_address: "127.0.0.1:5001".to_string(),
             sync_interval: 10_000,
+            mtu: 60,
         }
     }
 }

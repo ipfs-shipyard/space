@@ -2,47 +2,54 @@ use anyhow::{bail, Result};
 use messages::{
     ApplicationAPI, DataProtocol, Message, MessageChunker, SimpleChunker, TransmissionBlock,
 };
+use std::net::SocketAddr;
 use std::net::{ToSocketAddrs, UdpSocket};
 use std::rc::Rc;
 use std::thread::sleep;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
-const MTU: u16 = 60;
-
 pub struct MyceliApi {
-    address: String,
+    address: SocketAddr,
     socket: Rc<UdpSocket>,
     listen_address: String,
+    mtu: u16,
 }
 
 impl MyceliApi {
-    pub fn new(address: &str) -> Self {
-        let socket = Rc::new(UdpSocket::bind("127.0.0.1:0").unwrap());
+    pub fn new(address: &str, mtu: u16) -> Self {
+        let socket = Rc::new(UdpSocket::bind("127.0.0.1:0").expect("Failed to bind socket"));
         socket
             .set_read_timeout(Some(Duration::from_millis(500)))
-            .unwrap();
-        let listen_address = socket.local_addr().unwrap().to_string();
+            .expect("Failed to set socket read timeout");
+        let listen_address = socket
+            .local_addr()
+            .expect("Failed to create local address")
+            .to_string();
+        let address = address
+            .to_socket_addrs()
+            .ok()
+            .and_then(|mut iter| iter.next())
+            .expect("Failed to resolve address into socketaddr");
         MyceliApi {
-            address: address.to_string(),
+            address,
             socket,
             listen_address,
+            mtu,
         }
     }
 
     fn send_msg(&self, msg: Message) -> Result<()> {
-        let resolved_target_addr = self.address.to_socket_addrs().unwrap().next().unwrap();
-
-        let chunker = SimpleChunker::new(MTU);
+        let chunker = SimpleChunker::new(self.mtu);
         for chunk in chunker.chunk(msg)? {
-            self.socket.send_to(&chunk, resolved_target_addr)?;
+            self.socket.send_to(&chunk, self.address)?;
         }
         Ok(())
     }
 
     fn recv_msg(&self) -> Result<Message> {
-        let mut chunker = SimpleChunker::new(MTU);
-        let mut buf = vec![0; MTU.into()];
+        let mut chunker = SimpleChunker::new(self.mtu);
+        let mut buf = vec![0; self.mtu.into()];
         loop {
             {
                 loop {
@@ -99,6 +106,7 @@ impl MyceliApi {
         match self.recv_msg() {
             Ok(Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids })) => Ok(cids),
             other => {
+                // TODO: extract out to macro which logs and bails
                 warn!("Received wrong resp for RequestAvailableBlocks: {other:?}");
                 bail!("Received wrong resp for RequestAvailableBlocks: {other:?}")
             }

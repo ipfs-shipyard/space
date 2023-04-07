@@ -31,7 +31,7 @@ fn main() -> Result<()> {
     let db_path = format!("{}/storage.db", cfg.storage_path);
 
     let mut listener =
-        Listener::new(&resolved_listen_addr, &db_path).expect("Listener creation failed");
+        Listener::new(&resolved_listen_addr, &db_path, cfg.mtu).expect("Listener creation failed");
     listener
         .start(cfg.retry_timeout_duration)
         .expect("Error encountered in listener operation");
