@@ -66,7 +66,10 @@ pub enum ApplicationAPI {
     /// Request available DAGs
     RequestAvailableDags,
     /// Advertise available DAGs as a map of CID to filename
-    // AvailableDags { dags: BTreeMap<String, String> },
+    #[command(skip)]
+    AvailableDags {
+        dags: Vec<(String, String)>,
+    },
     /// Delete block from local store
     DeleteBlock {
         cid: String,

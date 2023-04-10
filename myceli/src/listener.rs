@@ -148,6 +148,9 @@ impl Listener {
             Message::ApplicationAPI(ApplicationAPI::RequestAvailableBlocks) => {
                 Some(handlers::request_available_blocks(self.storage.clone())?)
             }
+            Message::ApplicationAPI(ApplicationAPI::RequestAvailableDags) => {
+                Some(handlers::request_available_dags(self.storage.clone())?)
+            }
             Message::ApplicationAPI(ApplicationAPI::GetMissingDagBlocks { cid }) => Some(
                 handlers::get_missing_dag_blocks(&cid, self.storage.clone())?,
             ),

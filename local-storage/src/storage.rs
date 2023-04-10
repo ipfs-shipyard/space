@@ -55,6 +55,9 @@ impl Storage {
             }
         });
         if let Some(root_cid) = root_cid {
+            if let Some(filename) = path.file_name().and_then(|p| p.to_str()) {
+                self.provider.name_dag(&root_cid, filename)?;
+            }
             info!("Imported path {} to {}", path.display(), root_cid);
             Ok(root_cid)
         } else {
@@ -84,6 +87,10 @@ impl Storage {
         // Query list of available CIDs
         // Include all root and child CIDs?
         self.provider.get_available_cids()
+    }
+
+    pub fn list_available_dags(&self) -> Result<Vec<(String, String)>> {
+        self.provider.list_available_dags()
     }
 
     pub fn get_block_by_cid(&self, cid: &str) -> Result<StoredBlock> {
@@ -122,10 +129,6 @@ impl Storage {
 
     pub fn get_missing_dag_blocks(&self, cid: &str) -> Result<Vec<String>> {
         self.provider.get_missing_cid_blocks(cid)
-    }
-
-    pub fn list_available_dags(&self) -> Result<Vec<String>> {
-        self.provider.list_available_dags()
     }
 }
 
