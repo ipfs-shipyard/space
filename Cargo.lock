@@ -77,17 +77,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "app-api-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "messages",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "arrayref"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -608,6 +597,17 @@ name = "constant_time_eq"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3ad85c1f65dc7b37604eb0e89748faf0b9653065f2a8ef69f96a687ec1e9279"
+
+[[package]]
+name = "controller"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "messages",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "convert_case"
@@ -2715,6 +2715,7 @@ dependencies = [
  "blake2",
  "cid 0.10.1",
  "clap",
+ "figment",
  "file-hashing",
  "futures",
  "iroh-unixfs",
@@ -2722,7 +2723,6 @@ dependencies = [
  "messages",
  "rand 0.8.5",
  "serde",
- "serde_derive",
  "tokio",
  "toml 0.7.3",
  "tracing",

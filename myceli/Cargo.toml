@@ -9,10 +9,10 @@ edition = "2021"
 anyhow = "1"
 cid = {version = "0.10", features = ["scale-codec"] }
 clap = { version = "4.0.15", features = ["derive"] }
+figment = { version = "0.10", features = ["toml"] }
 local-storage = { path = "../local-storage" }
 messages = { path = "../messages" }
-serde_derive = "1"
-serde = "1"
+serde = { version = "1", features = ["derive"] }
 tokio = "1"
 toml = "0.7"
 tracing = "0.1"
