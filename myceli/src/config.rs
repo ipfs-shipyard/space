@@ -32,6 +32,8 @@ impl Default for ListenerConfig {
 pub struct Config {
     pub listeners: Vec<ListenerConfig>,
     pub storage_path: String,
+    pub name: String,
+    pub radio_address: String,
 }
 
 impl Default for Config {
@@ -41,6 +43,10 @@ impl Default for Config {
             listeners: vec![ListenerConfig::default()],
             // Default storage dir
             storage_path: "storage".to_string(),
+            // Default name
+            name: "Myceli".to_string(),
+            // Default radio address
+            radio_address: "127.0.0.1:8081".to_string(),
         }
     }
 }

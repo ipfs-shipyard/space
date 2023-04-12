@@ -11,8 +11,6 @@ use tokio::time::sleep;
 #[clap(about = "Control an IPFS instance")]
 pub struct Cli {
     instance_addr: String,
-    #[arg(short, long)]
-    listen: bool,
     #[clap(subcommand)]
     command: ApplicationAPI,
 }
@@ -30,22 +28,24 @@ impl Cli {
             socket.send_to(&chunks, target_address).await?;
         }
 
-        if self.listen {
-            loop {
-                let mut buf = vec![0; 1024];
-                if socket.recv(&mut buf).await.is_ok() {
-                    match chunker.unchunk(&buf) {
-                        Ok(Some(msg)) => {
-                            println!("{msg:?}");
-                            return Ok(());
-                        }
-                        // No assembly errors and nothing assembled yet
-                        Ok(None) => {}
-                        Err(e) => println!("{e:?}"),
+        let mut tries = 0;
+        while tries < 10 {
+            let mut buf = vec![0; 1024];
+            if socket.try_recv(&mut buf).is_ok() {
+                match chunker.unchunk(&buf) {
+                    Ok(Some(msg)) => {
+                        println!("{msg:?}");
+                        return Ok(());
                     }
+                    // No assembly errors and nothing assembled yet
+                    Ok(None) => {
+                        continue;
+                    }
+                    Err(e) => println!("{e:?}"),
                 }
-                sleep(Duration::from_millis(10)).await;
             }
+            tries += 1;
+            sleep(Duration::from_millis(10)).await;
         }
         Ok(())
     }

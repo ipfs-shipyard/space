@@ -90,9 +90,10 @@ impl Message {
         })
     }
 
-    pub fn import_file(path: &str) -> Self {
+    pub fn import_file(path: &str, target_node: Option<String>) -> Self {
         Message::ApplicationAPI(ApplicationAPI::ImportFile {
             path: path.to_string(),
+            target_node,
         })
     }
 

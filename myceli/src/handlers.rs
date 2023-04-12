@@ -37,13 +37,6 @@ pub fn request_available_blocks(storage: Rc<Storage>) -> Result<Message> {
     }))
 }
 
-pub fn request_available_dags(storage: Rc<Storage>) -> Result<Message> {
-    let dags = storage.list_available_dags()?;
-    Ok(Message::ApplicationAPI(ApplicationAPI::AvailableDags {
-        dags,
-    }))
-}
-
 pub fn get_missing_dag_blocks(cid: &str, storage: Rc<Storage>) -> Result<Message> {
     let blocks = storage.get_missing_dag_blocks(cid)?;
     Ok(Message::ApplicationAPI(ApplicationAPI::MissingDagBlocks {

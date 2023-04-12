@@ -1,12 +1,21 @@
 use clap::Subcommand;
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
 use serde::Serialize;
+use std::collections::BTreeMap;
+
+#[derive(Clone, Debug, ParityEncode, ParityDecode, Serialize, Eq, PartialEq)]
+pub struct DagInfo {
+    pub cid: String,
+    pub filename: String,
+    pub node: String,
+}
 
 #[derive(Clone, Debug, ParityEncode, ParityDecode, Serialize, Subcommand, Eq, PartialEq)]
 pub enum ApplicationAPI {
     /// Asks IPFS instance to import a file path into the local IPFS store
     ImportFile {
         path: String,
+        target_node: Option<String>,
     },
     /// Response message to ImportFile containing file's root CID
     FileImported {
@@ -36,6 +45,9 @@ pub enum ApplicationAPI {
         cid: String,
         target_addr: String,
         retries: u8,
+    },
+    FetchDag {
+        cid: String,
     },
     /// Initiates transmission of block corresponding to the given CID
     TransmitBlock {
@@ -68,7 +80,7 @@ pub enum ApplicationAPI {
     /// Advertise available DAGs as a map of CID to filename
     #[command(skip)]
     AvailableDags {
-        dags: Vec<(String, String)>,
+        dags: Vec<DagInfo>,
     },
     /// Delete block from local store
     DeleteBlock {
@@ -86,5 +98,14 @@ pub enum ApplicationAPI {
     RequestVersion,
     Version {
         version: String,
+    },
+    RequestNodeAddress,
+    NodeAddress {
+        address: String,
+    },
+    RequestNodeList,
+    #[command(skip)]
+    NodeList {
+        nodes: BTreeMap<String, Option<String>>,
     },
 }
