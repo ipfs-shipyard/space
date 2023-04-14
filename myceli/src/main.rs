@@ -1,12 +1,12 @@
 use anyhow::Result;
 use clap::Parser;
-use messages::{ApplicationAPI, Message};
-use messages::{DagInfo, MessageChunker, SimpleChunker};
+
+use messages::DagInfo;
 use myceli::config::Config;
 use myceli::listener::Listener;
 use std::collections::BTreeMap;
 use std::net::ToSocketAddrs;
-use std::net::UdpSocket;
+
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tracing::Level;

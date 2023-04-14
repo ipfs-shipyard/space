@@ -13,7 +13,7 @@ pub struct TransmissionBlock {
 impl fmt::Debug for TransmissionBlock {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let cid_str = Cid::try_from(self.cid.clone())
-            .and_then(|c| Ok(c.to_string()))
+            .map(|c| c.to_string())
             .unwrap();
 
         f.debug_struct("TransmissionBlock")

@@ -14,7 +14,7 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{sleep, spawn};
 use std::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 pub struct Listener {
     storage_path: String,
@@ -85,7 +85,7 @@ impl Listener {
             shipper.receive_msg_loop();
         });
 
-        if (self.primary) {
+        if self.primary {
             self.network_ping()?;
         }
 
@@ -180,7 +180,7 @@ impl Listener {
                                     target_addr,
                                 )?;
                             }
-                            other => {}
+                            _other => {}
                         }
                         None
                     }
@@ -188,10 +188,7 @@ impl Listener {
             }
             Message::ApplicationAPI(ApplicationAPI::FileImported { path, cid }) => {
                 if let Some(info) = self.nodes_list.lock().unwrap().last_entry() {
-                    if let Some(filename) = PathBuf::from(path)
-                        .file_name()
-                        .map(|s| s.to_str())
-                        .flatten()
+                    if let Some(filename) = PathBuf::from(path).file_name().and_then(|s| s.to_str())
                     {
                         self.network_dags.lock().unwrap().insert(
                             cid.to_string(),
@@ -228,7 +225,7 @@ impl Listener {
                     .lock()
                     .unwrap()
                     .iter()
-                    .map(|(cid, info)| info.clone())
+                    .map(|(_cid, info)| info.clone())
                     .collect();
                 local_dags.append(&mut network_dags);
                 Some(Message::ApplicationAPI(ApplicationAPI::AvailableDags {

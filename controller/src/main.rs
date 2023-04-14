@@ -1,5 +1,5 @@
 use anyhow::Result;
-use clap::{arg, Parser};
+use clap::Parser;
 use messages::{ApplicationAPI, Message, MessageChunker, SimpleChunker};
 use std::net::SocketAddr;
 use std::time::Duration;
