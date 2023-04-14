@@ -1,10 +1,12 @@
 use anyhow::Result;
 use clap::Parser;
-use messages::DagInfo;
+use messages::{ApplicationAPI, Message};
+use messages::{DagInfo, MessageChunker, SimpleChunker};
 use myceli::config::Config;
 use myceli::listener::Listener;
 use std::collections::BTreeMap;
 use std::net::ToSocketAddrs;
+use std::net::UdpSocket;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tracing::Level;
@@ -60,6 +62,7 @@ fn main() -> Result<()> {
                 thread_nodes,
                 &thread_radio_address,
                 thread_network_dags,
+                listener_cfg.primary,
             )
             .expect("Listener creation failed");
             listener

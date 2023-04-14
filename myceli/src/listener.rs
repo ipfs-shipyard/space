@@ -27,6 +27,7 @@ pub struct Listener {
     nodes_list: Arc<Mutex<BTreeMap<String, Option<String>>>>,
     radio_address: SocketAddr,
     network_dags: Arc<Mutex<BTreeMap<String, DagInfo>>>,
+    primary: bool,
 }
 
 impl Listener {
@@ -38,6 +39,7 @@ impl Listener {
         nodes_list: Arc<Mutex<BTreeMap<String, Option<String>>>>,
         radio_address: &str,
         network_dags: Arc<Mutex<BTreeMap<String, DagInfo>>>,
+        primary: bool,
     ) -> Result<Self> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
@@ -59,6 +61,7 @@ impl Listener {
             nodes_list,
             radio_address,
             network_dags,
+            primary,
         })
     }
 
@@ -82,6 +85,10 @@ impl Listener {
             shipper.receive_msg_loop();
         });
 
+        if (self.primary) {
+            self.network_ping()?;
+        }
+
         let mut buf = vec![0; usize::from(self.mtu)];
         loop {
             {
@@ -101,8 +108,6 @@ impl Listener {
                 }
             }
 
-            println!("datadbg: {buf:?}");
-
             match self.chunker.unchunk(&buf) {
                 Ok(Some(msg)) => match self.handle_message(msg, shipper_sender.clone()) {
                     Ok(Some(resp)) => {
@@ -118,9 +123,7 @@ impl Listener {
                         error!("MessageHandlerError: {e}");
                     }
                 },
-                Ok(None) => {
-                    info!("No msg found yet");
-                }
+                Ok(None) => {}
                 Err(err) => {
                     error!("Message parse failed: {err}");
                 }
@@ -133,7 +136,6 @@ impl Listener {
         message: Message,
         shipper_sender: Sender<(DataProtocol, String)>,
     ) -> Result<Option<Message>> {
-        info!("Handling {message:?}");
         let resp = match message {
             Message::ApplicationAPI(ApplicationAPI::TransmitDag {
                 cid,
@@ -238,6 +240,7 @@ impl Listener {
                 // Some(handlers::request_available_dags(self.storage.clone())?)
             }
             Message::ApplicationAPI(ApplicationAPI::AvailableDags { dags }) => {
+                info!("Found dags from networked myceli");
                 for info in dags {
                     self.network_dags
                         .lock()
@@ -284,13 +287,6 @@ impl Listener {
                 }))
             }
             Message::ApplicationAPI(ApplicationAPI::RequestNodeAddress) => {
-                // Request radio's node addr if we don't have it already
-                if self.nodes_list.lock().unwrap().len() != 2 {
-                    self.transmit_msg(
-                        Message::ApplicationAPI(ApplicationAPI::RequestNodeAddress),
-                        self.radio_address,
-                    )?;
-                }
                 // And then return our own
                 Some(Message::ApplicationAPI(ApplicationAPI::NodeAddress {
                     address: self.node_name.to_string(),
@@ -298,6 +294,7 @@ impl Listener {
             }
             Message::ApplicationAPI(ApplicationAPI::NodeAddress { address }) => {
                 // For today we'll assume that if we receive a ::NodeAddress message that it came from the other myceli
+                info!("Found myceli node: {address}");
                 self.nodes_list
                     .lock()
                     .unwrap()
@@ -305,9 +302,41 @@ impl Listener {
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::RequestNodeList) => {
+                // Request radio's node addr if we don't have it already
+                // if self.nodes_list.lock().unwrap().len() != 2 {
+                //     self.transmit_msg(
+                //         Message::ApplicationAPI(ApplicationAPI::RequestNodeAddress),
+                //         self.radio_address,
+                //     )?;
+                // }
+
                 Some(Message::ApplicationAPI(ApplicationAPI::NodeList {
                     nodes: self.nodes_list.lock().unwrap().clone(),
                 }))
+            }
+            Message::ApplicationAPI(ApplicationAPI::NetworkPing) => {
+                self.transmit_msg(
+                    Message::ApplicationAPI(ApplicationAPI::NodeAddress {
+                        address: self.node_name.to_string(),
+                    }),
+                    self.radio_address,
+                )?;
+
+                let local_dags: Vec<DagInfo> = self
+                    .storage
+                    .list_available_dags()?
+                    .iter()
+                    .map(|(cid, filename)| DagInfo {
+                        cid: cid.to_string(),
+                        filename: filename.to_string(),
+                        node: self.node_name.to_string(),
+                    })
+                    .collect();
+                self.transmit_msg(
+                    Message::ApplicationAPI(ApplicationAPI::AvailableDags { dags: local_dags }),
+                    self.radio_address,
+                )?;
+                None
             }
             // Default case for valid messages which don't have handling code implemented yet
             message => {
@@ -337,6 +366,38 @@ impl Listener {
         if let Some(sender_addr) = self.sender_addr {
             self.transmit_msg(message, sender_addr)?;
         }
+        Ok(())
+    }
+
+    fn network_ping(&self) -> Result<()> {
+        info!("Pinging myceli network");
+        self.transmit_msg(
+            Message::ApplicationAPI(ApplicationAPI::NetworkPing),
+            self.radio_address,
+        )?;
+
+        self.transmit_msg(
+            Message::ApplicationAPI(ApplicationAPI::NodeAddress {
+                address: self.node_name.to_string(),
+            }),
+            self.radio_address,
+        )?;
+
+        let local_dags: Vec<DagInfo> = self
+            .storage
+            .list_available_dags()?
+            .iter()
+            .map(|(cid, filename)| DagInfo {
+                cid: cid.to_string(),
+                filename: filename.to_string(),
+                node: self.node_name.to_string(),
+            })
+            .collect();
+        self.transmit_msg(
+            Message::ApplicationAPI(ApplicationAPI::AvailableDags { dags: local_dags }),
+            self.radio_address,
+        )?;
+
         Ok(())
     }
 }

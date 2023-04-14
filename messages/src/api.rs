@@ -108,4 +108,5 @@ pub enum ApplicationAPI {
     NodeList {
         nodes: BTreeMap<String, Option<String>>,
     },
+    NetworkPing,
 }

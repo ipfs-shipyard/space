@@ -13,6 +13,7 @@ pub struct ListenerConfig {
     pub address: String,
     pub retry_timeout_duration: u64,
     pub mtu: u16,
+    pub primary: bool,
 }
 
 impl Default for ListenerConfig {
@@ -24,6 +25,8 @@ impl Default for ListenerConfig {
             retry_timeout_duration: 120_000,
             // Default MTU appropriate for dev radio
             mtu: 60,
+            // Is this the primary (radio) listener?
+            primary: true,
         }
     }
 }
