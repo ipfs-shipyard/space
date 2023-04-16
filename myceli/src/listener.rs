@@ -3,7 +3,9 @@ use crate::shipper::Shipper;
 use anyhow::Result;
 use local_storage::provider::SqliteStorageProvider;
 use local_storage::storage::Storage;
-use messages::{ApplicationAPI, DagInfo, DataProtocol, Message, MessageChunker, SimpleChunker};
+use messages::{
+    ApplicationAPI, DagInfo, DataProtocol, Message, MessageChunker, SimpleChunker, UnchunkResult,
+};
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
@@ -20,7 +22,7 @@ pub struct Listener {
     storage_path: String,
     storage: Rc<Storage>,
     sender_addr: Option<SocketAddr>,
-    chunker: SimpleChunker,
+    chunker: Arc<Mutex<SimpleChunker>>,
     socket: Arc<UdpSocket>,
     mtu: u16,
     node_name: String,
@@ -46,6 +48,7 @@ impl Listener {
         let storage = Rc::new(Storage::new(Box::new(provider)));
         info!("{node_name} listening on {listen_address}");
         let socket = UdpSocket::bind(listen_address)?;
+        let _ = socket.set_read_timeout(Some(Duration::from_millis(100)));
         let radio_address = radio_address
             .to_socket_addrs()
             .map(|mut i| i.next().unwrap())
@@ -54,7 +57,7 @@ impl Listener {
             storage_path: storage_path.to_string(),
             storage,
             sender_addr: None,
-            chunker: SimpleChunker::new(mtu),
+            chunker: Arc::new(Mutex::new(SimpleChunker::new(mtu))),
             socket: Arc::new(socket),
             mtu,
             node_name: node_name.to_string(),
@@ -72,6 +75,7 @@ impl Listener {
         let shipper_sender_clone = shipper_sender.clone();
         let shipper_socket = Arc::clone(&self.socket);
         let shipper_mtu = self.mtu;
+        let shipper_chunker = Arc::clone(&self.chunker);
         spawn(move || {
             let mut shipper = Shipper::new(
                 &shipper_storage_path,
@@ -79,6 +83,7 @@ impl Listener {
                 shipper_sender_clone,
                 shipper_timeout_duration,
                 shipper_socket,
+                shipper_chunker,
                 shipper_mtu,
             )
             .expect("Shipper creation failed");
@@ -90,44 +95,94 @@ impl Listener {
         }
 
         let mut buf = vec![0; usize::from(self.mtu)];
+        let mut receive_tries = 0;
         loop {
             {
                 loop {
+                    if receive_tries > 100 {
+                        // info!("50 recv tries, check for missing chunks");
+                        receive_tries = 0;
+                        let missing_chunks = self.chunker.lock().unwrap().find_missing_chunks()?;
+                        if !missing_chunks.is_empty() {
+                            // println!("Found {} missing chunk msgs", missing_chunks.len());
+                            for msg in missing_chunks {
+                                self.socket.send_to(&msg, self.sender_addr.unwrap())?;
+                            }
+                        } else {
+                            // info!("nothing missing!");
+                        }
+                    }
+
+                    receive_tries += 1;
                     match self.socket.recv_from(&mut buf) {
                         Ok((len, sender)) => {
                             if len > 0 {
                                 self.sender_addr = Some(sender);
+                                receive_tries -= 1;
                                 break;
                             }
                         }
-                        Err(e) => {
-                            error!("Recv failed {e}");
-                        }
+                        Err(e) => match e.kind() {
+                            std::io::ErrorKind::WouldBlock => {}
+                            other => error!("Recv failed: {other}"),
+                        },
                     }
                     sleep(Duration::from_millis(10));
                 }
             }
 
-            match self.chunker.unchunk(&buf) {
-                Ok(Some(msg)) => match self.handle_message(msg, shipper_sender.clone()) {
-                    Ok(Some(resp)) => {
-                        if let Err(e) = self.transmit_response(resp) {
-                            error!("TransmitResponse error: {e}");
+            let unchunked_resp = self.chunker.lock().unwrap().unchunk(&buf);
+
+            match unchunked_resp {
+                Ok(Some(UnchunkResult::Message(msg))) => {
+                    // info!("unchunked msg");
+                    match self.handle_message(msg, shipper_sender.clone()) {
+                        Ok(Some(resp)) => {
+                            info!("Transmit resp {resp:?}");
+                            if let Err(e) = self.transmit_response(resp) {
+                                error!("TransmitResponse error: {e}");
+                            }
+                        }
+                        Ok(None) => {}
+                        Err(e) => {
+                            if let Err(e) = self.transmit_response(Message::Error(e.to_string())) {
+                                error!("TransmitResponse error: {e}");
+                            }
+                            error!("MessageHandlerError: {e}");
                         }
                     }
-                    Ok(None) => {}
-                    Err(e) => {
-                        if let Err(e) = self.transmit_response(Message::Error(e.to_string())) {
-                            error!("TransmitResponse error: {e}");
-                        }
-                        error!("MessageHandlerError: {e}");
+                }
+                Ok(Some(UnchunkResult::Missing(missing))) => {
+                    // info!("unchunked missing msg");
+                    let missing_chunks = self
+                        .chunker
+                        .lock()
+                        .unwrap()
+                        .get_prev_sent_chunks(missing.0)?;
+                    // println!("got missing chunks {}", missing_chunks.len());
+                    for chunk in missing_chunks {
+                        self.socket.send_to(&chunk, self.sender_addr.unwrap())?;
                     }
-                },
-                Ok(None) => {}
+                }
+                Ok(None) => {
+                    // info!("unchunked none");
+                }
                 Err(err) => {
                     error!("Message parse failed: {err}");
                 }
             }
+
+            // info!("general check for missing chunks");
+            // receive_tries = 0;
+            // let missing_chunks = self.chunker.lock().unwrap().find_missing_chunks()?;
+            // if !missing_chunks.len() > 1 {
+            //     println!("found we are missing {} chunks", missing_chunks.len());
+
+            //     self.socket
+            //         .send_to(&missing_chunks, self.sender_addr.unwrap())?;
+            // } else {
+            //     info!("nothing missing!");
+            // }
         }
     }
 
@@ -136,6 +191,7 @@ impl Listener {
         message: Message,
         shipper_sender: Sender<(DataProtocol, String)>,
     ) -> Result<Option<Message>> {
+        info!("Handling msg {message:?}");
         let resp = match message {
             Message::ApplicationAPI(ApplicationAPI::TransmitDag {
                 cid,
@@ -210,6 +266,8 @@ impl Listener {
                 Some(handlers::request_available_blocks(self.storage.clone())?)
             }
             Message::ApplicationAPI(ApplicationAPI::RequestAvailableDags) => {
+                info!("req available dags");
+                info!("check local dags");
                 let mut local_dags: Vec<DagInfo> = self
                     .storage
                     .list_available_dags()?
@@ -220,6 +278,7 @@ impl Listener {
                         node: self.node_name.to_string(),
                     })
                     .collect();
+                info!("check network dags");
                 let mut network_dags: Vec<DagInfo> = self
                     .network_dags
                     .lock()
@@ -228,6 +287,8 @@ impl Listener {
                     .map(|(_cid, info)| info.clone())
                     .collect();
                 local_dags.append(&mut network_dags);
+                dbg!(&local_dags);
+                info!("return");
                 Some(Message::ApplicationAPI(ApplicationAPI::AvailableDags {
                     dags: local_dags,
                 }))
@@ -258,7 +319,7 @@ impl Listener {
                     self.transmit_msg(
                         Message::ApplicationAPI(ApplicationAPI::TransmitDag {
                             cid,
-                            target_addr: "127.0.0.1:8080".to_string(),
+                            target_addr: "127.0.0.1:8081".to_string(),
                             retries: 5,
                         }),
                         self.radio_address,
@@ -316,7 +377,7 @@ impl Listener {
                     Message::ApplicationAPI(ApplicationAPI::NodeAddress {
                         address: self.node_name.to_string(),
                     }),
-                    self.radio_address,
+                    self.sender_addr.unwrap(),
                 )?;
 
                 let local_dags: Vec<DagInfo> = self
@@ -331,7 +392,7 @@ impl Listener {
                     .collect();
                 self.transmit_msg(
                     Message::ApplicationAPI(ApplicationAPI::AvailableDags { dags: local_dags }),
-                    self.radio_address,
+                    self.sender_addr.unwrap(),
                 )?;
                 None
             }
@@ -353,7 +414,8 @@ impl Listener {
     }
 
     fn transmit_msg(&self, message: Message, target_addr: SocketAddr) -> Result<()> {
-        for chunk in self.chunker.chunk(message)? {
+        info!("transmit msg {message:?}");
+        for chunk in self.chunker.lock().unwrap().chunk(message)? {
             self.socket.send_to(&chunk, target_addr)?;
         }
         Ok(())

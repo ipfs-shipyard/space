@@ -13,6 +13,7 @@ use std::net::UdpSocket;
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::thread::{sleep, spawn};
 use std::time::Duration;
 use tracing::{error, info};
@@ -32,6 +33,7 @@ pub struct Shipper {
     retry_timeout_duration: u64,
     // Socket shared between listener and shipper for a consistent listening socket
     socket: Arc<UdpSocket>,
+    chunker: Arc<Mutex<SimpleChunker>>,
     mtu: u16,
 }
 
@@ -42,6 +44,7 @@ impl Shipper {
         sender: Sender<(DataProtocol, String)>,
         retry_timeout_duration: u64,
         socket: Arc<UdpSocket>,
+        chunker: Arc<Mutex<SimpleChunker>>,
         mtu: u16,
     ) -> Result<Shipper> {
         let provider = SqliteStorageProvider::new(storage_path)?;
@@ -55,6 +58,7 @@ impl Shipper {
             sender,
             retry_timeout_duration,
             socket,
+            chunker,
             mtu,
         })
     }
@@ -165,14 +169,16 @@ impl Shipper {
     }
 
     fn transmit_msg(&mut self, msg: Message, target_addr: &str) -> Result<()> {
+        // println!("resolving {target_addr}");
         let resolved_target_addr = target_addr.to_socket_addrs().unwrap().next().unwrap();
         info!("Transmitting {msg:?} to {resolved_target_addr}");
         // let bind_address: SocketAddr = "127.0.0.1:0".parse()?;
         // let socket = UdpSocket::bind(bind_address)?;
-        let chunker = SimpleChunker::new(self.mtu);
-        for chunk in chunker.chunk(msg)? {
+        for chunk in self.chunker.lock().unwrap().chunk(msg)? {
+            // info!("sending chunk {} away", chunk.len());
             self.socket.send_to(&chunk, resolved_target_addr)?;
         }
+        // info!("done transmit");
         Ok(())
     }
 

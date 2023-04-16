@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use messages::{ApplicationAPI, Message, MessageChunker, SimpleChunker};
+use messages::{ApplicationAPI, Message, MessageChunker, SimpleChunker, UnchunkResult};
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::net::UdpSocket;
@@ -28,20 +28,32 @@ impl Cli {
             socket.send_to(&chunks, target_address).await?;
         }
 
-        let mut tries = 0;
-        while tries < 10 {
+        let mut tries: i32 = 0;
+        while tries < 50 {
             let mut buf = vec![0; 1024];
             if socket.try_recv(&mut buf).is_ok() {
+                println!("control recvd");
                 match chunker.unchunk(&buf) {
-                    Ok(Some(msg)) => {
+                    Ok(Some(UnchunkResult::Message(msg))) => {
                         println!("{msg:?}");
-                        return Ok(());
+                        // return Ok(());
+                    }
+                    Ok(Some(UnchunkResult::Missing(m))) => {
+                        println!("why did we get a missing msg? {m:?}");
                     }
                     // No assembly errors and nothing assembled yet
                     Ok(None) => {
                         continue;
                     }
                     Err(e) => println!("{e:?}"),
+                }
+            }
+
+            if tries.rem_euclid(10) == 0 {
+                let missing_chunks = chunker.find_missing_chunks()?;
+
+                for msg in missing_chunks {
+                    socket.send_to(&msg, target_address).await?;
                 }
             }
             tries += 1;

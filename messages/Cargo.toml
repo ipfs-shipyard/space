@@ -9,6 +9,7 @@ edition = "2021"
 anyhow = "1"
 cid = { version = "0.10" }
 clap = { version = "4.2", features = ["derive"] }
+mini-moka = "0.10"
 parity-scale-codec = { version = "3.4", features = ["derive"] }
 parity-scale-codec-derive = "3.1"
 rand = "0.8.5"
