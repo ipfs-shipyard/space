@@ -45,7 +45,7 @@ pub struct SimpleChunk {
 // This const is derived from the size of the above struct when encoded with SCALE
 // and verified using a test below. It appears to consistently be seven,
 // except when data is fairly small
-const CHUNK_OVERHEAD: u16 = 7;
+const CHUNK_OVERHEAD: u16 = 8;
 
 pub struct SimpleChunker {
     // Max message size
@@ -56,18 +56,19 @@ pub struct SimpleChunker {
     // Last received message_id to optimize reassembly searching
     last_recv_msg_id: u16,
     // Cache of sent messages
-    sent_cache: Cache<u16, Vec<SimpleChunk>>,
+    // { message_id: { }}
+    sent_cache: Cache<u16, BTreeMap<u16, SimpleChunk>>,
 }
 
 impl SimpleChunker {
     pub fn new(mtu: u16) -> Self {
         let sent_cache = Cache::builder()
             .initial_capacity(500)
-            .time_to_idle(Duration::from_secs(30))
+            .time_to_idle(Duration::from_secs(10))
             .build();
         let recv_cache = Cache::builder()
             .initial_capacity(500)
-            .time_to_idle(Duration::from_secs(30))
+            .time_to_idle(Duration::from_secs(10))
             .build();
         Self {
             mtu,
@@ -92,11 +93,8 @@ impl SimpleChunker {
         Ok(())
     }
 
-    fn attempt_msg_assembly(&mut self) -> Result<Option<UnchunkResult>> {
-        // TODO: This needs to be expanded beyond just assembling off the last received message id
-        // TODO: Data needs to be removed from the map once the message is assembled correctly
-        // TODO: Stale data in the map needs to be cleaned up periodically
-        if let Some(msg_map) = self.recv_cache.get(&self.last_recv_msg_id) {
+    fn actually_assemble_msg(&mut self, msg_id: u16) -> Result<Option<UnchunkResult>> {
+        if let Some(msg_map) = self.recv_cache.get(&msg_id) {
             // The BTreeMap docs tell us that into_values will be an iter sorted by key
             // In this case the key is the sequence_number, so in a complete set of chunks
             // that means the last item in the iter (or now vec) should be the "final chunk"
@@ -110,14 +108,36 @@ impl SimpleChunker {
                 {
                     // If all those checks pass, then we *should* have all the chunks in order
                     // Now we attempt to assemble the message
-                    return Ok(Some(UnchunkResult::Message(SimpleChunker::msg_unchunk(
-                        &chunks,
-                    )?)));
+                    match SimpleChunker::msg_unchunk(&chunks) {
+                        Ok(msg) => {
+                            // If the assembly passes then remove the message's associated chunks`
+                            self.recv_cache.invalidate(&msg_id);
+                            return Ok(Some(UnchunkResult::Message(msg)));
+                        }
+                        Err(e) => bail!(e),
+                    }
                 }
             }
         }
 
         Ok(None)
+    }
+
+    fn attempt_msg_assembly(&mut self) -> Result<Option<UnchunkResult>> {
+        match self.actually_assemble_msg(self.last_recv_msg_id) {
+            Ok(None) => {
+                // If the last received msg can't be assembled, then attempt to assemble
+                // other messages waiting in the cache
+                for entry in self.recv_cache.clone().iter() {
+                    match self.actually_assemble_msg(*entry.key()) {
+                        Ok(None) => continue,
+                        otherwise => return otherwise,
+                    }
+                }
+                return Ok(None);
+            }
+            other => return other,
+        }
     }
 
     fn msg_unchunk(data: &[&SimpleChunk]) -> Result<Message> {
@@ -188,11 +208,17 @@ impl MessageChunker for SimpleChunker {
         if let Some(mut last_chunk) = chunks.last_mut() {
             last_chunk.final_chunk = true;
         }
-        if let Message::DataProtocol(DataProtocol::Block(_)) = message {
-            // don't cache these
-        } else {
-            self.sent_cache.insert(msg_id, chunks.clone());
+        // if let Message::DataProtocol(DataProtocol::Block(_)) = message {
+        //     // don't cache these
+        // } else {
+        let mut msg_map = BTreeMap::new();
+        for c in chunks.iter() {
+            msg_map.insert(c.sequence_number, c.clone());
         }
+        if !msg_map.is_empty() {
+            self.sent_cache.insert(msg_id, msg_map);
+        }
+        // }
 
         // Encode all the chunks
         Ok(chunks
@@ -205,7 +231,9 @@ impl MessageChunker for SimpleChunker {
         let mut databuf = &data[..data.len()];
         match SimpleMsg::decode(&mut databuf) {
             Ok(SimpleMsg::Chunk(chunk)) => {
+                println!("recv chunk");
                 self.recv_chunk(chunk)?;
+                println!("attempt assembly");
                 return Ok(self.attempt_msg_assembly()?);
             }
             Ok(SimpleMsg::Missing(missing)) => {
@@ -222,10 +250,7 @@ impl MessageChunker for SimpleChunker {
 
         for (msg_id, chunk_seq) in chunk_map {
             if let Some(sent_chunks) = self.sent_cache.get(&msg_id) {
-                if let Some(found) = sent_chunks
-                    .iter()
-                    .find(|sc| sc.sequence_number == chunk_seq)
-                {
+                if let Some(found) = sent_chunks.get(&chunk_seq) {
                     found_chunks.push(SimpleMsg::Chunk(found.clone()).encode());
                 }
             }
@@ -377,26 +402,22 @@ mod tests {
             cids: vec!["hello I am a CID".to_string()],
         });
         let msg_two = Message::ApplicationAPI(ApplicationAPI::AvailableBlocks {
-            cids: vec!["hello I am a different CID".to_string()],
+            cids: vec!["hello I am a diff CID".to_string()],
         });
         let mut chunker = SimpleChunker::new(60);
         let msg_one_chunks = chunker.chunk(msg_one.clone()).unwrap();
         let msg_two_chunks = chunker.chunk(msg_two.clone()).unwrap();
 
-        if let UnchunkResult::Message(unchunked_message) = chunker
-            .unchunk(msg_one_chunks.first().unwrap())
-            .unwrap()
-            .unwrap()
+        if let Some(UnchunkResult::Message(unchunked_message)) =
+            chunker.unchunk(msg_one_chunks.first().unwrap()).unwrap()
         {
             assert_eq!(msg_one, unchunked_message);
         } else {
             panic!("Failed to decode message");
         }
 
-        if let UnchunkResult::Message(unchunked_message) = chunker
-            .unchunk(msg_two_chunks.first().unwrap())
-            .unwrap()
-            .unwrap()
+        if let Some(UnchunkResult::Message(unchunked_message)) =
+            chunker.unchunk(msg_two_chunks.first().unwrap()).unwrap()
         {
             assert_eq!(msg_two, unchunked_message);
         } else {
@@ -543,7 +564,7 @@ mod tests {
 
         let missing_chunk = chunks.remove(2);
         let mut databuf = &missing_chunk[..missing_chunk.len()];
-        let missing_chunk = if let Ok(chunk) = SimpleChunk::decode(&mut databuf) {
+        let missing_chunk = if let Ok(SimpleMsg::Chunk(chunk)) = SimpleMsg::decode(&mut databuf) {
             chunk
         } else {
             panic!("decode removed chunk failed");
@@ -573,7 +594,7 @@ mod tests {
 
         let missing_chunk = chunks.remove(0);
         let mut databuf = &missing_chunk[..missing_chunk.len()];
-        let missing_chunk = if let Ok(chunk) = SimpleChunk::decode(&mut databuf) {
+        let missing_chunk = if let Ok(SimpleMsg::Chunk(chunk)) = SimpleMsg::decode(&mut databuf) {
             chunk
         } else {
             panic!("decode removed chunk failed");
@@ -601,7 +622,7 @@ mod tests {
 
         let missing_chunk = chunks.remove(2);
         let mut databuf = &missing_chunk[..missing_chunk.len()];
-        let missing_chunk = if let Ok(chunk) = SimpleChunk::decode(&mut databuf) {
+        let missing_chunk = if let Ok(SimpleMsg::Chunk(chunk)) = SimpleMsg::decode(&mut databuf) {
             chunk
         } else {
             panic!("decode removed chunk failed");
@@ -639,7 +660,7 @@ mod tests {
 
         let missing_chunk = chunks.pop().unwrap();
         let mut databuf = &missing_chunk[..missing_chunk.len()];
-        let missing_chunk = if let Ok(chunk) = SimpleChunk::decode(&mut databuf) {
+        let missing_chunk = if let Ok(SimpleMsg::Chunk(chunk)) = SimpleMsg::decode(&mut databuf) {
             chunk
         } else {
             panic!("decode removed chunk failed");
@@ -651,7 +672,7 @@ mod tests {
         }
 
         let missing_chunks = chunker.find_missing_chunks_map().unwrap();
-        let mut missing_map = vec![(missing_chunk.message_id, missing_chunk.sequence_number)];
+        let missing_map = vec![(missing_chunk.message_id, missing_chunk.sequence_number)];
 
         assert_eq!(missing_chunks, missing_map);
     }
