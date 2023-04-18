@@ -1,6 +1,6 @@
 use anyhow::Result;
 use local_storage::storage::Storage;
-use messages::{ApplicationAPI, Message};
+use messages::{ApplicationAPI, DataProtocol, Message};
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -52,6 +52,26 @@ pub fn get_missing_dag_blocks_protocol(cid: &str, storage: Rc<Storage>) -> Resul
     } else {
         Ok(Message::missing_dag_blocks(cid, vec![cid.to_string()]))
     }
+}
+
+pub fn get_missing_dag_blocks_window_protocol(
+    cid: &str,
+    blocks: Vec<String>,
+    storage: Rc<Storage>,
+) -> Result<Message> {
+    let mut missing_blocks = vec![];
+    for block in blocks {
+        if storage.get_block_by_cid(&block).is_err() {
+            missing_blocks.push(block);
+        }
+    }
+
+    Ok(Message::DataProtocol(
+        DataProtocol::MissingDagBlocksWindow {
+            cid: cid.to_string(),
+            blocks: missing_blocks,
+        },
+    ))
 }
 
 #[cfg(test)]

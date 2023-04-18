@@ -54,4 +54,19 @@ pub enum DataProtocol {
         cid: String,
         target_addr: String,
     },
+    RequestTransmitDagWindow {
+        cid: String,
+        target_addr: String,
+        retries: u8,
+        window_size: u8,
+    },
+    // Message to request list of blocks missing from list of CIDs sent
+    RequestMissingDagBlocksWindow {
+        cid: String,
+        blocks: Vec<String>,
+    },
+    MissingDagBlocksWindow {
+        cid: String,
+        blocks: Vec<String>,
+    },
 }

@@ -211,6 +211,26 @@ impl Listener {
 
                 None
             }
+            Message::ApplicationAPI(ApplicationAPI::TransmitDagWindow {
+                cid,
+                target_addr,
+                retries,
+                window_size,
+            }) => {
+                shipper_sender.send((
+                    DataProtocol::RequestTransmitDagWindow {
+                        cid,
+                        target_addr,
+                        retries,
+                        window_size,
+                    },
+                    self.sender_addr
+                        .map(|s| s.to_string())
+                        .unwrap_or("".to_string()),
+                ))?;
+
+                None
+            }
             Message::ApplicationAPI(ApplicationAPI::TransmitBlock { cid, target_addr }) => {
                 shipper_sender.send((
                     DataProtocol::RequestTransmitBlock { cid, target_addr },

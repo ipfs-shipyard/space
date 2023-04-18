@@ -231,9 +231,7 @@ impl MessageChunker for SimpleChunker {
         let mut databuf = &data[..data.len()];
         match SimpleMsg::decode(&mut databuf) {
             Ok(SimpleMsg::Chunk(chunk)) => {
-                println!("recv chunk");
                 self.recv_chunk(chunk)?;
-                println!("attempt assembly");
                 return Ok(self.attempt_msg_assembly()?);
             }
             Ok(SimpleMsg::Missing(missing)) => {

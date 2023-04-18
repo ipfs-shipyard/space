@@ -51,14 +51,17 @@ impl Storage {
                 error!("Failed to import block {e}");
             }
             if !stored.links.is_empty() {
+                info!("Found links in block {}", stored.cid);
                 root_cid = Some(stored.cid);
             }
         });
+
         if let Some(root_cid) = root_cid {
             if let Some(filename) = path.file_name().and_then(|p| p.to_str()) {
                 self.provider.name_dag(&root_cid, filename)?;
             }
             info!("Imported path {} to {}", path.display(), root_cid);
+            info!("Imported {} blocks for {}", blocks.len(), root_cid);
             Ok(root_cid)
         } else {
             bail!("Failed to find root block for {path:?}")
@@ -105,7 +108,11 @@ impl Storage {
         // If links, grab all appropriate StoredBlocks
         let mut child_blocks = vec![];
         for link in root_block.links {
-            child_blocks.push(self.provider.get_block_by_cid(&link)?);
+            let block = self.provider.get_block_by_cid(&link)?;
+            if !block.links.is_empty() {
+                child_blocks.append(&mut self.get_all_blocks_under_cid(&block.cid)?);
+            }
+            child_blocks.push(block);
         }
         Ok(child_blocks)
     }

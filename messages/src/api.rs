@@ -46,6 +46,12 @@ pub enum ApplicationAPI {
         target_addr: String,
         retries: u8,
     },
+    TransmitDagWindow {
+        cid: String,
+        target_addr: String,
+        retries: u8,
+        window_size: u8,
+    },
     FetchDag {
         cid: String,
     },
