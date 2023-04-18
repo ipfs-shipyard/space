@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use messages::{
     ApplicationAPI, DataProtocol, Message, MessageChunker, SimpleChunker, TransmissionBlock,
+    UnchunkResult,
 };
 use std::net::SocketAddr;
 use std::net::{ToSocketAddrs, UdpSocket};
@@ -69,7 +70,8 @@ impl MyceliApi {
             }
 
             match chunker.unchunk(&buf) {
-                Ok(Some(msg)) => return Ok(msg),
+                Ok(Some(UnchunkResult::Message(msg))) => return Ok(msg),
+                Ok(Some(other)) => {}
                 Ok(None) => {
                     debug!("No msg found yet")
                 }
