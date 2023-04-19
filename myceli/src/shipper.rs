@@ -126,6 +126,27 @@ impl Shipper {
                     self.retry_dag_session(&cid, &target_addr);
                 }
             }
+            DataProtocol::RetryDagWindowSession { cid, target_addr } => {
+                if self.window_sessions.contains_key(&cid) {
+                    info!("Received retry dag session, sending get missing req to {target_addr}");
+                    if let Some(session) = self.window_sessions.get(&cid) {
+                        let blocks = self.get_dag_window_blocks(
+                            &cid,
+                            session.window_num,
+                            session.window_size,
+                        )?;
+                        let blocks = blocks.iter().map(|s| s.cid.to_string()).collect();
+                        self.transmit_msg(
+                            Message::DataProtocol(DataProtocol::RequestMissingDagBlocksWindow {
+                                cid: cid.to_string(),
+                                blocks,
+                            }),
+                            &target_addr,
+                        )?;
+                        self.retry_dag_window_session(&cid, &target_addr);
+                    }
+                }
+            }
             DataProtocol::RequestTransmitDagWindow {
                 cid,
                 target_addr,
@@ -147,9 +168,16 @@ impl Shipper {
                 if blocks.is_empty() {
                     self.increment_dag_window_session(&cid, sender_addr)?;
                 } else {
-                    for b in blocks {
+                    for b in blocks.clone() {
                         self.transmit_block(&b, sender_addr)?;
                     }
+                    self.transmit_msg(
+                        Message::DataProtocol(DataProtocol::RequestMissingDagBlocksWindow {
+                            cid,
+                            blocks,
+                        }),
+                        sender_addr,
+                    )?;
                 }
             }
         }
@@ -175,6 +203,7 @@ impl Shipper {
     fn next_dag_window_session(&mut self, cid: &str) -> Option<(u8, u8)> {
         if let Some(session) = self.window_sessions.get_mut(cid) {
             session.window_num += 1;
+            session.remaining_retries = 5;
             return Some((session.window_num, session.window_size));
         }
         None
@@ -203,11 +232,41 @@ impl Shipper {
         });
     }
 
+    fn start_dag_window_retry_timeout(&mut self, cid: &str, target_addr: &str) {
+        let sender_clone = self.sender.clone();
+        let cid_str = cid.to_string();
+        let target_addr_str = target_addr.to_string();
+        let timeout_duration = Duration::from_millis(self.retry_timeout_duration);
+        spawn(move || {
+            sleep(timeout_duration);
+            sender_clone
+                .send((
+                    DataProtocol::RetryDagWindowSession {
+                        cid: cid_str,
+                        target_addr: target_addr_str,
+                    },
+                    "127.0.0.1:0".to_string(),
+                ))
+                .unwrap();
+        });
+    }
+
     fn retry_dag_session(&mut self, cid: &str, target_addr: &str) {
         if let Some(session) = self.sessions.get_mut(cid) {
             if session.remaining_retries > 0 {
                 session.remaining_retries -= 1;
                 self.start_retry_timeout(cid, target_addr);
+            } else {
+                self.sessions.remove(cid);
+            }
+        }
+    }
+
+    fn retry_dag_window_session(&mut self, cid: &str, target_addr: &str) {
+        if let Some(session) = self.window_sessions.get_mut(cid) {
+            if session.remaining_retries > 0 {
+                session.remaining_retries -= 1;
+                self.start_dag_window_retry_timeout(cid, target_addr);
             } else {
                 self.sessions.remove(cid);
             }
@@ -240,6 +299,7 @@ impl Shipper {
             target_addr,
         )?;
         self.open_dag_window_session(cid, retries - 1, window_size);
+        self.start_dag_window_retry_timeout(cid, target_addr);
 
         Ok(())
     }
@@ -249,7 +309,10 @@ impl Shipper {
             let blocks =
                 self.transmit_dag_window(cid, window_size, next_window_num, target_addr)?;
             if !blocks.is_empty() {
-                info!("Dag window session for {cid} moving to window {next_window_num}");
+                info!(
+                    "Dag window session for {cid} moving to window {}",
+                    next_window_num + 1
+                );
                 self.transmit_msg(
                     Message::DataProtocol(DataProtocol::RequestMissingDagBlocksWindow {
                         cid: cid.to_string(),
@@ -319,28 +382,43 @@ impl Shipper {
         target_addr: &str,
     ) -> Result<Vec<String>> {
         let mut transmitted_cids = vec![];
+
+        let window_blocks = self.get_dag_window_blocks(cid, window_num, window_size)?;
+
+        info!(
+            "transmitting {} blocks in window {}",
+            window_blocks.len(),
+            window_num,
+        );
+
+        self.transmit_blocks(&window_blocks, target_addr)?;
+        for b in window_blocks {
+            transmitted_cids.push(b.cid);
+        }
+
+        Ok(transmitted_cids)
+    }
+
+    fn get_dag_window_blocks(
+        &mut self,
+        cid: &str,
+        window_num: u8,
+        window_size: u8,
+    ) -> Result<Vec<StoredBlock>> {
         let root_block = self.storage.get_block_by_cid(cid)?;
         let blocks = self.storage.get_all_blocks_under_cid(cid)?;
         let mut all_blocks = vec![root_block];
         all_blocks.extend(blocks);
-
-        info!(
-            "transmitting window {} of {} blocks",
-            window_num,
-            all_blocks.len()
-        );
 
         if let Some(window_blocks) = all_blocks
             .chunks(window_size.into())
             .map(|c| c.to_vec())
             .nth(window_num.into())
         {
-            self.transmit_blocks(&window_blocks, target_addr)?;
-            for b in window_blocks {
-                transmitted_cids.push(b.cid);
-            }
+            Ok(window_blocks)
+        } else {
+            Ok(vec![])
         }
-        Ok(transmitted_cids)
     }
 
     fn receive_block(&mut self, block: TransmissionBlock) -> Result<()> {

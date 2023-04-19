@@ -64,11 +64,11 @@ impl SimpleChunker {
     pub fn new(mtu: u16) -> Self {
         let sent_cache = Cache::builder()
             .initial_capacity(500)
-            .time_to_idle(Duration::from_secs(10))
+            .time_to_idle(Duration::from_secs(60))
             .build();
         let recv_cache = Cache::builder()
             .initial_capacity(500)
-            .time_to_idle(Duration::from_secs(10))
+            .time_to_idle(Duration::from_secs(60))
             .build();
         Self {
             mtu,

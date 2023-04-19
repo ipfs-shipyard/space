@@ -54,6 +54,10 @@ pub enum DataProtocol {
         cid: String,
         target_addr: String,
     },
+    RetryDagWindowSession {
+        cid: String,
+        target_addr: String,
+    },
     RequestTransmitDagWindow {
         cid: String,
         target_addr: String,
