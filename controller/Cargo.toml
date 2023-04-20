@@ -9,5 +9,8 @@ edition = "2021"
 anyhow = "1"
 clap = { version = "4.0.15", features = ["cargo", "derive"] }
 messages = { path = "../messages" }
+myceli = { path = "../myceli" }
 serde_json = "1"
 tokio = { version = "1", features = ["net", "rt", "macros", "time"] }
+quinn = "0.9.3"
+rustls = { version = "*", features = ["dangerous_configuration", "quic"] }

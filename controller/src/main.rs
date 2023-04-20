@@ -1,10 +1,7 @@
-use anyhow::{anyhow, Result};
+use anyhow::{bail, Result};
 use clap::{arg, Parser};
-use messages::{ApplicationAPI, Message, MessageChunker, SimpleChunker};
-use std::net::{SocketAddr, ToSocketAddrs};
-use std::time::Duration;
-use tokio::net::UdpSocket;
-use tokio::time::sleep;
+use messages::{ApplicationAPI, Message};
+use myceli::{transport::Transport, udp_transport::UdpTransport};
 
 #[derive(Parser, Debug, Clone)]
 #[clap(version, long_about = None, propagate_version = true)]
@@ -21,42 +18,23 @@ pub struct Cli {
 
 impl Cli {
     pub async fn run(&self) -> Result<()> {
-        let mut chunker = SimpleChunker::new(60);
+        let transport = UdpTransport::new(&self.bind_address, 60)?;
+
         let command = Message::ApplicationAPI(self.command.clone());
         let cmd_str = serde_json::to_string(&command)?;
         println!("Transmitting: {}", &cmd_str);
-        let target_address = self
-            .instance_addr
-            .to_socket_addrs()?
-            .next()
-            .ok_or(anyhow!("Error parsing target address"))?;
-        let bind_address: SocketAddr = self
-            .bind_address
-            .to_socket_addrs()?
-            .next()
-            .ok_or(anyhow!("Error parsing listen address"))?;
-        let socket = UdpSocket::bind(&bind_address).await?;
-        for chunks in chunker.chunk(command).unwrap() {
-            socket.send_to(&chunks, target_address).await?;
-        }
 
+        transport.send(command, &self.target_address)?;
         if self.listen_mode {
-            loop {
-                let mut buf = vec![0; 1024];
-                if socket.recv(&mut buf).await.is_ok() {
-                    match chunker.unchunk(&buf) {
-                        Ok(Some(msg)) => {
-                            println!("{msg:?}");
-                            return Ok(());
-                        }
-                        // No assembly errors and nothing assembled yet
-                        Ok(None) => {}
-                        Err(e) => println!("{e:?}"),
-                    }
+            match transport.receive() {
+                Ok((msg, _)) => {
+                    println!("{msg:?}");
+                    return Ok(());
                 }
-                sleep(Duration::from_millis(10)).await;
+                Err(e) => bail!("{e:?}"),
             }
         }
+
         Ok(())
     }
 }

@@ -1,4 +1,5 @@
 use crate::handlers;
+use crate::transport::Transport;
 use anyhow::Result;
 use cid::Cid;
 use local_storage::block::StoredBlock;
@@ -6,10 +7,8 @@ use local_storage::provider::SqliteStorageProvider;
 use local_storage::storage::Storage;
 use messages::Message;
 use messages::{DataProtocol, TransmissionBlock};
-use messages::{MessageChunker, SimpleChunker};
 use std::collections::BTreeMap;
 use std::net::ToSocketAddrs;
-use std::net::UdpSocket;
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
@@ -31,8 +30,7 @@ pub struct Shipper {
     // Retry timeout in milliseconds
     retry_timeout_duration: u64,
     // Socket shared between listener and shipper for a consistent listening socket
-    socket: Arc<UdpSocket>,
-    mtu: u16,
+    transport: Arc<dyn Transport + Send>,
 }
 
 impl Shipper {
@@ -41,8 +39,7 @@ impl Shipper {
         receiver: Receiver<(DataProtocol, String)>,
         sender: Sender<(DataProtocol, String)>,
         retry_timeout_duration: u64,
-        socket: Arc<UdpSocket>,
-        mtu: u16,
+        transport: Arc<dyn Transport + Send>,
     ) -> Result<Shipper> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
@@ -54,8 +51,7 @@ impl Shipper {
             receiver,
             sender,
             retry_timeout_duration,
-            socket,
-            mtu,
+            transport,
         })
     }
 
@@ -169,10 +165,7 @@ impl Shipper {
         info!("sending {msg:?} to {resolved_target_addr}");
         // let bind_address: SocketAddr = "127.0.0.1:0".parse()?;
         // let socket = UdpSocket::bind(bind_address)?;
-        let chunker = SimpleChunker::new(self.mtu);
-        for chunk in chunker.chunk(msg)? {
-            self.socket.send_to(&chunk, resolved_target_addr)?;
-        }
+        self.transport.send(msg, target_addr)?;
         Ok(())
     }
 
