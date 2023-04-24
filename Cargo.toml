@@ -1,8 +1,8 @@
 [workspace]
 
 members = [
-    "app-api-cli",
     "car-utility",
+    "controller",
     "cpp-transmit-example",
     "hyphae",
     "local-dev-environment/desktop/radio-service",

@@ -29,6 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        project: [myceli, controller]
         target:
           [
             armv7-unknown-linux-gnueabihf,
@@ -44,17 +45,18 @@ jobs:
         run: cargo install cross --git https://github.com/cross-rs/cross
       - name: clean cargo
         run: cargo clean
-      - name: myceli build
-        run: CROSS_CONFIG=Cross.toml cross build --bin myceli --target ${{ matrix.target }} --release
-      - name: upload myceli binary
+      - name: cargo/cross build
+        run: CROSS_CONFIG=Cross.toml cross build --bin ${{ matrix.project }} --target ${{ matrix.target }} --release
+      - name: upload binary
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ needs.start_release.outputs.upload_url }}
-          asset_path: ./target/${{ matrix.target }}/release/myceli
-          asset_name: myceli-${{ matrix.target }}
+          asset_path: ./target/${{ matrix.target }}/release/${{ matrix.project }}
+          asset_name: ${{ matrix.project }}-${{ matrix.target }}
           asset_content_type: application
+
   build_upload_docker:
     needs: [start_release]
     name: build_upload_docker
