@@ -6,9 +6,7 @@ use transports::{Transport, UdpTransport};
 
 pub struct MyceliApi {
     address: String,
-    // socket: Rc<UdpSocket>,
     listen_address: String,
-    // mtu: u16,
     transport: Rc<UdpTransport>,
 }
 

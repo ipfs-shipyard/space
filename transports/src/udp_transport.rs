@@ -12,6 +12,7 @@ pub struct UdpTransport {
     pub socket: UdpSocket,
     mtu: u16,
     chunker: Arc<Mutex<SimpleChunker>>,
+    max_read_attempts: Option<u16>,
 }
 
 impl UdpTransport {
@@ -21,7 +22,16 @@ impl UdpTransport {
             mtu,
             socket,
             chunker: Arc::new(Mutex::new(SimpleChunker::new(mtu))),
+            max_read_attempts: None,
         })
+    }
+
+    pub fn set_read_timeout(&mut self, dur: Option<Duration>) -> Result<()> {
+        Ok(self.socket.set_read_timeout(dur)?)
+    }
+
+    pub fn set_max_read_attempts(&mut self, attempts: Option<u16>) {
+        self.max_read_attempts = attempts;
     }
 }
 
@@ -29,8 +39,10 @@ impl Transport for UdpTransport {
     fn receive(&self) -> Result<(Message, String)> {
         let mut buf = vec![0; usize::from(self.mtu)];
         let mut sender_addr;
+        let mut read_attempts = 0;
         loop {
             loop {
+                read_attempts += 1;
                 match self.socket.recv_from(&mut buf) {
                     Ok((len, sender)) => {
                         if len > 0 {
@@ -40,6 +52,11 @@ impl Transport for UdpTransport {
                     }
                     Err(e) => {
                         error!("Recv failed {e}");
+                    }
+                }
+                if let Some(max_attempts) = self.max_read_attempts {
+                    if read_attempts > max_attempts {
+                        bail!("Exceeded number of read attempts");
                     }
                 }
                 sleep(Duration::from_millis(10));

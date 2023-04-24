@@ -233,7 +233,6 @@ fn stored_block_to_transmission_block(stored: &StoredBlock) -> Result<Transmissi
 mod tests {
     use super::*;
 
-    use anyhow::bail;
     use assert_fs::fixture::FileWriteBin;
     use assert_fs::{fixture::PathChild, TempDir};
     use cid::multihash::MultihashDigest;
@@ -245,10 +244,11 @@ mod tests {
     use std::sync::mpsc;
     use std::sync::Arc;
     use std::time::Duration;
+    use transports::UdpTransport;
 
     struct TestShipper {
         listen_addr: String,
-        listen_socket: Arc<UdpSocket>,
+        listen_transport: Arc<dyn Transport + Send>,
         _storage: Rc<Storage>,
         shipper: Shipper,
         test_dir: TempDir,
@@ -259,11 +259,13 @@ mod tests {
             let mut rng = thread_rng();
             let port_num = rng.gen_range(6000..9000);
             let listen_addr = format!("127.0.0.1:{port_num}");
-            let listen_socket = Arc::new(UdpSocket::bind(listen_addr.to_owned()).unwrap());
-            listen_socket
+            let mut listen_transport = UdpTransport::new(&listen_addr, 60).unwrap();
+            listen_transport
                 .set_read_timeout(Some(Duration::from_millis(10)))
                 .unwrap();
-            let shipper_socket = Arc::clone(&listen_socket);
+            listen_transport.set_max_read_attempts(Some(1));
+            let listen_transport = Arc::new(listen_transport);
+            let shipper_transport = Arc::clone(&listen_transport);
 
             let test_dir = TempDir::new().unwrap();
             let db_path = test_dir.child("storage.db");
@@ -277,8 +279,7 @@ mod tests {
                 shipper_receiver,
                 shipper_sender,
                 10,
-                shipper_socket,
-                60,
+                shipper_transport,
             )
             .unwrap();
             TestShipper {
@@ -286,28 +287,13 @@ mod tests {
                 _storage,
                 shipper,
                 test_dir,
-                listen_socket,
+                listen_transport,
             }
         }
 
         pub fn recv_msg(&mut self) -> Result<Message> {
-            let mut tries = 0;
-            let mut chunker = SimpleChunker::new(60);
-            loop {
-                let mut buf = vec![0; 128];
-                if self.listen_socket.recv(&mut buf).is_ok() {
-                    match chunker.unchunk(&buf) {
-                        Ok(Some(msg)) => return Ok(msg),
-                        Ok(None) => {}
-                        Err(e) => bail!("Error found {e:?}"),
-                    }
-                }
-                sleep(Duration::from_millis(10));
-                tries += 1;
-                if tries > 20 {
-                    bail!("Listen tries exceeded");
-                }
-            }
+            let (msg, _) = self.listen_transport.receive()?;
+            Ok(msg)
         }
 
         pub fn generate_file(&self) -> Result<String> {

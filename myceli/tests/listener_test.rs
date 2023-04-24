@@ -167,7 +167,12 @@ pub fn test_transmit_dag_no_response_exceed_retries() {
     let transmitter = TestListener::new();
     let mut controller = TestController::new();
 
-    let controller_addr = controller.socket.local_addr().unwrap().to_string();
+    let controller_addr = controller
+        .transport
+        .socket
+        .local_addr()
+        .unwrap()
+        .to_string();
 
     transmitter.start().unwrap();
 
