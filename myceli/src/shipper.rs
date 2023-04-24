@@ -20,7 +20,7 @@ struct Session {
     pub remaining_retries: u8,
 }
 
-pub struct Shipper {
+pub struct Shipper<T> {
     // Handle to storage
     pub storage: Rc<Storage>,
     // Current shipping sessions
@@ -30,17 +30,17 @@ pub struct Shipper {
     // Retry timeout in milliseconds
     retry_timeout_duration: u64,
     // Socket shared between listener and shipper for a consistent listening socket
-    transport: Arc<dyn Transport + Send>,
+    transport: Arc<T>,
 }
 
-impl Shipper {
+impl<T: Transport + Send + 'static> Shipper<T> {
     pub fn new(
         storage_path: &str,
         receiver: Receiver<(DataProtocol, String)>,
         sender: Sender<(DataProtocol, String)>,
         retry_timeout_duration: u64,
-        transport: Arc<dyn Transport + Send>,
-    ) -> Result<Shipper> {
+        transport: Arc<T>,
+    ) -> Result<Shipper<T>> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
         let storage = Rc::new(Storage::new(Box::new(provider)));
@@ -248,9 +248,9 @@ mod tests {
 
     struct TestShipper {
         listen_addr: String,
-        listen_transport: Arc<dyn Transport + Send>,
+        listen_transport: Arc<UdpTransport>,
         _storage: Rc<Storage>,
-        shipper: Shipper,
+        shipper: Shipper<UdpTransport>,
         test_dir: TempDir,
     }
 

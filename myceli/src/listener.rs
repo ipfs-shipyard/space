@@ -14,19 +14,19 @@ use std::thread::spawn;
 use tracing::{error, info};
 use transports::Transport;
 
-pub struct Listener {
+pub struct Listener<T> {
     storage_path: String,
     storage: Rc<Storage>,
     sender_addr: Option<SocketAddr>,
-    transport: Arc<dyn Transport + Send>,
+    transport: Arc<T>,
 }
 
-impl Listener {
+impl<T: Transport + Send + 'static> Listener<T> {
     pub fn new(
         listen_address: &SocketAddr,
         storage_path: &str,
-        transport: Arc<dyn Transport + Send>,
-    ) -> Result<Self> {
+        transport: Arc<T>,
+    ) -> Result<Listener<T>> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
         let storage = Rc::new(Storage::new(Box::new(provider)));
