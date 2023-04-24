@@ -1,14 +1,10 @@
-use crate::message::{Message, MessageContainer};
-
 use anyhow::{bail, Result};
+use messages::Message;
 use parity_scale_codec::{Decode, Encode};
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
 use std::collections::BTreeMap;
 
-pub trait MessageChunker {
-    fn chunk(&self, message: Message) -> Result<Vec<Vec<u8>>>;
-    fn unchunk(&mut self, data: &[u8]) -> Result<Option<Message>>;
-}
+use crate::chunking::MessageContainer;
 
 #[derive(Clone, Debug, ParityDecode, ParityEncode)]
 pub struct SimpleChunk {
@@ -85,17 +81,15 @@ impl SimpleChunker {
         Ok(None)
     }
 
-    fn msg_unchunk(data: &[&SimpleChunk]) -> Result<Message> {
+    pub fn msg_unchunk(data: &[&SimpleChunk]) -> Result<Message> {
         let mut all_data = vec![];
         data.iter().for_each(|c| all_data.extend(&c.data));
         let mut databuf = &all_data[..all_data.len()];
         let container = MessageContainer::from_bytes(&mut databuf)?;
         Ok(container.message)
     }
-}
 
-impl MessageChunker for SimpleChunker {
-    fn chunk(&self, message: Message) -> Result<Vec<Vec<u8>>> {
+    pub fn chunk(&self, message: Message) -> Result<Vec<Vec<u8>>> {
         let msg_id = rand::random::<u16>();
         let mut seq_num = 0;
         // Create container around message
@@ -124,7 +118,7 @@ impl MessageChunker for SimpleChunker {
         Ok(chunks.iter().map(|c| c.encode()).collect::<Vec<Vec<u8>>>())
     }
 
-    fn unchunk(&mut self, data: &[u8]) -> Result<Option<Message>> {
+    pub fn unchunk(&mut self, data: &[u8]) -> Result<Option<Message>> {
         let mut databuf = &data[..data.len()];
         match SimpleChunk::decode(&mut databuf) {
             Ok(chunk) => {
@@ -140,7 +134,7 @@ impl MessageChunker for SimpleChunker {
 mod tests {
     use super::*;
 
-    use crate::ApplicationAPI;
+    use messages::ApplicationAPI;
     use rand::seq::SliceRandom;
     use rand::thread_rng;
 

@@ -1,6 +1,5 @@
 use crate::handlers;
 use crate::shipper::Shipper;
-use crate::transport::Transport;
 use anyhow::Result;
 use local_storage::provider::SqliteStorageProvider;
 use local_storage::storage::Storage;
@@ -13,6 +12,7 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::Arc;
 use std::thread::spawn;
 use tracing::{error, info};
+use transports::Transport;
 
 pub struct Listener {
     storage_path: String,

@@ -1,6 +1,7 @@
-use crate::transport::Transport;
+use crate::udp_chunking::SimpleChunker;
+use crate::Transport;
 use anyhow::{bail, Result};
-use messages::{Message, MessageChunker, SimpleChunker};
+use messages::Message;
 use std::net::{ToSocketAddrs, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
@@ -8,13 +9,13 @@ use std::time::Duration;
 use tracing::{debug, error};
 
 pub struct UdpTransport {
-    socket: UdpSocket,
+    pub socket: UdpSocket,
     mtu: u16,
     chunker: Arc<Mutex<SimpleChunker>>,
 }
 
-impl Transport for UdpTransport {
-    fn new(listen_addr: &str, mtu: u16) -> Result<Self> {
+impl UdpTransport {
+    pub fn new(listen_addr: &str, mtu: u16) -> Result<Self> {
         let socket = UdpSocket::bind(listen_addr)?;
         Ok(UdpTransport {
             mtu,
@@ -22,7 +23,9 @@ impl Transport for UdpTransport {
             chunker: Arc::new(Mutex::new(SimpleChunker::new(mtu))),
         })
     }
+}
 
+impl Transport for UdpTransport {
     fn receive(&self) -> Result<(Message, String)> {
         let mut buf = vec![0; usize::from(self.mtu)];
         let mut sender_addr;

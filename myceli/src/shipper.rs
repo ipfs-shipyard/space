@@ -1,5 +1,4 @@
 use crate::handlers;
-use crate::transport::Transport;
 use anyhow::Result;
 use cid::Cid;
 use local_storage::block::StoredBlock;
@@ -15,6 +14,7 @@ use std::sync::Arc;
 use std::thread::{sleep, spawn};
 use std::time::Duration;
 use tracing::{error, info};
+use transports::Transport;
 
 struct Session {
     pub remaining_retries: u8,

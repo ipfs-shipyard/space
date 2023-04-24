@@ -12,5 +12,4 @@ messages = { path = "../messages" }
 myceli = { path = "../myceli" }
 serde_json = "1"
 tokio = { version = "1", features = ["net", "rt", "macros", "time"] }
-quinn = "0.9.3"
-rustls = { version = "*", features = ["dangerous_configuration", "quic"] }
+transports = { path = "../transports" }

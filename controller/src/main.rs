@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use clap::{arg, Parser};
 use messages::{ApplicationAPI, Message};
-use myceli::{transport::Transport, udp_transport::UdpTransport};
+use transports::{Transport, UdpTransport};
 
 #[derive(Parser, Debug, Clone)]
 #[clap(version, long_about = None, propagate_version = true)]
@@ -27,8 +27,9 @@ impl Cli {
         transport.send(command, &self.target_address)?;
         if self.listen_mode {
             match transport.receive() {
-                Ok((msg, _)) => {
+                Ok((msg, sender)) => {
                     println!("{msg:?}");
+                    println!("{sender:?}");
                     return Ok(());
                 }
                 Err(e) => bail!("{e:?}"),

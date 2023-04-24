@@ -2,11 +2,10 @@ use anyhow::Result;
 use clap::Parser;
 use myceli::config::MyceliConfig;
 use myceli::listener::Listener;
-use myceli::transport::Transport;
-use myceli::udp_transport::UdpTransport;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use tracing::Level;
+use transports::UdpTransport;
 
 #[derive(Parser, Debug)]
 #[clap(about = "Myceli, a spacey IPFS node")]
