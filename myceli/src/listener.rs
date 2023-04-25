@@ -60,7 +60,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
         loop {
             match self.transport.receive() {
                 Ok((message, sender_addr)) => {
-                    self.sender_addr = Some(sender_addr.to_socket_addrs()?.next().unwrap());
+                    self.sender_addr = sender_addr.to_socket_addrs()?.next();
                     match self.handle_message(message, shipper_sender.clone()) {
                         Ok(Some(resp)) => {
                             if let Err(e) = self.transmit_response(resp) {

@@ -1,6 +1,6 @@
 use crate::udp_chunking::SimpleChunker;
 use crate::Transport;
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use messages::Message;
 use std::net::{ToSocketAddrs, UdpSocket};
 use std::sync::{Arc, Mutex};
@@ -62,7 +62,12 @@ impl Transport for UdpTransport {
                 sleep(Duration::from_millis(10));
             }
 
-            match self.chunker.lock().unwrap().unchunk(&buf) {
+            match self
+                .chunker
+                .lock()
+                .expect("Lock failed, this is really bad")
+                .unchunk(&buf)
+            {
                 Ok(Some(msg)) => return Ok((msg, sender_addr.to_string())),
                 Ok(None) => debug!("No msg yet"),
                 Err(err) => {
@@ -73,8 +78,16 @@ impl Transport for UdpTransport {
     }
 
     fn send(&self, msg: Message, addr: &str) -> Result<()> {
-        let addr = addr.to_socket_addrs()?.next().unwrap();
-        for chunk in self.chunker.lock().unwrap().chunk(msg)? {
+        let addr = addr
+            .to_socket_addrs()?
+            .next()
+            .ok_or(anyhow!("Failed to parse address"))?;
+        for chunk in self
+            .chunker
+            .lock()
+            .expect("Lock failed, this is really bad")
+            .chunk(msg)?
+        {
             self.socket.send_to(&chunk, addr)?;
         }
         Ok(())
