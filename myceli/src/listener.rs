@@ -5,7 +5,6 @@ use local_storage::provider::SqliteStorageProvider;
 use local_storage::storage::Storage;
 use messages::{ApplicationAPI, DataProtocol, Message};
 use std::net::SocketAddr;
-use std::net::ToSocketAddrs;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::{self, Sender};
@@ -17,7 +16,6 @@ use transports::Transport;
 pub struct Listener<T> {
     storage_path: String,
     storage: Rc<Storage>,
-    sender_addr: Option<SocketAddr>,
     transport: Arc<T>,
 }
 
@@ -34,7 +32,6 @@ impl<T: Transport + Send + 'static> Listener<T> {
         Ok(Listener {
             storage_path: storage_path.to_string(),
             storage,
-            sender_addr: None,
             transport,
         })
     }
@@ -60,16 +57,17 @@ impl<T: Transport + Send + 'static> Listener<T> {
         loop {
             match self.transport.receive() {
                 Ok((message, sender_addr)) => {
-                    self.sender_addr = sender_addr.to_socket_addrs()?.next();
-                    match self.handle_message(message, shipper_sender.clone()) {
+                    match self.handle_message(message, &sender_addr, shipper_sender.clone()) {
                         Ok(Some(resp)) => {
-                            if let Err(e) = self.transmit_response(resp) {
+                            if let Err(e) = self.transmit_response(resp, &sender_addr) {
                                 error!("TransmitResponse error: {e}");
                             }
                         }
                         Ok(None) => {}
                         Err(e) => {
-                            if let Err(e) = self.transmit_response(Message::Error(e.to_string())) {
+                            if let Err(e) =
+                                self.transmit_response(Message::Error(e.to_string()), &sender_addr)
+                            {
                                 error!("TransmitResponse error: {e}");
                             }
                             error!("MessageHandlerError: {e}");
@@ -86,6 +84,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
     fn handle_message(
         &mut self,
         message: Message,
+        sender_addr: &str,
         shipper_sender: Sender<(DataProtocol, String)>,
     ) -> Result<Option<Message>> {
         info!("Handling {message:?}");
@@ -101,9 +100,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                         target_addr,
                         retries,
                     },
-                    self.sender_addr
-                        .map(|s| s.to_string())
-                        .unwrap_or("".to_string()),
+                    sender_addr.to_string(),
                 ))?;
 
                 None
@@ -111,9 +108,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
             Message::ApplicationAPI(ApplicationAPI::TransmitBlock { cid, target_addr }) => {
                 shipper_sender.send((
                     DataProtocol::RequestTransmitBlock { cid, target_addr },
-                    self.sender_addr
-                        .map(|s| s.to_string())
-                        .unwrap_or("".to_string()),
+                    sender_addr.to_string(),
                 ))?;
                 None
             }
@@ -134,12 +129,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 Some(handlers::validate_dag(&cid, self.storage.clone())?)
             }
             Message::DataProtocol(data_msg) => {
-                shipper_sender.send((
-                    data_msg,
-                    self.sender_addr
-                        .map(|s| s.to_string())
-                        .unwrap_or("".to_string()),
-                ))?;
+                shipper_sender.send((data_msg, sender_addr.to_string()))?;
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::RequestVersion) => {
@@ -156,15 +146,8 @@ impl<T: Transport + Send + 'static> Listener<T> {
         Ok(resp)
     }
 
-    fn transmit_msg(&self, message: Message, target_addr: SocketAddr) -> Result<()> {
-        self.transport.send(message, &target_addr.to_string())?;
-        Ok(())
-    }
-
-    fn transmit_response(&self, message: Message) -> Result<()> {
-        if let Some(sender_addr) = self.sender_addr {
-            self.transmit_msg(message, sender_addr)?;
-        }
+    fn transmit_response(&self, message: Message, sender_addr: &str) -> Result<()> {
+        self.transport.send(message, sender_addr)?;
         Ok(())
     }
 }
