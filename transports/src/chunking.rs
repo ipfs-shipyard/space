@@ -20,8 +20,7 @@ pub(crate) struct MessageContainer {
 impl MessageContainer {
     pub fn new(message: Message) -> Self {
         // This hash uses a 128-bit Blake2s-128 hash, rather than the common sha2-256 to save on overhead size
-        let hash = Code::Blake2s128.digest(&message.to_bytes());
-        let cid = Cid::new_v1(0x55, hash);
+        let cid = MessageContainer::gen_cid(&message.to_bytes());
         MessageContainer {
             cid: cid.to_bytes(),
             message,
