@@ -24,12 +24,11 @@ impl Cli {
         let cmd_str = serde_json::to_string(&command)?;
         println!("Transmitting: {}", &cmd_str);
 
-        transport.send(command, &self.target_address)?;
+        transport.send(command, &self.instance_addr)?;
         if self.listen_mode {
             match transport.receive() {
-                Ok((msg, sender)) => {
+                Ok((msg, _)) => {
                     println!("{msg:?}");
-                    println!("{sender:?}");
                     return Ok(());
                 }
                 Err(e) => bail!("{e:?}"),

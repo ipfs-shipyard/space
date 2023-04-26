@@ -14,7 +14,7 @@ iroh-unixfs = "0.2.0"
 rusqlite = { version = "0.28.0", features = ["bundled"] }
 thiserror = "1"
 tokio = "1"
-tracing = "0.1"
+tracing = "0.1.34"
 
 [dev-dependencies]
 assert_fs = "1"
