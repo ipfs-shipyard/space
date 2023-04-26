@@ -6,22 +6,21 @@ use local_storage::provider::SqliteStorageProvider;
 use local_storage::storage::Storage;
 use messages::Message;
 use messages::{DataProtocol, TransmissionBlock};
-use messages::{MessageChunker, SimpleChunker};
 use std::collections::BTreeMap;
 use std::net::ToSocketAddrs;
-use std::net::UdpSocket;
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::thread::{sleep, spawn};
 use std::time::Duration;
 use tracing::{error, info};
+use transports::Transport;
 
 struct Session {
     pub remaining_retries: u8,
 }
 
-pub struct Shipper {
+pub struct Shipper<T> {
     // Handle to storage
     pub storage: Rc<Storage>,
     // Current shipping sessions
@@ -31,19 +30,17 @@ pub struct Shipper {
     // Retry timeout in milliseconds
     retry_timeout_duration: u64,
     // Socket shared between listener and shipper for a consistent listening socket
-    socket: Arc<UdpSocket>,
-    mtu: u16,
+    transport: Arc<T>,
 }
 
-impl Shipper {
+impl<T: Transport + Send + 'static> Shipper<T> {
     pub fn new(
         storage_path: &str,
         receiver: Receiver<(DataProtocol, String)>,
         sender: Sender<(DataProtocol, String)>,
         retry_timeout_duration: u64,
-        socket: Arc<UdpSocket>,
-        mtu: u16,
-    ) -> Result<Shipper> {
+        transport: Arc<T>,
+    ) -> Result<Shipper<T>> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
         let storage = Rc::new(Storage::new(Box::new(provider)));
@@ -54,8 +51,7 @@ impl Shipper {
             receiver,
             sender,
             retry_timeout_duration,
-            socket,
-            mtu,
+            transport,
         })
     }
 
@@ -169,10 +165,7 @@ impl Shipper {
         info!("sending {msg:?} to {resolved_target_addr}");
         // let bind_address: SocketAddr = "127.0.0.1:0".parse()?;
         // let socket = UdpSocket::bind(bind_address)?;
-        let chunker = SimpleChunker::new(self.mtu);
-        for chunk in chunker.chunk(msg)? {
-            self.socket.send_to(&chunk, resolved_target_addr)?;
-        }
+        self.transport.send(msg, target_addr)?;
         Ok(())
     }
 
@@ -240,7 +233,6 @@ fn stored_block_to_transmission_block(stored: &StoredBlock) -> Result<Transmissi
 mod tests {
     use super::*;
 
-    use anyhow::bail;
     use assert_fs::fixture::FileWriteBin;
     use assert_fs::{fixture::PathChild, TempDir};
     use cid::multihash::MultihashDigest;
@@ -252,12 +244,13 @@ mod tests {
     use std::sync::mpsc;
     use std::sync::Arc;
     use std::time::Duration;
+    use transports::UdpTransport;
 
     struct TestShipper {
         listen_addr: String,
-        listen_socket: Arc<UdpSocket>,
+        listen_transport: Arc<UdpTransport>,
         _storage: Rc<Storage>,
-        shipper: Shipper,
+        shipper: Shipper<UdpTransport>,
         test_dir: TempDir,
     }
 
@@ -266,11 +259,13 @@ mod tests {
             let mut rng = thread_rng();
             let port_num = rng.gen_range(6000..9000);
             let listen_addr = format!("127.0.0.1:{port_num}");
-            let listen_socket = Arc::new(UdpSocket::bind(listen_addr.to_owned()).unwrap());
-            listen_socket
+            let mut listen_transport = UdpTransport::new(&listen_addr, 60).unwrap();
+            listen_transport
                 .set_read_timeout(Some(Duration::from_millis(10)))
                 .unwrap();
-            let shipper_socket = Arc::clone(&listen_socket);
+            listen_transport.set_max_read_attempts(Some(1));
+            let listen_transport = Arc::new(listen_transport);
+            let shipper_transport = Arc::clone(&listen_transport);
 
             let test_dir = TempDir::new().unwrap();
             let db_path = test_dir.child("storage.db");
@@ -284,8 +279,7 @@ mod tests {
                 shipper_receiver,
                 shipper_sender,
                 10,
-                shipper_socket,
-                60,
+                shipper_transport,
             )
             .unwrap();
             TestShipper {
@@ -293,28 +287,13 @@ mod tests {
                 _storage,
                 shipper,
                 test_dir,
-                listen_socket,
+                listen_transport,
             }
         }
 
         pub fn recv_msg(&mut self) -> Result<Message> {
-            let mut tries = 0;
-            let mut chunker = SimpleChunker::new(60);
-            loop {
-                let mut buf = vec![0; 128];
-                if self.listen_socket.recv(&mut buf).is_ok() {
-                    match chunker.unchunk(&buf) {
-                        Ok(Some(msg)) => return Ok(msg),
-                        Ok(None) => {}
-                        Err(e) => bail!("Error found {e:?}"),
-                    }
-                }
-                sleep(Duration::from_millis(10));
-                tries += 1;
-                if tries > 20 {
-                    bail!("Listen tries exceeded");
-                }
-            }
+            let (msg, _) = self.listen_transport.receive()?;
+            Ok(msg)
         }
 
         pub fn generate_file(&self) -> Result<String> {

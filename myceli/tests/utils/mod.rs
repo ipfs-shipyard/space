@@ -1,16 +1,17 @@
 use super::*;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use assert_fs::fixture::ChildPath;
 use assert_fs::{fixture::FileWriteBin, fixture::PathChild, TempDir};
 use blake2::{Blake2s256, Digest};
 use file_hashing::get_hash_file;
-use messages::{MessageChunker, SimpleChunker};
 use myceli::listener::Listener;
 use rand::{thread_rng, Rng, RngCore};
-use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::thread::{sleep, spawn};
+use transports::{Transport, UdpTransport};
 
 pub struct TestListener {
     pub listen_addr: String,
@@ -59,23 +60,29 @@ impl TestListener {
 
 fn start_listener_thread(listen_addr: SocketAddr, db_path: ChildPath) {
     let db_path = db_path.path().to_str().unwrap();
-    let mut listener = Listener::new(&listen_addr, db_path, 60).unwrap();
+    let listen_addr_str = listen_addr.to_string();
+    let mut transport = UdpTransport::new(&listen_addr_str, 60).unwrap();
+    transport
+        .set_read_timeout(Some(Duration::from_millis(10)))
+        .unwrap();
+    transport.set_max_read_attempts(Some(1));
+    let transport = Arc::new(transport);
+    let mut listener = Listener::new(&listen_addr, db_path, transport).unwrap();
     listener.start(10).expect("Error encountered in listener");
 }
 
 pub struct TestController {
-    pub socket: UdpSocket,
-    pub chunker: SimpleChunker,
+    pub transport: UdpTransport,
 }
 
 impl TestController {
     pub fn new() -> Self {
-        let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
-        socket
+        let mut transport = UdpTransport::new("127.0.0.1:0", 60).unwrap();
+        transport
             .set_read_timeout(Some(Duration::from_millis(50)))
             .unwrap();
-        let chunker = SimpleChunker::new(60);
-        TestController { socket, chunker }
+        transport.set_max_read_attempts(Some(1));
+        TestController { transport }
     }
 
     pub fn send_and_recv(&mut self, target_addr: &str, message: Message) -> Message {
@@ -84,28 +91,14 @@ impl TestController {
     }
 
     pub fn send_msg(&self, message: Message, target_addr: &str) {
-        for chunk in self.chunker.chunk(message).unwrap() {
-            self.socket.send_to(&chunk, target_addr).unwrap();
-        }
+        self.transport
+            .send(message, target_addr)
+            .expect("Transport send failed");
     }
 
     pub fn recv_msg(&mut self) -> Result<Message> {
-        let mut tries = 0;
-        loop {
-            let mut buf = vec![0; 128];
-            if self.socket.recv_from(&mut buf).is_ok() {
-                match self.chunker.unchunk(&buf) {
-                    Ok(Some(msg)) => return Ok(msg),
-                    Ok(None) => {}
-                    Err(e) => bail!("Error found {e:?}"),
-                }
-            }
-            sleep(Duration::from_millis(10));
-            tries += 1;
-            if tries > 20 {
-                bail!("Listen tries exceeded");
-            }
-        }
+        let (msg, _) = self.transport.receive()?;
+        Ok(msg)
     }
 }
 

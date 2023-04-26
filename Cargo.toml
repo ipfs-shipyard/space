@@ -8,5 +8,6 @@ members = [
     "local-dev-environment/desktop/radio-service",
     "local-storage",
     "messages",
-    "myceli"
+    "myceli",
+    "transports"
 ]

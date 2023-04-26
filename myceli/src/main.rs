@@ -3,7 +3,10 @@ use clap::Parser;
 use myceli::config::MyceliConfig;
 use myceli::listener::Listener;
 use std::net::ToSocketAddrs;
+use std::sync::Arc;
 use tracing::Level;
+use transports::UdpTransport;
+
 #[derive(Parser, Debug)]
 #[clap(about = "Myceli, a spacey IPFS node")]
 struct Args {
@@ -30,8 +33,11 @@ fn main() -> Result<()> {
 
     let db_path = format!("{}/storage.db", cfg.storage_path);
 
-    let mut listener =
-        Listener::new(&resolved_listen_addr, &db_path, cfg.mtu).expect("Listener creation failed");
+    let udp_transport =
+        UdpTransport::new(&cfg.listen_address, cfg.mtu).expect("Failed to create udp transport");
+
+    let mut listener = Listener::new(&resolved_listen_addr, &db_path, Arc::new(udp_transport))
+        .expect("Listener creation failed");
     listener
         .start(cfg.retry_timeout_duration)
         .expect("Error encountered in listener operation");

@@ -1,81 +1,32 @@
-use anyhow::{anyhow, bail, Result};
-use messages::{
-    ApplicationAPI, DataProtocol, Message, MessageChunker, SimpleChunker, TransmissionBlock,
-};
-use std::net::SocketAddr;
-use std::net::{ToSocketAddrs, UdpSocket};
+use anyhow::{bail, Result};
+use messages::{ApplicationAPI, DataProtocol, Message, TransmissionBlock};
 use std::rc::Rc;
-use std::thread::sleep;
-use std::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
+use transports::{Transport, UdpTransport};
 
 pub struct MyceliApi {
-    address: SocketAddr,
-    socket: Rc<UdpSocket>,
+    address: String,
     listen_address: String,
-    mtu: u16,
+    transport: Rc<UdpTransport>,
 }
 
 impl MyceliApi {
     pub fn new(myceli_address: &str, listen_address: &str, mtu: u16) -> Result<Self> {
-        let socket_addr = listen_address
-            .to_socket_addrs()?
-            .next()
-            .ok_or(anyhow!("Failed to parse listen address"))?;
-        let socket = Rc::new(UdpSocket::bind(socket_addr)?);
-        socket.set_read_timeout(Some(Duration::from_millis(500)))?;
-        let address = myceli_address
-            .to_socket_addrs()?
-            .next()
-            .ok_or(anyhow!("Failed to parse myceli address"))?;
+        let transport = Rc::new(UdpTransport::new(listen_address, mtu)?);
         Ok(MyceliApi {
-            address,
-            socket,
+            address: myceli_address.to_string(),
             listen_address: listen_address.to_string(),
-            mtu,
+            transport,
         })
     }
 
     fn send_msg(&self, msg: Message) -> Result<()> {
-        let chunker = SimpleChunker::new(self.mtu);
-        for chunk in chunker.chunk(msg)? {
-            self.socket.send_to(&chunk, self.address)?;
-        }
-        Ok(())
+        self.transport.send(msg, &self.address)
     }
 
     fn recv_msg(&self) -> Result<Message> {
-        let mut chunker = SimpleChunker::new(self.mtu);
-        let mut buf = vec![0; self.mtu.into()];
-        loop {
-            {
-                loop {
-                    match self.socket.recv_from(&mut buf) {
-                        Ok((len, _)) => {
-                            if len > 0 {
-                                break;
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Recv failed {e}");
-                            bail!("Recv failed {e}");
-                        }
-                    }
-                    sleep(Duration::from_millis(10));
-                }
-            }
-
-            match chunker.unchunk(&buf) {
-                Ok(Some(msg)) => return Ok(msg),
-                Ok(None) => {
-                    debug!("No msg found yet")
-                }
-                Err(err) => {
-                    warn!("Message parsed failed: {err}");
-                    bail!("Message parse failed: {err}")
-                }
-            }
-        }
+        let (msg, _) = self.transport.receive()?;
+        Ok(msg)
     }
 
     pub fn check_alive(&self) -> bool {
