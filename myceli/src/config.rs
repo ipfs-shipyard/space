@@ -48,7 +48,7 @@ impl std::default::Default for MyceliConfig {
     fn default() -> Self {
         Self {
             // Default listening address
-            listen_address: "127.0.0.1:8080".to_string(),
+            listen_address: "0.0.0.0:8080".to_string(),
             // Default retry timeout of 120_000 ms = 120 s = 2 minutes
             retry_timeout_duration: 120_000,
             // Default storage dir

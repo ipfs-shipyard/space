@@ -72,7 +72,7 @@ impl TestController {
     pub fn new() -> Self {
         let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
         socket
-            .set_read_timeout(Some(Duration::from_millis(10)))
+            .set_read_timeout(Some(Duration::from_millis(50)))
             .unwrap();
         let chunker = SimpleChunker::new(60);
         TestController { socket, chunker }
@@ -102,7 +102,7 @@ impl TestController {
             }
             sleep(Duration::from_millis(10));
             tries += 1;
-            if tries > 10 {
+            if tries > 20 {
                 bail!("Listen tries exceeded");
             }
         }

@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use messages::{
     ApplicationAPI, DataProtocol, Message, MessageChunker, SimpleChunker, TransmissionBlock,
 };
@@ -17,26 +17,23 @@ pub struct MyceliApi {
 }
 
 impl MyceliApi {
-    pub fn new(address: &str, mtu: u16) -> Self {
-        let socket = Rc::new(UdpSocket::bind("127.0.0.1:0").expect("Failed to bind socket"));
-        socket
-            .set_read_timeout(Some(Duration::from_millis(500)))
-            .expect("Failed to set socket read timeout");
-        let listen_address = socket
-            .local_addr()
-            .expect("Failed to create local address")
-            .to_string();
-        let address = address
-            .to_socket_addrs()
-            .ok()
-            .and_then(|mut iter| iter.next())
-            .expect("Failed to resolve address into socketaddr");
-        MyceliApi {
+    pub fn new(myceli_address: &str, listen_address: &str, mtu: u16) -> Result<Self> {
+        let socket_addr = listen_address
+            .to_socket_addrs()?
+            .next()
+            .ok_or(anyhow!("Failed to parse listen address"))?;
+        let socket = Rc::new(UdpSocket::bind(socket_addr)?);
+        socket.set_read_timeout(Some(Duration::from_millis(500)))?;
+        let address = myceli_address
+            .to_socket_addrs()?
+            .next()
+            .ok_or(anyhow!("Failed to parse myceli address"))?;
+        Ok(MyceliApi {
             address,
             socket,
-            listen_address,
+            listen_address: listen_address.to_string(),
             mtu,
-        }
+        })
     }
 
     fn send_msg(&self, msg: Message) -> Result<()> {
