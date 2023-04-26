@@ -605,8 +605,10 @@ dependencies = [
  "anyhow",
  "clap",
  "messages",
+ "myceli",
  "serde_json",
  "tokio",
+ "transports",
 ]
 
 [[package]]
@@ -1510,6 +1512,7 @@ dependencies = [
  "serde_json",
  "tracing",
  "tracing-subscriber",
+ "transports",
 ]
 
 [[package]]
@@ -2727,6 +2730,7 @@ dependencies = [
  "toml 0.7.3",
  "tracing",
  "tracing-subscriber",
+ "transports",
 ]
 
 [[package]]
@@ -4748,6 +4752,20 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "transports"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cid 0.10.1",
+ "messages",
+ "parity-scale-codec",
+ "parity-scale-codec-derive",
+ "rand 0.8.5",
+ "serde",
+ "tracing",
 ]
 
 [[package]]
