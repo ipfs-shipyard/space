@@ -13,7 +13,7 @@ pub struct Cli {
     instance_addr: String,
     #[arg(short, long)]
     listen_mode: bool,
-    #[arg(short, long, default_value = "127.0.0.1:9090")]
+    #[arg(short, long, default_value = "0.0.0.0:8090")]
     bind_address: String,
     #[clap(subcommand)]
     command: ApplicationAPI,

@@ -95,7 +95,12 @@ fn main() -> Result<()> {
     info!("Connecting to kubo@{}", cfg.kubo_address);
 
     let kubo = KuboApi::new(&cfg.kubo_address);
-    let myceli = MyceliApi::new(&cfg.myceli_address, cfg.mtu);
+    let myceli = MyceliApi::new(
+        &cfg.myceli_address,
+        &cfg.listen_to_myceli_address,
+        cfg.myceli_mtu,
+    )
+    .expect("Failed to create MyceliAPi");
 
     loop {
         if kubo.check_alive() && myceli.check_alive() {
