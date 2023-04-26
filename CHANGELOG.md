@@ -13,6 +13,10 @@
 
 - Added `mtu` config parameter to `myceli`.
 - Renamed `app-api-cli` to `controller`.
+- Fixed `controller` to resolve addresses
+- Standardize default addresses on `0.0.0.0`
+- Added configurable listen address to `hyphae`
+- Added configurable listen address to `controller`
 
 ## [0.6] - 2023-04-04
 
