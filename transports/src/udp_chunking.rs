@@ -128,7 +128,7 @@ impl SimpleChunker {
                         other => return other,
                     }
                 }
-                return Ok(None);
+                Ok(None)
             }
             other => other,
         }
@@ -218,11 +218,9 @@ impl SimpleChunker {
         match SimpleMsg::decode(&mut databuf) {
             Ok(SimpleMsg::Chunk(chunk)) => {
                 self.recv_chunk(chunk)?;
-                return Ok(self.attempt_msg_assembly()?);
+                self.attempt_msg_assembly()
             }
-            Ok(SimpleMsg::Missing(missing)) => {
-                return Ok(Some(UnchunkResult::Missing(missing)));
-            }
+            Ok(SimpleMsg::Missing(missing)) => Ok(Some(UnchunkResult::Missing(missing))),
             Err(e) => bail!("Failed to decode {e:?}"),
         }
     }
@@ -413,7 +411,7 @@ mod tests {
                     assert!([&msg_one, &msg_two].contains(&&msg));
                     found_msgs += 1;
                 }
-                Ok(other) => {}
+                Ok(_other) => {}
                 Err(_) => {}
             }
         }
@@ -446,7 +444,7 @@ mod tests {
                     assert!([&msg_one, &msg_two].contains(&&msg));
                     found_msgs += 1;
                 }
-                Ok(other) => {}
+                Ok(_other) => {}
                 Err(_) => {}
             }
         }
@@ -485,7 +483,7 @@ mod tests {
                     assert!(msgs.contains(&msg));
                     found_msgs += 1;
                 }
-                Ok(other) => {}
+                Ok(_other) => {}
                 Err(_) => {}
             }
         }
@@ -540,7 +538,7 @@ mod tests {
         }
 
         let missing_chunks = chunker.find_missing_chunks_map().unwrap();
-        let mut missing_map = vec![(missing_chunk.message_id, missing_chunk.sequence_number)];
+        let missing_map = vec![(missing_chunk.message_id, missing_chunk.sequence_number)];
 
         assert_eq!(missing_chunks, missing_map);
     }
@@ -570,7 +568,7 @@ mod tests {
         }
 
         let missing_chunks = chunker.find_missing_chunks_map().unwrap();
-        let mut missing_map = vec![(missing_chunk.message_id, missing_chunk.sequence_number)];
+        let missing_map = vec![(missing_chunk.message_id, missing_chunk.sequence_number)];
 
         assert_eq!(missing_chunks, missing_map);
     }
@@ -603,7 +601,7 @@ mod tests {
         }
 
         let missing_chunks = chunker.find_missing_chunks_map().unwrap();
-        let mut missing_map = vec![
+        let missing_map = vec![
             (missing_chunk.message_id, 2),
             (missing_chunk.message_id, 16),
             (missing_chunk.message_id, 17),
@@ -677,26 +675,24 @@ mod tests {
         let msg = Message::ApplicationAPI(ApplicationAPI::AvailableBlocks {
             cids: vec!["hello i am a CID".to_string(); 200],
         });
-        let MTU = 60;
-        let mut chunker = SimpleChunker::new(MTU);
+        let mtu = 60;
+        let mut chunker = SimpleChunker::new(mtu);
         let mut chunks = chunker.chunk(msg).unwrap();
 
-        let mut missing_chunks_raw: Vec<Vec<u8>> = vec![];
-
         // Remove a few more chunks for fun
-        missing_chunks_raw.push(chunks.remove(15));
-        missing_chunks_raw.push(chunks.remove(15));
-        missing_chunks_raw.push(chunks.remove(25));
-        missing_chunks_raw.push(chunks.remove(25));
-        missing_chunks_raw.push(chunks.remove(25));
-        missing_chunks_raw.push(chunks.remove(25));
-        missing_chunks_raw.push(chunks.remove(25));
-        missing_chunks_raw.push(chunks.remove(25));
-        missing_chunks_raw.push(chunks.remove(25));
-        missing_chunks_raw.push(chunks.remove(25));
-        missing_chunks_raw.push(chunks.remove(25));
-        missing_chunks_raw.push(chunks.remove(25));
-        missing_chunks_raw.push(chunks.remove(25));
+        chunks.remove(15);
+        chunks.remove(15);
+        chunks.remove(25);
+        chunks.remove(25);
+        chunks.remove(25);
+        chunks.remove(25);
+        chunks.remove(25);
+        chunks.remove(25);
+        chunks.remove(25);
+        chunks.remove(25);
+        chunks.remove(25);
+        chunks.remove(25);
+        chunks.remove(25);
 
         for chunk in chunks {
             chunker.unchunk(&chunk).unwrap();
@@ -704,7 +700,7 @@ mod tests {
 
         let missing_chunk_msgs = chunker.find_missing_chunks().unwrap();
         for msg in missing_chunk_msgs {
-            assert!(msg.len() <= MTU.into());
+            assert!(msg.len() <= mtu.into());
         }
     }
 
@@ -719,11 +715,10 @@ mod tests {
 
         let mut chunks = sending_chunker.chunk(msg).unwrap();
 
-        let mut missing_chunks_raw = vec![];
-        missing_chunks_raw.push(chunks.remove(2));
-        missing_chunks_raw.push(chunks.remove(15));
-        missing_chunks_raw.push(chunks.remove(15));
-        missing_chunks_raw.push(chunks.remove(25));
+        chunks.remove(2);
+        chunks.remove(15);
+        chunks.remove(15);
+        chunks.remove(25);
 
         for chunk in chunks {
             let unchunk = receiving_chunker.unchunk(&chunk).unwrap();
@@ -732,9 +727,9 @@ mod tests {
 
         let missing_chunks_map = receiving_chunker.find_missing_chunks().unwrap();
         let missing_chunks_map = missing_chunks_map.first().unwrap();
-        let mut databuf = &missing_chunks_map[..missing_chunks_map.len()];
+        let databuf = &missing_chunks_map[..missing_chunks_map.len()];
         let missing_chunks = if let Some(UnchunkResult::Missing(missing)) =
-            sending_chunker.unchunk(&mut databuf).unwrap()
+            sending_chunker.unchunk(databuf).unwrap()
         {
             sending_chunker.get_prev_sent_chunks(missing.0).unwrap()
         } else {
@@ -744,10 +739,10 @@ mod tests {
         let mut found_msgs = 0;
         for chunk in missing_chunks {
             match receiving_chunker.unchunk(&chunk) {
-                Ok(Some(UnchunkResult::Message(msg))) => {
+                Ok(Some(UnchunkResult::Message(_msg))) => {
                     found_msgs += 1;
                 }
-                Ok(other) => {}
+                Ok(_other) => {}
                 Err(_) => {}
             }
         }
