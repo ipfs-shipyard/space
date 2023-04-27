@@ -1,8 +1,8 @@
-use crate::udp_chunking::SimpleChunker;
+use crate::udp_chunking::{SimpleChunker, UnchunkResult};
 use crate::Transport;
 use anyhow::{anyhow, bail, Result};
 use messages::Message;
-use std::net::{ToSocketAddrs, UdpSocket};
+use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
@@ -38,15 +38,35 @@ impl UdpTransport {
 impl Transport for UdpTransport {
     fn receive(&self) -> Result<(Message, String)> {
         let mut buf = vec![0; usize::from(self.mtu)];
-        let mut sender_addr;
+        let mut sender_addr = None;
         let mut read_attempts = 0;
+        let mut receive_before_unchunk_tries = 0;
+        let mut has_received = false;
         loop {
             loop {
+                // Every 100 reads, check for missing chunks in our local recv cache
+                // and send out messages requesting those missing chunks
+                if has_received && receive_before_unchunk_tries > 100 {
+                    receive_before_unchunk_tries = 0;
+                    if let Some(sender_addr) = sender_addr {
+                        let missing_chunks = self
+                            .chunker
+                            .lock()
+                            .expect("Lock failed, this is bad")
+                            .find_missing_chunks()?;
+                        if !missing_chunks.is_empty() {
+                            for msg in missing_chunks {
+                                self.socket.send_to(&msg, sender_addr)?;
+                            }
+                        }
+                    }
+                }
                 read_attempts += 1;
                 match self.socket.recv_from(&mut buf) {
                     Ok((len, sender)) => {
                         if len > 0 {
-                            sender_addr = sender;
+                            sender_addr = Some(sender);
+                            has_received = true;
                             break;
                         }
                     }
@@ -62,16 +82,31 @@ impl Transport for UdpTransport {
                 sleep(Duration::from_millis(10));
             }
 
-            match self
-                .chunker
-                .lock()
-                .expect("Lock failed, this is really bad")
-                .unchunk(&buf)
-            {
-                Ok(Some(msg)) => return Ok((msg, sender_addr.to_string())),
-                Ok(None) => debug!("No msg yet"),
-                Err(err) => {
-                    bail!("Error unchunking message: {err}");
+            if let Some(sender_addr) = sender_addr {
+                let unchunking_resp = self
+                    .chunker
+                    .lock()
+                    .expect("Lock failed, this is bad")
+                    .unchunk(&buf);
+
+                match unchunking_resp {
+                    Ok(Some(UnchunkResult::Message(msg))) => {
+                        return Ok((msg, sender_addr.to_string()));
+                    }
+                    Ok(Some(UnchunkResult::Missing(missing))) => {
+                        let missing_chunks = self
+                            .chunker
+                            .lock()
+                            .expect("Lock failed, this is bad")
+                            .get_prev_sent_chunks(missing.0)?;
+                        for chunk in missing_chunks {
+                            self.socket.send_to(&chunk, sender_addr)?;
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(err) => {
+                        bail!("Error unchunking message: {err}");
+                    }
                 }
             }
         }

@@ -9,6 +9,7 @@ edition = "2021"
 anyhow = "1"
 cid = { version = "0.10" }
 messages = { path = "../messages" }
+mini-moka = "0.10.0"
 parity-scale-codec = { version = "3.0.0", default-features = false, features = ["derive", "std"] }
 parity-scale-codec-derive = "3.1.3"
 rand = "0.8.5"
