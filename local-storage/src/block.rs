@@ -5,7 +5,7 @@ use cid::Cid;
 use iroh_unixfs::Block;
 use std::str::FromStr;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct StoredBlock {
     pub cid: String,
     pub data: Vec<u8>,

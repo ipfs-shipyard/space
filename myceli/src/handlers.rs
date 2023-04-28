@@ -1,6 +1,6 @@
 use anyhow::Result;
 use local_storage::storage::Storage;
-use messages::{ApplicationAPI, Message};
+use messages::{ApplicationAPI, DataProtocol, Message};
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -45,13 +45,22 @@ pub fn get_missing_dag_blocks(cid: &str, storage: Rc<Storage>) -> Result<Message
     }))
 }
 
-pub fn get_missing_dag_blocks_protocol(cid: &str, storage: Rc<Storage>) -> Result<Message> {
-    if storage.get_block_by_cid(cid).is_ok() {
-        let blocks = storage.get_missing_dag_blocks(cid)?;
-        Ok(Message::missing_dag_blocks(cid, blocks))
-    } else {
-        Ok(Message::missing_dag_blocks(cid, vec![cid.to_string()]))
+pub fn get_missing_dag_blocks_window_protocol(
+    cid: &str,
+    blocks: Vec<String>,
+    storage: Rc<Storage>,
+) -> Result<Message> {
+    let mut missing_blocks = vec![];
+    for block in blocks {
+        if storage.get_block_by_cid(&block).is_err() {
+            missing_blocks.push(block);
+        }
     }
+
+    Ok(Message::DataProtocol(DataProtocol::MissingDagBlocks {
+        cid: cid.to_string(),
+        blocks: missing_blocks,
+    }))
 }
 
 #[cfg(test)]
@@ -82,7 +91,7 @@ pub mod tests {
 
         pub fn generate_file(&self) -> Result<String> {
             let mut data = Vec::<u8>::new();
-            data.resize(256, 1);
+            data.resize(256 * 5, 1);
             thread_rng().fill_bytes(&mut data);
 
             let tmp_file = self.db_dir.child("test.file");

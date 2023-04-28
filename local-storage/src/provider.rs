@@ -93,6 +93,7 @@ impl StorageProvider for SqliteStorageProvider {
                 ) {
                     maybe_block_id = Some(block_id);
                 }
+
                 self.conn.execute(
                     "INSERT OR IGNORE INTO links (root_cid, block_cid, block_id) VALUES(?1, ?2, ?3)",
                     (&block.cid, link_cid, maybe_block_id),
@@ -183,8 +184,12 @@ impl StorageProvider for SqliteStorageProvider {
             // TODO: Correctly catch/log/handle errors here
             .filter_map(|cid| cid.ok())
             .collect();
+
         if blocks.is_empty() {
-            bail!("No blocks for CID {cid} found. Root block may be missing.")
+            // If we found no child blocks then be sure the block itself exists
+            if self.get_block_by_cid(cid).is_err() {
+                bail!("No links or block for CID {cid} found. Root block may be missing.")
+            }
         }
         // Then filter by those that are missing a block_id
         let cids: Vec<String> = blocks

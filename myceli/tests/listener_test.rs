@@ -73,7 +73,7 @@ pub fn test_transmit_receive_dag() {
         &transmitter.listen_addr,
     );
 
-    sleep(Duration::from_millis(50));
+    sleep(Duration::from_millis(2_000));
 
     let receiver_blocks =
         controller.send_and_recv(&receiver.listen_addr, Message::request_available_blocks());
@@ -110,7 +110,7 @@ pub fn test_transmit_receive_dag_with_retries() {
         &transmitter.listen_addr,
     );
 
-    sleep(Duration::from_millis(50));
+    sleep(Duration::from_millis(500));
 
     let receiver_blocks =
         controller.send_and_recv(&receiver.listen_addr, Message::request_available_blocks());
@@ -147,7 +147,7 @@ pub fn test_import_transmit_export_file() {
         &transmitter.listen_addr,
     );
 
-    sleep(Duration::from_millis(50));
+    sleep(Duration::from_millis(600));
 
     let export_path = format!("{}/export", &receiver.test_dir.to_str().unwrap());
     controller.send_msg(
@@ -155,7 +155,7 @@ pub fn test_import_transmit_export_file() {
         &receiver.listen_addr,
     );
 
-    sleep(Duration::from_millis(50));
+    sleep(Duration::from_millis(100));
 
     let imported_hash = utils::hash_file(&test_file_path);
     let exported_hash = utils::hash_file(&export_path);
@@ -199,7 +199,10 @@ pub fn test_transmit_dag_no_response_exceed_retries() {
         match controller.recv_msg() {
             // These are expected prior to getting the missing dag block requests
             Ok(Message::DataProtocol(DataProtocol::Block(_))) => {}
-            Ok(Message::DataProtocol(DataProtocol::RequestMissingDagBlocks { cid })) => {
+            Ok(Message::DataProtocol(DataProtocol::RequestMissingDagWindowBlocks {
+                cid,
+                blocks: _,
+            })) => {
                 assert_eq!(cid, root_cid);
                 retries += 1;
             }
@@ -213,3 +216,5 @@ pub fn test_transmit_dag_no_response_exceed_retries() {
     // once again for each retry attempt, so we should expect retry_attempts+1
     assert_eq!(retries, retry_attempts + 1);
 }
+
+// TODO: need another test here to verify single-block transfers, they seem to have some issues that multi-block files don't have
