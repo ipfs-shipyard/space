@@ -1,0 +1,2 @@
+listen_address = "0.0.0.0:8081"
+storage_path = "space"

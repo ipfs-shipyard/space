@@ -1,0 +1,18 @@
+version: "3.9"
+services:
+  ground-node:
+    image: "ghcr.io/ipfs-shipyard/myceli:v0.6"
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/myceli
+    environment:
+      CONFIG_PATH: "/myceli/ground-cfg.toml"
+  space-node:
+    image: "ghcr.io/ipfs-shipyard/myceli:v0.6"
+    ports:
+      - "8081:8081"
+    volumes:
+      - .:/myceli
+    environment:
+      CONFIG_PATH: "/myceli/space-cfg.toml"
