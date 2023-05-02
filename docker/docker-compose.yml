@@ -3,7 +3,7 @@ services:
   ground-node:
     image: "ghcr.io/ipfs-shipyard/myceli:v0.6"
     ports:
-      - "8080:8080"
+      - "8080:8080/udp"
     volumes:
       - .:/myceli
     environment:
@@ -11,7 +11,7 @@ services:
   space-node:
     image: "ghcr.io/ipfs-shipyard/myceli:v0.6"
     ports:
-      - "8081:8081"
+      - "8081:8081/udp"
     volumes:
       - .:/myceli
     environment:
