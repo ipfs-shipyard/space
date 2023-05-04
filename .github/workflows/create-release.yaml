@@ -47,15 +47,17 @@ jobs:
         run: cargo clean
       - name: cargo/cross build
         run: CROSS_CONFIG=Cross.toml cross build --bin ${{ matrix.project }} --target ${{ matrix.target }} --release
+      - name: Archive binary
+        run: tar -czvf ${{ matrix.project }}-${{ matrix.target }}.tar.gz -C ./target/${{ matrix.target }}/release ${{ matrix.project }}
       - name: upload binary
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ needs.start_release.outputs.upload_url }}
-          asset_path: ./target/${{ matrix.target }}/release/${{ matrix.project }}
-          asset_name: ${{ matrix.project }}-${{ matrix.target }}
-          asset_content_type: application
+          asset_path: ./${{ matrix.project }}-${{ matrix.target }}.tar.gz
+          asset_name: ${{ matrix.project }}-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+          asset_content_type: application/gzip
 
   build_upload_docker:
     needs: [start_release]
