@@ -18,9 +18,16 @@ pub enum ApplicationAPI {
         cid: String,
         path: String,
     },
-    /// Tells IPFS instance whether comms are connected or not
-    IsConnected {
-        is_connected: bool,
+    /// Sets current connected state
+    SetConnected {
+        #[arg(action(clap::ArgAction::Set), required(true))]
+        connected: bool,
+    },
+    /// Requests the current connected state
+    GetConnected,
+    /// Response to GetConnected, with current connected state
+    ConnectedState {
+        connected: bool,
     },
     /// Asks IPFS instance if it has a valid DAG corresponding to the CID and all its child data
     ValidateDag {
@@ -81,6 +88,7 @@ pub enum ApplicationAPI {
         blocks: Vec<String>,
     },
     RequestVersion,
+    #[command(skip)]
     Version {
         version: String,
     },

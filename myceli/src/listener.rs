@@ -17,6 +17,7 @@ pub struct Listener<T> {
     storage_path: String,
     storage: Rc<Storage>,
     transport: Arc<T>,
+    connected: bool,
 }
 
 impl<T: Transport + Send + 'static> Listener<T> {
@@ -33,6 +34,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
             storage_path: storage_path.to_string(),
             storage,
             transport,
+            connected: true,
         })
     }
 
@@ -42,6 +44,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
         let shipper_storage_path = self.storage_path.to_string();
         let shipper_sender_clone = shipper_sender.clone();
         let shipper_transport = Arc::clone(&self.transport);
+        let initial_connected = self.connected;
         spawn(move || {
             let mut shipper = Shipper::new(
                 &shipper_storage_path,
@@ -50,6 +53,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 shipper_timeout_duration,
                 shipper_window_size,
                 shipper_transport,
+                initial_connected,
             )
             .expect("Shipper creation failed");
             shipper.receive_msg_loop();
@@ -136,6 +140,19 @@ impl<T: Transport + Send + 'static> Listener<T> {
             Message::ApplicationAPI(ApplicationAPI::RequestVersion) => {
                 Some(Message::ApplicationAPI(ApplicationAPI::Version {
                     version: env!("CARGO_PKG_VERSION").to_string(),
+                }))
+            }
+            Message::ApplicationAPI(ApplicationAPI::SetConnected { connected }) => {
+                self.connected = connected;
+                shipper_sender.send((
+                    DataProtocol::SetConnected { connected },
+                    sender_addr.to_string(),
+                ))?;
+                None
+            }
+            Message::ApplicationAPI(ApplicationAPI::GetConnected) => {
+                Some(Message::ApplicationAPI(ApplicationAPI::ConnectedState {
+                    connected: self.connected,
                 }))
             }
             // Default case for valid messages which don't have handling code implemented yet
