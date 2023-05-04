@@ -74,4 +74,4 @@ jobs:
       - name: Build and publish myceli docker
         run: |
           docker build -f myceli.Dockerfile . --tag ghcr.io/ipfs-shipyard/myceli:latest --tag ghcr.io/ipfs-shipyard/myceli:${{ github.ref_name }}
-          docker push ghcr.io/ipfs-shipyard/myceli:latest ghcr.io/ipfs-shipyard/myceli:${{ github.ref_name }}
+          docker push -a
