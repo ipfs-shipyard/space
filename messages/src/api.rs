@@ -49,6 +49,13 @@ pub enum ApplicationAPI {
         cid: String,
         target_addr: String,
     },
+    // Resumes the transmission of a dag which may have run out of retries or
+    // paused due to connectivity lost
+    ResumeTransmitDag {
+        cid: String,
+    },
+    // Resumes the transmission of all dags which may be paused
+    ResumeTransmitAllDags,
     /// Listens on address for data and writes out files received
     Receive {
         listen_addr: String,

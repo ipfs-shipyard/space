@@ -155,6 +155,18 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     connected: self.connected,
                 }))
             }
+            Message::ApplicationAPI(ApplicationAPI::ResumeTransmitDag { cid }) => {
+                shipper_sender.send((
+                    DataProtocol::ResumeTransmitDag { cid },
+                    sender_addr.to_string(),
+                ))?;
+                None
+            }
+            Message::ApplicationAPI(ApplicationAPI::ResumeTransmitAllDags) => {
+                shipper_sender
+                    .send((DataProtocol::ResumeTransmitAllDags, sender_addr.to_string()))?;
+                None
+            }
             // Default case for valid messages which don't have handling code implemented yet
             message => {
                 info!("Received unhandled message: {:?}", message);

@@ -143,6 +143,8 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                     )?;
                 }
             }
+            DataProtocol::ResumeTransmitDag { cid } => {}
+            DataProtocol::ResumeTransmitAllDags => {}
             DataProtocol::SetConnected { connected } => {
                 self.connected = connected;
             }
@@ -429,6 +431,7 @@ mod tests {
                 10,
                 5,
                 shipper_transport,
+                true,
             )
             .unwrap();
             TestShipper {
