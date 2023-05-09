@@ -153,7 +153,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             DataProtocol::SetConnected { connected } => {
                 let prev_connected = self.connected;
                 self.connected = connected;
-                if (prev_connected != true && connected == true) {
+                if !prev_connected && connected {
                     self.resume_all_dag_window_sessions()?;
                 }
             }
