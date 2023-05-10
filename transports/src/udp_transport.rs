@@ -6,7 +6,7 @@ use std::net::{ToSocketAddrs, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
-use tracing::{debug, error};
+use tracing::debug;
 
 pub struct UdpTransport {
     pub socket: UdpSocket,
@@ -51,7 +51,7 @@ impl Transport for UdpTransport {
                         }
                     }
                     Err(e) => {
-                        error!("Recv failed {e}");
+                        debug!("Recv failed {e}");
                     }
                 }
                 if let Some(max_attempts) = self.max_read_attempts {

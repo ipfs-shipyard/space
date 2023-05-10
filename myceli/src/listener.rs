@@ -10,7 +10,7 @@ use std::rc::Rc;
 use std::sync::mpsc::{self, Sender};
 use std::sync::Arc;
 use std::thread::spawn;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use transports::Transport;
 
 pub struct Listener<T> {
@@ -80,7 +80,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     }
                 }
                 Err(e) => {
-                    error!("Receive message failed: {e}");
+                    debug!("Receive message failed: {e}");
                 }
             }
         }

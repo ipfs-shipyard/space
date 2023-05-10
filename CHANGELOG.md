@@ -6,6 +6,8 @@
 ### Added
 
 - Added windowing to DAG transfers, and corresponding `window_size` config for `myceli`.
+- Added `ResumeTransmitDag` and `ResumeTransmitAllDags` APIs for resuming DAG transfers.
+- Added `SetConnected` and `GetConnected` APIs for setting connection state.
 
 ### Changed
 

@@ -314,4 +314,57 @@ pub fn test_no_transmit_after_disconnect() {
     );
 }
 
+#[test]
+pub fn test_transmit_resume_after_timeout() {
+    let transmitter = TestListener::new();
+    let receiver = TestListener::new();
+    let mut controller = TestController::new();
+
+    transmitter.start().unwrap();
+
+    let test_file_path = transmitter.generate_file().unwrap();
+    let resp = controller.send_and_recv(
+        &transmitter.listen_addr,
+        Message::import_file(&test_file_path),
+    );
+    let root_cid = match resp {
+        Message::ApplicationAPI(ApplicationAPI::FileImported { cid, .. }) => cid,
+        other => panic!("Failed to receive FileImported msg {other:?}"),
+    };
+
+    controller.send_msg(
+        Message::transmit_dag(&root_cid, &receiver.listen_addr, 1),
+        &transmitter.listen_addr,
+    );
+
+    sleep(Duration::from_millis(2_000));
+
+    receiver.start().unwrap();
+
+    let receiver_blocks =
+        controller.send_and_recv(&receiver.listen_addr, Message::request_available_blocks());
+
+    assert_eq!(
+        receiver_blocks,
+        Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids: vec![] })
+    );
+
+    controller.send_msg(
+        Message::ApplicationAPI(ApplicationAPI::ResumeTransmitDag { cid: root_cid }),
+        &transmitter.listen_addr,
+    );
+
+    sleep(Duration::from_millis(2_000));
+
+    let receiver_blocks =
+        controller.send_and_recv(&receiver.listen_addr, Message::request_available_blocks());
+
+    let transmitter_blocks = controller.send_and_recv(
+        &transmitter.listen_addr,
+        Message::request_available_blocks(),
+    );
+
+    assert_eq!(receiver_blocks, transmitter_blocks);
+}
+
 // TODO: need another test here to verify single-block transfers, they seem to have some issues that multi-block files don't have

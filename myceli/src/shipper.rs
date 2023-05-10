@@ -145,6 +145,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                 }
             }
             DataProtocol::ResumeTransmitDag { cid } => {
+                info!("Shipper resume {cid}");
                 self.resume_dag_window_session(&cid)?;
             }
             DataProtocol::ResumeTransmitAllDags => {
@@ -161,6 +162,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         Ok(())
     }
 
+    // Helper function for adding a new session to the session list
     fn open_dag_window_session(&mut self, cid: &str, retries: u8, target_addr: &str) {
         self.window_sessions
             .entry(cid.to_string())
@@ -172,6 +174,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             });
     }
 
+    // Helper function for incrementing a session's window and resetting the retries
     fn next_dag_window_session(&mut self, cid: &str) -> Option<u8> {
         if let Some(session) = self.window_sessions.get_mut(cid) {
             session.window_num += 1;
@@ -181,6 +184,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         None
     }
 
+    // Helper function for removing sessions which are complete
     fn end_dag_window_session(&mut self, cid: &str) {
         self.window_sessions.remove(cid);
     }
@@ -209,8 +213,6 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             if session.remaining_window_retries > 0 {
                 session.remaining_window_retries -= 1;
                 self.start_dag_window_retry_timeout(cid, target_addr);
-            } else {
-                self.window_sessions.remove(cid);
             }
         }
     }
@@ -243,9 +245,15 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         Ok(())
     }
 
+    // This function resumes the transmission of a DAG by fetching the relevant session
+    // and running the last sent window again
     fn resume_dag_window_session(&mut self, cid: &str) -> Result<()> {
         if let Some(session) = self.window_sessions.get(cid) {
+            info!("start dag window session for {cid}");
+            // Need to reset the window retries here
             self.dag_window_session_run(cid, session.window_num, &session.target_addr.clone())?;
+        } else {
+            info!("session not found for {cid}");
         }
 
         Ok(())
