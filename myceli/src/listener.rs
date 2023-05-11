@@ -36,7 +36,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
         })
     }
 
-    pub fn start(&mut self, shipper_timeout_duration: u64) -> Result<()> {
+    pub fn start(&mut self, shipper_timeout_duration: u64, shipper_window_size: u8) -> Result<()> {
         // First setup the shipper and its pieces
         let (shipper_sender, shipper_receiver) = mpsc::channel();
         let shipper_storage_path = self.storage_path.to_string();
@@ -48,6 +48,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 shipper_receiver,
                 shipper_sender_clone,
                 shipper_timeout_duration,
+                shipper_window_size,
                 shipper_transport,
             )
             .expect("Shipper creation failed");

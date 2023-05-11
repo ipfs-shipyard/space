@@ -49,7 +49,7 @@ impl TestListener {
 
     pub fn generate_file(&self) -> Result<String> {
         let mut data = Vec::<u8>::new();
-        data.resize(256, 1);
+        data.resize(256 * 5, 1);
         thread_rng().fill_bytes(&mut data);
 
         let tmp_file = self.test_dir.child("test.file");
@@ -68,7 +68,9 @@ fn start_listener_thread(listen_addr: SocketAddr, db_path: ChildPath) {
     transport.set_max_read_attempts(Some(1));
     let transport = Arc::new(transport);
     let mut listener = Listener::new(&listen_addr, db_path, transport).unwrap();
-    listener.start(10).expect("Error encountered in listener");
+    listener
+        .start(10, 2)
+        .expect("Error encountered in listener");
 }
 
 pub struct TestController {

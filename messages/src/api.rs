@@ -31,7 +31,7 @@ pub enum ApplicationAPI {
         cid: String,
         result: String,
     },
-    /// Initiates transmission of DAG corresponding to the given CID, with a given number of retries
+    // Initiates the transmission of a DAG corresponding to the given CID, with a given number of retries
     TransmitDag {
         cid: String,
         target_addr: String,

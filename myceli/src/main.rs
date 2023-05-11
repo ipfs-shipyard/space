@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use myceli::config::MyceliConfig;
+use myceli::config::Config;
 use myceli::listener::Listener;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
@@ -19,7 +19,7 @@ fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    let cfg: MyceliConfig = MyceliConfig::parse(args.config_path);
+    let cfg = Config::parse(args.config_path).expect("Failed to parse config");
 
     let mut resolved_listen_addr = cfg
         .listen_address
@@ -39,7 +39,7 @@ fn main() -> Result<()> {
     let mut listener = Listener::new(&resolved_listen_addr, &db_path, Arc::new(udp_transport))
         .expect("Listener creation failed");
     listener
-        .start(cfg.retry_timeout_duration)
+        .start(cfg.retry_timeout_duration, cfg.window_size)
         .expect("Error encountered in listener operation");
     Ok(())
 }

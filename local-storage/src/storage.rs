@@ -17,6 +17,9 @@ pub struct Storage {
     pub provider: Box<dyn StorageProvider>,
 }
 
+// TODO: Make this configurable
+const BLOCK_SIZE: usize = 256;
+
 impl Storage {
     pub fn new(provider: Box<dyn StorageProvider>) -> Self {
         Storage { provider }
@@ -27,7 +30,7 @@ impl Storage {
         let blocks: Result<Vec<Block>> = rt.block_on(async {
             let file: File = FileBuilder::new()
                 .path(path)
-                .fixed_chunker(50)
+                .fixed_chunker(BLOCK_SIZE)
                 .build()
                 .await?;
             let blocks: Vec<_> = file.encode().await?.try_collect().await?;
@@ -54,6 +57,11 @@ impl Storage {
                 root_cid = Some(stored.cid);
             }
         });
+        if blocks.len() == 1 {
+            if let Some(first) = blocks.first() {
+                root_cid = Some(first.cid().to_string());
+            }
+        }
         if let Some(root_cid) = root_cid {
             info!("Imported path {} to {}", path.display(), root_cid);
             Ok(root_cid)
@@ -74,7 +82,9 @@ impl Storage {
         let mut output_file = FsFile::create(path)?;
         // Walk the StoredBlocks and write out to path
         for block in child_blocks {
-            output_file.write_all(&block.data)?;
+            if block.links.is_empty() {
+                output_file.write_all(&block.data)?;
+            }
         }
         output_file.sync_all()?;
         Ok(())
@@ -98,7 +108,11 @@ impl Storage {
         // If links, grab all appropriate StoredBlocks
         let mut child_blocks = vec![];
         for link in root_block.links {
-            child_blocks.push(self.provider.get_block_by_cid(&link)?);
+            let block = self.provider.get_block_by_cid(&link)?;
+            if !block.links.is_empty() {
+                child_blocks.append(&mut self.get_all_blocks_under_cid(&block.cid)?);
+            }
+            child_blocks.push(block);
         }
         Ok(child_blocks)
     }
@@ -134,6 +148,7 @@ pub mod tests {
     use super::*;
     use crate::provider::SqliteStorageProvider;
     use assert_fs::{fixture::FileWriteBin, fixture::PathChild, TempDir};
+    use rand::{thread_rng, RngCore};
 
     struct TestHarness {
         storage: Storage,
@@ -162,7 +177,9 @@ pub mod tests {
         let test_file = temp_dir.child("data.txt");
         test_file
             .write_binary(
-                b"654684646847616846846876168468416874616846416846846186468464684684648684684",
+                "654684646847616846846876168468416874616846416846846186468464684684648684684"
+                    .repeat(10)
+                    .as_bytes(),
             )
             .unwrap();
         let root_cid = harness.storage.import_path(test_file.path()).unwrap();
@@ -180,7 +197,9 @@ pub mod tests {
         let test_file = temp_dir.child("data.txt");
         test_file
             .write_binary(
-                b"654684646847616846846876168468416874616846416846846186468464684684648684684",
+                "654684646847616846846876168468416874616846416846846186468464684684648684684"
+                    .repeat(10)
+                    .as_bytes(),
             )
             .unwrap();
         let cid = harness.storage.import_path(test_file.path()).unwrap();
@@ -195,4 +214,61 @@ pub mod tests {
         let next_test_file_contents = std::fs::read_to_string(next_test_file.path()).unwrap();
         assert_eq!(test_file_contents, next_test_file_contents);
     }
+
+    #[test]
+    pub fn export_from_storage_various_file_sizes_binary_data() {
+        for size in [100, 200, 300, 500, 1000] {
+            let harness = TestHarness::new();
+            let temp_dir = assert_fs::TempDir::new().unwrap();
+            let test_file = temp_dir.child("data.txt");
+
+            let data_size = BLOCK_SIZE * size;
+            let mut data = Vec::<u8>::new();
+            data.resize(data_size, 1);
+            thread_rng().fill_bytes(&mut data);
+
+            test_file.write_binary(&data).unwrap();
+            let cid = harness.storage.import_path(test_file.path()).unwrap();
+
+            let next_test_file = temp_dir.child("output.txt");
+            harness
+                .storage
+                .export_cid(&cid, next_test_file.path())
+                .unwrap();
+
+            let test_file_contents = std::fs::read(test_file.path()).unwrap();
+            let next_test_file_contents = std::fs::read(next_test_file.path()).unwrap();
+            assert_eq!(test_file_contents.len(), next_test_file_contents.len());
+            assert_eq!(test_file_contents, next_test_file_contents);
+        }
+    }
+
+    // TODO: duplicated data is not being handled correctly right now, need to fix this
+    // #[test]
+    // pub fn export_from_storage_various_file_sizes_duplicated_data() {
+    //     for size in [100, 200, 300, 500, 1000] {
+    //         let harness = TestHarness::new();
+    //         let temp_dir = assert_fs::TempDir::new().unwrap();
+    //         let test_file = temp_dir.child("data.txt");
+    //         test_file
+    //             .write_binary(
+    //                 "654684646847616846846876168468416874616846416846846186468464684684648684684"
+    //                     .repeat(size)
+    //                     .as_bytes(),
+    //             )
+    //             .unwrap();
+    //         let cid = harness.storage.import_path(test_file.path()).unwrap();
+
+    //         let next_test_file = temp_dir.child("output.txt");
+    //         harness
+    //             .storage
+    //             .export_cid(&cid, next_test_file.path())
+    //             .unwrap();
+
+    //         let test_file_contents = std::fs::read(test_file.path()).unwrap();
+    //         let next_test_file_contents = std::fs::read(next_test_file.path()).unwrap();
+    //         assert_eq!(test_file_contents.len(), next_test_file_contents.len());
+    //         assert_eq!(test_file_contents, next_test_file_contents);
+    //     }
+    // }
 }

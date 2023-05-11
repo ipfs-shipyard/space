@@ -69,6 +69,13 @@ impl Message {
         })
     }
 
+    pub fn request_missing_dag_window_blocks(cid: &str, blocks: Vec<String>) -> Self {
+        Message::DataProtocol(DataProtocol::RequestMissingDagWindowBlocks {
+            cid: cid.to_owned(),
+            blocks,
+        })
+    }
+
     pub fn missing_dag_blocks(cid: &str, blocks: Vec<String>) -> Self {
         Message::DataProtocol(DataProtocol::MissingDagBlocks {
             cid: cid.to_owned(),
