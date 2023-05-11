@@ -306,18 +306,24 @@ impl<T: Transport + Send + 'static> Shipper<T> {
     fn get_dag_window_blocks(&mut self, cid: &str, window_num: u8) -> Result<Vec<StoredBlock>> {
         let root_block = self.storage.get_block_by_cid(cid)?;
         let blocks = self.storage.get_all_blocks_under_cid(cid)?;
-        info!("found {} blocks under {}", blocks.len(), cid);
         let mut all_blocks = vec![root_block];
         all_blocks.extend(blocks);
 
-        if let Some(window_blocks) = all_blocks
-            .chunks(self.window_size.into())
-            .map(|c| c.to_vec())
-            .nth(window_num.into())
-        {
-            Ok(window_blocks)
-        } else {
+        // TODO: Push this windowing down into the storage layer instead of
+        // grabbing all blocks every time
+        let window_start: usize = (self.window_size * window_num) as usize;
+        let window_end: usize = window_start + self.window_size as usize;
+
+        if window_start > all_blocks.len() {
             Ok(vec![])
+        } else {
+            all_blocks.drain(..window_start);
+
+            if window_end < all_blocks.len() {
+                all_blocks.drain(window_end..);
+            }
+
+            Ok(all_blocks)
         }
     }
 
