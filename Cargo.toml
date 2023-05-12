@@ -1,8 +1,6 @@
 [workspace]
 members = [
-    "car-utility",
     "controller",
-    "cpp-transmit-example",
     "hyphae",
     "ipfs-unixfs",
     "local-dev-environment/desktop/radio-service",
