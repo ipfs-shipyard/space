@@ -1,13 +1,60 @@
 [workspace]
-
 members = [
-    "car-utility",
     "controller",
-    "cpp-transmit-example",
     "hyphae",
+    "ipfs-unixfs",
     "local-dev-environment/desktop/radio-service",
     "local-storage",
     "messages",
     "myceli",
     "transports"
 ]
+
+[workspace.package]
+version = "0.6.3"
+edition = "2021"
+license = "Apache-2.0/MIT"
+rust-version = "1.68.1"
+repository = "https://github.com/ipfs-shipyard/space"
+
+[workspace.dependencies]
+# External deps
+anyhow = { version = "1.0.71", default-features = false, features = ["backtrace"] }
+assert_fs = "1.0.13"
+async-recursion = "1.0.4"
+async-stream = "0.3.3"
+blake2 = { version = "0.10.6", default-features = false }
+bytes = "1.1"
+cid = {version = "0.9", default-features = false }
+clap = { version = "4.0.15", features = ["derive"] }
+figment = { version = "0.10", features = ["toml"] }
+file-hashing = "0.1.1"
+futures = "0.3.24"
+libipld = { version = "0.15", default-features = false, features = ["dag-pb", "dag-cbor", "dag-json"] }
+multihash = "0.18.1"
+num_enum = "0.5.7"
+parity-scale-codec = { version = "3.0.0", default-features = false, features = ["derive", "std"] }
+parity-scale-codec-derive = "3.1.3"
+proptest = "1.1.0"
+prost = "0.11"
+prost-build = "0.11.1"
+rand = "0.8.5"
+reqwest = { version = "0.11.10", default-features = false}
+rusqlite = { version = "0.28.0", features = ["bundled"] }
+serde = "1.0.163"
+serde_derive = "1.0.163"
+serde_json = "1.0.87"
+tempfile = "3.3"
+thiserror = "1.0.40"
+tokio = "1.28.1"
+tokio-serial = "5.4"
+tokio-util = "0.7.8"
+toml = { version = "0.7.3", default-features = false } 
+tracing = { version = "0.1.34", default-features = false }
+tracing-subscriber = { version = "0.3.14", default-features = false, features = ["fmt"] }
+
+# Internal deps
+ipfs-unixfs = { path = "ipfs-unixfs" }
+local-storage = { path = "local-storage" }
+messages = { path = "messages" }
+transports = { path = "transports" }

@@ -1,0 +1,33 @@
+[package]
+name = "ipfs-unixfs"
+authors = ["dignifiedquire <me@dignifiedquire.com>", "Ryan Plauche <ryan@littlebearlabs.io>"]
+description = "Implementation of unixfs for iroh, a trimmed copy of https://github.com/n0-computer/beetle/tree/main/iroh-unixfs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-recursion.workspace = true
+async-stream.workspace = true
+bytes.workspace = true
+cid.workspace = true
+futures.workspace = true
+libipld.workspace = true
+multihash.workspace = true
+num_enum.workspace = true
+prost.workspace = true
+tokio = { workspace = true, features = ["fs"] }
+
+[dev-dependencies]
+# criterion = { workspace = true, features = ["async_tokio"] }
+proptest.workspace = true
+rand.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread", "fs"] }
+tokio-util = { workspace = true, features = ["io-util"] }
+
+[build-dependencies]
+prost-build.workspace = true

@@ -69,7 +69,7 @@ pub mod tests {
 
     use assert_fs::{fixture::FileWriteBin, fixture::PathChild, TempDir};
     use futures::TryStreamExt;
-    use iroh_unixfs::builder::{File, FileBuilder};
+    use ipfs_unixfs::builder::{File, FileBuilder};
     use local_storage::block::StoredBlock;
     use local_storage::provider::SqliteStorageProvider;
     use rand::{thread_rng, RngCore};

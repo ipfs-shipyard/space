@@ -2,10 +2,10 @@ use crate::util::verify_dag;
 use anyhow::{anyhow, bail, Result};
 use bytes::Bytes;
 use cid::Cid;
-use iroh_unixfs::Block;
+use ipfs_unixfs::Block;
 use std::str::FromStr;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct StoredBlock {
     pub cid: String,
     pub data: Vec<u8>,
@@ -15,7 +15,7 @@ pub struct StoredBlock {
 impl StoredBlock {
     pub fn validate(&self) -> Result<()> {
         // For now we'll just piggy back on the validate logic built
-        // into n0/beetle:unixfs::Block
+        // into unixfs::Block
         let block: Block = self.try_into()?;
         block.validate()
     }
@@ -53,7 +53,7 @@ mod tests {
 
     use cid::multihash::MultihashDigest;
     use futures::TryStreamExt;
-    use iroh_unixfs::builder::{File, FileBuilder};
+    use ipfs_unixfs::builder::{File, FileBuilder};
     use rand::{thread_rng, RngCore};
 
     fn generate_stored_blocks(num_blocks: u8) -> Result<Vec<StoredBlock>> {
