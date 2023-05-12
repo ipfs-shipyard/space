@@ -20,6 +20,7 @@ struct WindowSession {
     pub max_retries: u8,
     pub remaining_window_retries: u8,
     pub window_num: u8,
+    pub target_addr: String,
 }
 
 pub struct Shipper<T> {
@@ -37,6 +38,8 @@ pub struct Shipper<T> {
     transport: Arc<T>,
     // Default window size for dag transfers
     window_size: u8,
+    // Current connection status
+    connected: bool,
 }
 
 impl<T: Transport + Send + 'static> Shipper<T> {
@@ -47,6 +50,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         retry_timeout_duration: u64,
         window_size: u8,
         transport: Arc<T>,
+        connected: bool,
     ) -> Result<Shipper<T>> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
@@ -60,6 +64,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             retry_timeout_duration,
             window_size,
             transport,
+            connected,
         })
     }
 
@@ -76,7 +81,9 @@ impl<T: Transport + Send + 'static> Shipper<T> {
     pub fn receive(&mut self, message: DataProtocol, sender_addr: &str) -> Result<()> {
         match message {
             DataProtocol::RequestTransmitBlock { cid, target_addr } => {
-                self.transmit_block(&cid, &target_addr)?;
+                if self.connected {
+                    self.transmit_block(&cid, &target_addr)?;
+                }
             }
             DataProtocol::Block(block) => self.receive_block(block)?,
             DataProtocol::RequestTransmitDag {
@@ -87,7 +94,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                 self.begin_dag_window_session(&cid, &target_addr, retries)?;
             }
             DataProtocol::RetryDagSession { cid, target_addr } => {
-                if self.window_sessions.contains_key(&cid) {
+                if self.connected && self.window_sessions.contains_key(&cid) {
                     info!("Received retry dag session, sending get missing req to {target_addr}");
                     if let Some(session) = self.window_sessions.get(&cid) {
                         let blocks = self.get_dag_window_blocks(&cid, session.window_num)?;
@@ -137,20 +144,37 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                     )?;
                 }
             }
+            DataProtocol::ResumeTransmitDag { cid } => {
+                info!("Shipper resume {cid}");
+                self.resume_dag_window_session(&cid)?;
+            }
+            DataProtocol::ResumeTransmitAllDags => {
+                self.resume_all_dag_window_sessions()?;
+            }
+            DataProtocol::SetConnected { connected } => {
+                let prev_connected = self.connected;
+                self.connected = connected;
+                if !prev_connected && connected {
+                    self.resume_all_dag_window_sessions()?;
+                }
+            }
         }
         Ok(())
     }
 
-    fn open_dag_window_session(&mut self, cid: &str, retries: u8) {
+    // Helper function for adding a new session to the session list
+    fn open_dag_window_session(&mut self, cid: &str, retries: u8, target_addr: &str) {
         self.window_sessions
             .entry(cid.to_string())
             .or_insert(WindowSession {
                 max_retries: retries,
                 remaining_window_retries: retries,
                 window_num: 0,
+                target_addr: target_addr.to_string(),
             });
     }
 
+    // Helper function for incrementing a session's window and resetting the retries
     fn next_dag_window_session(&mut self, cid: &str) -> Option<u8> {
         if let Some(session) = self.window_sessions.get_mut(cid) {
             session.window_num += 1;
@@ -160,6 +184,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         None
     }
 
+    // Helper function for removing sessions which are complete
     fn end_dag_window_session(&mut self, cid: &str) {
         self.window_sessions.remove(cid);
     }
@@ -188,10 +213,59 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             if session.remaining_window_retries > 0 {
                 session.remaining_window_retries -= 1;
                 self.start_dag_window_retry_timeout(cid, target_addr);
-            } else {
-                self.window_sessions.remove(cid);
             }
         }
+    }
+
+    fn dag_window_session_run(
+        &mut self,
+        cid: &str,
+        window_num: u8,
+        target_addr: &str,
+    ) -> Result<()> {
+        let blocks = self.transmit_dag_window(cid, window_num, target_addr)?;
+        if !blocks.is_empty() {
+            info!(
+                "Transmitting window {} for {}, {} blocks",
+                window_num,
+                cid,
+                blocks.len()
+            );
+            self.transmit_msg(
+                Message::DataProtocol(DataProtocol::RequestMissingDagWindowBlocks {
+                    cid: cid.to_string(),
+                    blocks,
+                }),
+                target_addr,
+            )?;
+        } else {
+            info!("Dag transfer session for {cid} is complete");
+            self.end_dag_window_session(cid);
+        }
+        Ok(())
+    }
+
+    // This function resumes the transmission of a DAG by fetching the relevant session
+    // and running the last sent window again
+    fn resume_dag_window_session(&mut self, cid: &str) -> Result<()> {
+        if let Some(session) = self.window_sessions.get(cid) {
+            info!("start dag window session for {cid}");
+            // Need to reset the window retries here
+            self.dag_window_session_run(cid, session.window_num, &session.target_addr.clone())?;
+        } else {
+            info!("session not found for {cid}");
+        }
+
+        Ok(())
+    }
+
+    fn resume_all_dag_window_sessions(&mut self) -> Result<()> {
+        let session_cids: Vec<String> = self.window_sessions.keys().map(|s| s.to_owned()).collect();
+        for cid in session_cids {
+            self.resume_dag_window_session(&cid)?;
+        }
+
+        Ok(())
     }
 
     pub fn begin_dag_window_session(
@@ -200,41 +274,23 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         target_addr: &str,
         retries: u8,
     ) -> Result<()> {
-        let blocks = self.transmit_dag_window(cid, 0, target_addr)?;
-        self.transmit_msg(
-            Message::DataProtocol(DataProtocol::RequestMissingDagWindowBlocks {
-                cid: cid.to_string(),
-                blocks,
-            }),
-            target_addr,
-        )?;
-        let retries = if retries == 0 { 0 } else { retries - 1 };
-        self.open_dag_window_session(cid, retries);
-        self.start_dag_window_retry_timeout(cid, target_addr);
+        if self.connected {
+            self.dag_window_session_run(cid, 0, target_addr)?;
+            let retries = if retries == 0 { 0 } else { retries - 1 };
+            self.open_dag_window_session(cid, retries, target_addr);
+            self.start_dag_window_retry_timeout(cid, target_addr);
+        } else {
+            self.open_dag_window_session(cid, retries, target_addr);
+        }
 
         Ok(())
     }
 
     pub fn increment_dag_window_session(&mut self, cid: &str, target_addr: &str) -> Result<()> {
         if let Some(next_window_num) = self.next_dag_window_session(cid) {
-            let blocks = self.transmit_dag_window(cid, next_window_num, target_addr)?;
-            if !blocks.is_empty() {
-                info!(
-                    "Dag window session for {cid} moving to window {}",
-                    next_window_num + 1
-                );
-                self.transmit_msg(
-                    Message::DataProtocol(DataProtocol::RequestMissingDagWindowBlocks {
-                        cid: cid.to_string(),
-                        blocks,
-                    }),
-                    target_addr,
-                )?;
-            } else {
-                info!("dag window session for {cid} is complete");
-                self.end_dag_window_session(cid);
-            }
+            self.dag_window_session_run(cid, next_window_num, target_addr)?;
         }
+
         Ok(())
     }
 
@@ -265,17 +321,21 @@ impl<T: Transport + Send + 'static> Shipper<T> {
     }
 
     pub fn transmit_block(&mut self, cid: &str, target_addr: &str) -> Result<()> {
-        let block = self.storage.get_block_by_cid(cid)?;
-        self.transmit_blocks(&[block], target_addr)?;
+        if self.connected {
+            let block = self.storage.get_block_by_cid(cid)?;
+            self.transmit_blocks(&[block], target_addr)?;
+        }
         Ok(())
     }
 
     pub fn transmit_dag(&mut self, cid: &str, target_addr: &str) -> Result<()> {
-        let root_block = self.storage.get_block_by_cid(cid)?;
-        let blocks = self.storage.get_all_blocks_under_cid(cid)?;
-        let mut all_blocks = vec![root_block];
-        all_blocks.extend(blocks);
-        self.transmit_blocks(&all_blocks, target_addr)?;
+        if self.connected {
+            let root_block = self.storage.get_block_by_cid(cid)?;
+            let blocks = self.storage.get_all_blocks_under_cid(cid)?;
+            let mut all_blocks = vec![root_block];
+            all_blocks.extend(blocks);
+            self.transmit_blocks(&all_blocks, target_addr)?;
+        }
         Ok(())
     }
 
@@ -285,22 +345,26 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         window_num: u8,
         target_addr: &str,
     ) -> Result<Vec<String>> {
-        let mut transmitted_cids = vec![];
+        if self.connected {
+            let mut transmitted_cids = vec![];
 
-        let window_blocks = self.get_dag_window_blocks(cid, window_num)?;
+            let window_blocks = self.get_dag_window_blocks(cid, window_num)?;
 
-        info!(
-            "transmitting {} blocks in window {}",
-            window_blocks.len(),
-            window_num,
-        );
+            info!(
+                "transmitting {} blocks in window {}",
+                window_blocks.len(),
+                window_num,
+            );
 
-        self.transmit_blocks(&window_blocks, target_addr)?;
-        for b in window_blocks {
-            transmitted_cids.push(b.cid);
+            self.transmit_blocks(&window_blocks, target_addr)?;
+            for b in window_blocks {
+                transmitted_cids.push(b.cid);
+            }
+
+            Ok(transmitted_cids)
+        } else {
+            Ok(vec![])
         }
-
-        Ok(transmitted_cids)
     }
 
     fn get_dag_window_blocks(&mut self, cid: &str, window_num: u8) -> Result<Vec<StoredBlock>> {
@@ -408,6 +472,7 @@ mod tests {
                 10,
                 5,
                 shipper_transport,
+                true,
             )
             .unwrap();
             TestShipper {

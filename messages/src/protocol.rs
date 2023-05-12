@@ -45,6 +45,13 @@ pub enum DataProtocol {
         target_addr: String,
         retries: u8,
     },
+    // Resumes the transmission of a dag which may have run out of retries or
+    // paused due to connectivity lost
+    ResumeTransmitDag {
+        cid: String,
+    },
+    // Resumes the transmission of all dags which may be paused
+    ResumeTransmitAllDags,
     // Message to request list of blocks missing from list of CIDs sent
     RequestMissingDagWindowBlocks {
         cid: String,
@@ -57,5 +64,9 @@ pub enum DataProtocol {
     MissingDagBlocks {
         cid: String,
         blocks: Vec<String>,
+    },
+    /// Sets current connected state
+    SetConnected {
+        connected: bool,
     },
 }
