@@ -2,7 +2,7 @@ use crate::util::verify_dag;
 use anyhow::{anyhow, bail, Result};
 use bytes::Bytes;
 use cid::Cid;
-use iroh_unixfs::Block;
+use ipfs_unixfs::Block;
 use std::str::FromStr;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -53,7 +53,7 @@ mod tests {
 
     use cid::multihash::MultihashDigest;
     use futures::TryStreamExt;
-    use iroh_unixfs::builder::{File, FileBuilder};
+    use ipfs_unixfs::builder::{File, FileBuilder};
     use rand::{thread_rng, RngCore};
 
     fn generate_stored_blocks(num_blocks: u8) -> Result<Vec<StoredBlock>> {

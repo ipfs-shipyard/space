@@ -4,7 +4,7 @@ use crate::provider::StorageProvider;
 use crate::block::StoredBlock;
 use anyhow::{bail, Result};
 use futures::TryStreamExt;
-use iroh_unixfs::{
+use ipfs_unixfs::{
     builder::{File, FileBuilder},
     Block,
 };
