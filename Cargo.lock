@@ -347,12 +347,6 @@ checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
 name = "base64"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ea22880d78093b0cbe17c89f64a7d457941e65759157ec6cb31a31d652b05e5"
-
-[[package]]
-name = "base64"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4a4ddaa51a5bc52a6948f74c06d20aaaddb71924eab79b8c97a8c556e942d6a"
@@ -1751,33 +1745,22 @@ name = "ipfs-unixfs"
 version = "0.6.0"
 dependencies = [
  "anyhow",
- "async-channel",
  "async-recursion",
  "async-stream",
- "async-trait",
- "base64 0.20.0",
  "bytes",
  "cid 0.9.0",
- "config",
  "criterion",
- "fastmurmur3",
  "futures",
  "libipld 0.15.0",
  "multihash 0.17.0",
  "num_enum",
- "once_cell",
  "proptest",
  "prost 0.11.9",
  "prost-build 0.11.9",
  "rand 0.8.5",
- "serde",
- "serde_json",
  "tempfile",
  "tokio",
  "tokio-util",
- "tracing",
- "unsigned-varint",
- "url",
 ]
 
 [[package]]
@@ -4883,7 +4866,6 @@ dependencies = [
  "form_urlencoded",
  "idna 0.3.0",
  "percent-encoding",
- "serde",
 ]
 
 [[package]]

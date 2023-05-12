@@ -1,16 +1,15 @@
 use std::{
-    collections::BTreeMap,
     fmt::Debug,
     path::{Path, PathBuf},
     pin::Pin,
 };
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{ensure, Result};
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use futures::{
     stream::{self, BoxStream},
-    Stream, StreamExt, TryFutureExt,
+    Stream, StreamExt,
 };
 use prost::Message;
 use tokio::io::AsyncRead;
@@ -18,9 +17,8 @@ use tokio::io::AsyncRead;
 use crate::{
     balanced_tree::{TreeBuilder, DEFAULT_DEGREE},
     chunker::{self, Chunker, ChunkerConfig, DEFAULT_CHUNK_SIZE_LIMIT},
-    hamt::{bitfield::Bitfield, bits, hash_key},
     types::Block,
-    unixfs::{dag_pb, unixfs_pb, DataType, HamtHashFunction, Node, UnixfsNode},
+    unixfs::{dag_pb, unixfs_pb, DataType, Node, UnixfsNode},
 };
 
 // The maximum number of links we allow in a directory
