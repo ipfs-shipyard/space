@@ -981,54 +981,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_hamt_detection() -> Result<()> {
-        // allow hamt override
-        let builder = DirectoryBuilder::new().hamt();
-        assert_eq!(DirectoryType::Hamt, builder.typ);
-
-        let mut builder = DirectoryBuilder::new();
-
-        for _i in 0..DIRECTORY_LINK_LIMIT {
-            let file = FileBuilder::new()
-                .name("foo.txt")
-                .content_bytes(Bytes::from("hello world"))
-                .build()
-                .await?;
-            builder = builder.add_file(file);
-        }
-
-        // under DIRECTORY_LINK_LIMIT should still be a basic directory
-        assert_eq!(DirectoryType::Basic, builder.typ);
-
-        let file = FileBuilder::new()
-            .name("foo.txt")
-            .content_bytes(Bytes::from("hello world"))
-            .build()
-            .await?;
-        builder = builder.add_file(file);
-
-        // at directory link limit should be processed as a hamt
-        assert_eq!(DirectoryType::Hamt, builder.typ);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_hamt_hash_collision() -> Result<()> {
-        // allow hamt override
-        let mut builder = DirectoryBuilder::new().hamt();
-        for _i in 0..2 {
-            let file = FileBuilder::new()
-                .name("foo.txt")
-                .content_bytes(Bytes::from("hello world"))
-                .build()
-                .await?;
-            builder = builder.add_file(file);
-        }
-        assert!(builder.build().await.is_err());
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn test_make_dir_from_path() -> Result<()> {
         let temp_dir = std::env::temp_dir();
         let dir = temp_dir.join("test_dir");

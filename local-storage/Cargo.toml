@@ -14,7 +14,7 @@ futures.workspace = true
 ipfs-unixfs.workspace = true
 rusqlite.workspace = true
 thiserror.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
 tracing.workspace = true
 
 [dev-dependencies]
