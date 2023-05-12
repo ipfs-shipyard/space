@@ -15,7 +15,7 @@ pub struct StoredBlock {
 impl StoredBlock {
     pub fn validate(&self) -> Result<()> {
         // For now we'll just piggy back on the validate logic built
-        // into n0/beetle:unixfs::Block
+        // into unixfs::Block
         let block: Block = self.try_into()?;
         block.validate()
     }

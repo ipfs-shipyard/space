@@ -27,8 +27,6 @@ blake2 = { version = "0.10.6", default-features = false }
 bytes = "1.1"
 cid = {version = "0.9", default-features = false }
 clap = { version = "4.0.15", features = ["derive"] }
-criterion = "0.4"
-fastmurmur3 = "0.1.2"
 figment = { version = "0.10", features = ["toml"] }
 file-hashing = "0.1.1"
 futures = "0.3.24"

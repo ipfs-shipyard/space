@@ -19,15 +19,15 @@ libipld.workspace = true
 multihash.workspace = true
 num_enum.workspace = true
 prost.workspace = true
-rand.workspace = true
 tokio = { workspace = true, features = ["fs"] }
-tokio-util = { workspace = true, features = ["io-util"] }
 
 [dev-dependencies]
-criterion = { workspace = true, features = ["async_tokio"] }
+# criterion = { workspace = true, features = ["async_tokio"] }
 proptest.workspace = true
+rand.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread", "fs"] }
+tokio-util = { workspace = true, features = ["io-util"] }
 
 [build-dependencies]
 prost-build.workspace = true
