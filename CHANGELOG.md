@@ -8,11 +8,14 @@
 - Added windowing to DAG transfers, and corresponding `window_size` config for `myceli`.
 - Added `ResumeTransmitDag` and `ResumeTransmitAllDags` APIs for resuming DAG transfers.
 - Added `SetConnected` and `GetConnected` APIs for setting connection state.
+- Brought in `iroh-unixfs` as `ipfs-unixfs`, which has been trimmed to focus on creation of DAGs and Blocks.
 
 ### Changed
 
 - Renamed `app-api-cli` to `controller`.
 - Updated default block size to 256 bytes and generally improved handling of larger files in storage layer.
+- Archived unused `car-utility` and `cpp-transmit-example` projects.
+- Converted all crate dependencies to workspace dependencies, tightened version specificity, narrowed features when possible.
 
 ## [0.6.3] - 2023-05-04
 
