@@ -49,7 +49,7 @@ impl TestListener {
 
     pub fn generate_file(&self) -> Result<String> {
         let mut data = Vec::<u8>::new();
-        data.resize(256 * 5, 1);
+        data.resize(256 * 50, 1);
         thread_rng().fill_bytes(&mut data);
 
         let tmp_file = self.test_dir.child("test.file");

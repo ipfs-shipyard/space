@@ -62,11 +62,11 @@ pub enum ApplicationAPI {
     },
     /// Information about the next pass used for calculating
     /// data transfer parameters
-    NextPassInfo {
-        duration: u32,
-        send_bytes: u32,
-        receive_bytes: u32,
-    },
+    // NextPassInfo {
+    //     duration: u32,
+    //     send_bytes: u32,
+    //     receive_bytes: u32,
+    // },
     /// Request Available Blocks
     RequestAvailableBlocks,
     /// Advertise all available blocks by CID
@@ -78,7 +78,7 @@ pub enum ApplicationAPI {
         cid: String,
     },
     /// Request available DAGs
-    RequestAvailableDags,
+    // RequestAvailableDags,
     /// Advertise available DAGs as a map of CID to filename
     // AvailableDags { dags: BTreeMap<String, String> },
     /// Delete block from local store

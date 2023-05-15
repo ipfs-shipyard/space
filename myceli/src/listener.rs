@@ -8,7 +8,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::{self, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::spawn;
 use tracing::{debug, error, info};
 use transports::Transport;
@@ -17,7 +17,7 @@ pub struct Listener<T> {
     storage_path: String,
     storage: Rc<Storage>,
     transport: Arc<T>,
-    connected: bool,
+    connected: Arc<Mutex<bool>>,
 }
 
 impl<T: Transport + Send + 'static> Listener<T> {
@@ -34,17 +34,17 @@ impl<T: Transport + Send + 'static> Listener<T> {
             storage_path: storage_path.to_string(),
             storage,
             transport,
-            connected: true,
+            connected: Arc::new(Mutex::new(true)),
         })
     }
 
-    pub fn start(&mut self, shipper_timeout_duration: u64, shipper_window_size: u8) -> Result<()> {
+    pub fn start(&mut self, shipper_timeout_duration: u64, shipper_window_size: u32) -> Result<()> {
         // First setup the shipper and its pieces
         let (shipper_sender, shipper_receiver) = mpsc::channel();
         let shipper_storage_path = self.storage_path.to_string();
         let shipper_sender_clone = shipper_sender.clone();
         let shipper_transport = Arc::clone(&self.transport);
-        let initial_connected = self.connected;
+        let initial_connected = Arc::clone(&self.connected);
         spawn(move || {
             let mut shipper = Shipper::new(
                 &shipper_storage_path,
@@ -143,16 +143,17 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 }))
             }
             Message::ApplicationAPI(ApplicationAPI::SetConnected { connected }) => {
-                self.connected = connected;
-                shipper_sender.send((
-                    DataProtocol::SetConnected { connected },
-                    sender_addr.to_string(),
-                ))?;
+                let prev_connected = *self.connected.lock().unwrap();
+                *self.connected.lock().unwrap() = connected;
+                if !prev_connected && connected {
+                    shipper_sender
+                        .send((DataProtocol::ResumeTransmitAllDags, sender_addr.to_string()))?;
+                }
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::GetConnected) => {
                 Some(Message::ApplicationAPI(ApplicationAPI::ConnectedState {
-                    connected: self.connected,
+                    connected: *self.connected.lock().unwrap(),
                 }))
             }
             Message::ApplicationAPI(ApplicationAPI::ResumeTransmitDag { cid }) => {
@@ -165,6 +166,14 @@ impl<T: Transport + Send + 'static> Listener<T> {
             Message::ApplicationAPI(ApplicationAPI::ResumeTransmitAllDags) => {
                 shipper_sender
                     .send((DataProtocol::ResumeTransmitAllDags, sender_addr.to_string()))?;
+                None
+            }
+            Message::ApplicationAPI(ApplicationAPI::ValidateDagResponse { cid, result }) => {
+                info!("Received ValidateDagResponse from {sender_addr} for {cid}: {result}");
+                None
+            }
+            Message::ApplicationAPI(ApplicationAPI::FileImported { path, cid }) => {
+                info!("Received FileImported from {sender_addr}: {path} -> {cid}");
                 None
             }
             // Default case for valid messages which don't have handling code implemented yet

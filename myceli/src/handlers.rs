@@ -13,7 +13,7 @@ pub fn import_file(path: &str, storage: Rc<Storage>) -> Result<Message> {
 }
 
 pub fn validate_dag(cid: &str, storage: Rc<Storage>) -> Result<Message> {
-    let dag_blocks = storage.get_dag_blocks(cid)?;
+    let dag_blocks = storage.get_all_dag_blocks(cid)?;
     let resp = match local_storage::block::validate_dag(&dag_blocks) {
         Ok(_) => "Dag is valid".to_string(),
         Err(e) => e.to_string(),
@@ -167,7 +167,7 @@ pub mod tests {
 
         let blocks = harness
             .storage
-            .get_all_blocks_under_cid(&imported_file_cid)
+            .get_all_dag_blocks(&imported_file_cid)
             .unwrap();
         for block in blocks {
             let (validated_cid, result) = match validate_dag(&block.cid, harness.storage.clone()) {
