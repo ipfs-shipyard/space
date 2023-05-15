@@ -16,6 +16,10 @@
 - Updated default block size to 256 bytes and generally improved handling of larger files in storage layer.
 - Archived unused `car-utility` and `cpp-transmit-example` projects.
 - Converted all crate dependencies to workspace dependencies, tightened version specificity, narrowed features when possible.
+- Increase default MTU to 512 bytes to accommodate more realistic systems
+- Move functions for fetching all DAG cids & blocks into storage layer
+- Increase default file block size to 100kb for better performance when importing larger files
+- Small revision to testing plan
 
 ## [0.6.3] - 2023-05-04
 

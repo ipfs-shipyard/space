@@ -20,15 +20,15 @@ Command Details:
 
 This test case passes if both steps pass.
 
-## Test Case - Retrieve an IPFS File
+## Test Case - Transmit an IPFS File (Ground to Space)
 
 Steps:
-1. Using the controller software, send the `ImportFile` command to the `myceli` space instance with a known good path for the one-pass payload file.
+1. Using the controller software, send the `ImportFile` command to the `myceli` ground instance with a known good path for the one-pass payload file.
     - This step passes if an `FileImported` response with CID is received. Any other response / no response is a failure.
-1. Using the controller software, send the `TransmitDag` command to the `myceli` space instance with the CID obtained from the `FileImported` response and with the network address of the space-to-ground radio link.
-1. Using the controller software, send the `ValidateDag` command to the `myceli` ground instance with the CID obtained from the `FileImported` response.
+1. Using the controller software, send the `TransmitDag` command to the `myceli` ground instance with the CID obtained from the `FileImported` response and with the network address of the ground-to-space radio link.
+1. Using the controller software, send the `ValidateDag` command to the `myceli` space instance with the CID obtained from the `FileImported` response.
     - This step passes if an `ValidateDagResponse` response with true. Any other response / no response is a failure.
-1. Using the controller software, send the `ExportDag` command to the `myceli` ground instance with the CID obtained from the `FileImported` response and a writeable file path.
+1. Using the controller software, send the `ExportDag` command to the `myceli` space instance with the CID obtained from the `FileImported` response and a writeable file path.
     - This step passes if `myceli` is able to correctly write a file to the given file path.
 
 Command Details:
@@ -43,7 +43,7 @@ Command Details:
 
 This test case passes if the final step is successful and the resulting written file matches the onboard payload file.
 
-## Test Case - Send and Retrieve New IPFS File
+## Test Case - Transmit Back & Forth, and Export File with IPFS
 
 Steps:
 1. Using the controller software, send the `ImportFile` command to the `myceli` ground instance with a known good path for the one-pass payload file.

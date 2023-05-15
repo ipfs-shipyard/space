@@ -60,13 +60,6 @@ pub enum ApplicationAPI {
     Receive {
         listen_addr: String,
     },
-    /// Information about the next pass used for calculating
-    /// data transfer parameters
-    NextPassInfo {
-        duration: u32,
-        send_bytes: u32,
-        receive_bytes: u32,
-    },
     /// Request Available Blocks
     RequestAvailableBlocks,
     /// Advertise all available blocks by CID
@@ -77,10 +70,6 @@ pub enum ApplicationAPI {
     DeleteCid {
         cid: String,
     },
-    /// Request available DAGs
-    RequestAvailableDags,
-    /// Advertise available DAGs as a map of CID to filename
-    // AvailableDags { dags: BTreeMap<String, String> },
     /// Delete block from local store
     DeleteBlock {
         cid: String,
@@ -99,4 +88,16 @@ pub enum ApplicationAPI {
     Version {
         version: String,
     },
+    // TODO: Implement later
+    // Information about the next pass used for calculating
+    // data transfer parameters
+    // NextPassInfo {
+    //     duration: u32,
+    //     send_bytes: u32,
+    //     receive_bytes: u32,
+    // },
+    // Request available DAGs
+    // RequestAvailableDags,
+    // Advertise available DAGs as a map of CID to filename
+    // AvailableDags { dags: BTreeMap<String, String> },
 }

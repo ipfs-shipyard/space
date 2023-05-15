@@ -11,7 +11,7 @@ pub struct Config {
     pub retry_timeout_duration: u64,
     pub storage_path: String,
     pub mtu: u16,
-    pub window_size: u8,
+    pub window_size: u32,
 }
 
 impl Default for Config {

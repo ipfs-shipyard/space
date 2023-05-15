@@ -14,6 +14,15 @@ pub trait StorageProvider {
     fn get_links_by_cid(&self, cid: &str) -> Result<Vec<String>>;
     fn list_available_dags(&self) -> Result<Vec<String>>;
     fn get_missing_cid_blocks(&self, cid: &str) -> Result<Vec<String>>;
+    fn get_dag_blocks_by_window(
+        &self,
+        cid: &str,
+        offset: u32,
+        window_size: u32,
+    ) -> Result<Vec<StoredBlock>>;
+    fn get_all_dag_cids(&self, cid: &str) -> Result<Vec<String>>;
+    fn get_all_dag_blocks(&self, cid: &str) -> Result<Vec<StoredBlock>>;
+    fn get_all_blocks_under_cid(&self, cid: &str) -> Result<Vec<StoredBlock>>;
 }
 
 pub struct SqliteStorageProvider {
@@ -200,6 +209,140 @@ impl StorageProvider for SqliteStorageProvider {
             })
             .collect();
         Ok(cids)
+    }
+
+    fn get_dag_blocks_by_window(
+        &self,
+        cid: &str,
+        offset: u32,
+        window_size: u32,
+    ) -> Result<Vec<StoredBlock>> {
+        let blocks: Vec<StoredBlock> = self
+            .conn
+            .prepare(
+                "
+            WITH RECURSIVE cids(x,y) AS (
+                SELECT cid,data FROM blocks WHERE cid = (?1)
+                UNION
+                SELECT cid,data FROM blocks b 
+                    INNER JOIN links l ON b.cid==l.block_cid 
+                    INNER JOIN cids ON (root_cid=x)
+            )
+            SELECT x,y FROM cids
+            LIMIT (?2) OFFSET (?3);
+            ",
+            )?
+            .query_map(
+                [cid, &format!("{window_size}"), &format!("{offset}")],
+                |row| {
+                    let cid_str: String = row.get(0)?;
+                    let data: Vec<u8> = row.get(1)?;
+                    let links = match self.get_links_by_cid(&cid_str) {
+                        Ok(links) => links,
+                        Err(_) => vec![],
+                    };
+                    Ok(StoredBlock {
+                        cid: cid_str,
+                        data,
+                        links,
+                    })
+                },
+            )?
+            .filter_map(|b| b.ok())
+            .collect();
+
+        Ok(blocks)
+    }
+
+    fn get_all_dag_cids(&self, cid: &str) -> Result<Vec<String>> {
+        let cids: Vec<String> = self
+            .conn
+            .prepare(
+                "
+                WITH RECURSIVE cids(x) AS (
+                    VALUES(?1)
+                    UNION
+                    SELECT block_cid FROM links JOIN cids ON root_cid=x
+                )
+                SELECT x FROM cids;
+            ",
+            )?
+            .query_map([cid], |row| {
+                let cid_str: String = row.get(0)?;
+                Ok(cid_str)
+            })?
+            .filter_map(|b| b.ok())
+            .collect();
+
+        Ok(cids)
+    }
+
+    fn get_all_dag_blocks(&self, cid: &str) -> Result<Vec<StoredBlock>> {
+        let blocks: Vec<StoredBlock> = self
+            .conn
+            .prepare(
+                "
+            WITH RECURSIVE cids(x,y) AS (
+                SELECT cid,data FROM blocks WHERE cid = (?1)
+                UNION
+                SELECT cid,data FROM blocks b 
+                    INNER JOIN links l ON b.cid==l.block_cid 
+                    INNER JOIN cids ON (root_cid=x)
+            )
+            SELECT x,y FROM cids
+            ",
+            )?
+            .query_map([cid], |row| {
+                let cid_str: String = row.get(0)?;
+                let data: Vec<u8> = row.get(1)?;
+                let links = match self.get_links_by_cid(&cid_str) {
+                    Ok(links) => links,
+                    Err(_) => vec![],
+                };
+                Ok(StoredBlock {
+                    cid: cid_str,
+                    data,
+                    links,
+                })
+            })?
+            .filter_map(|b| b.ok())
+            .collect();
+
+        Ok(blocks)
+    }
+
+    fn get_all_blocks_under_cid(&self, cid: &str) -> Result<Vec<StoredBlock>> {
+        let blocks: Vec<StoredBlock> = self
+            .conn
+            .prepare(
+                "
+            WITH RECURSIVE cids(x,y) AS (
+                SELECT cid,data FROM blocks WHERE cid = (?1)
+                UNION
+                SELECT cid,data FROM blocks b 
+                    INNER JOIN links l ON b.cid==l.block_cid 
+                    INNER JOIN cids ON (root_cid=x)
+            )
+            SELECT x,y FROM cids
+            ",
+            )?
+            .query_map([cid], |row| {
+                let cid_str: String = row.get(0)?;
+                let data: Vec<u8> = row.get(1)?;
+                let links = match self.get_links_by_cid(&cid_str) {
+                    Ok(links) => links,
+                    Err(_) => vec![],
+                };
+                Ok(StoredBlock {
+                    cid: cid_str,
+                    data,
+                    links,
+                })
+            })?
+            .filter_map(|b| b.ok())
+            .collect();
+
+        Ok(blocks)
     }
 }
 

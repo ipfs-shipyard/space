@@ -18,7 +18,7 @@ pub struct Cli {
 
 impl Cli {
     pub async fn run(&self) -> Result<()> {
-        let transport = UdpTransport::new(&self.bind_address, 60)?;
+        let transport = UdpTransport::new(&self.bind_address, 512)?;
 
         let command = Message::ApplicationAPI(self.command.clone());
         let cmd_str = serde_json::to_string(&command)?;
