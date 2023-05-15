@@ -89,7 +89,7 @@ impl Storage {
             bail!(StorageError::DagIncomplete(cid.to_string()))
         }
         // Fetch all blocks tied to links under given cid
-        let child_blocks = self.get_all_dag_blocks(&cid)?;
+        let child_blocks = self.get_all_dag_blocks(cid)?;
         // Open up file path for writing
         let mut output_file = FsFile::create(path)?;
         // Walk the StoredBlocks and write out to path
@@ -114,21 +114,6 @@ impl Storage {
         self.provider.get_block_by_cid(cid)
     }
 
-    // pub fn get_all_blocks_under_cid(&self, cid: &str) -> Result<Vec<StoredBlock>> {
-    //     // Get StoredBlock by cid and check for links
-    //     let root_block = self.provider.get_block_by_cid(cid)?;
-    //     // If links, grab all appropriate StoredBlocks
-    //     let mut child_blocks = vec![];
-    //     for link in root_block.links {
-    //         let block = self.provider.get_block_by_cid(&link)?;
-    //         if !block.links.is_empty() {
-    //             child_blocks.append(&mut self.get_all_blocks_under_cid(&block.cid)?);
-    //         }
-    //         child_blocks.push(block);
-    //     }
-    //     Ok(child_blocks)
-    // }
-
     pub fn get_all_dag_cids(&self, cid: &str) -> Result<Vec<String>> {
         self.provider.get_all_dag_cids(cid)
     }
@@ -136,22 +121,6 @@ impl Storage {
     pub fn get_all_dag_blocks(&self, cid: &str) -> Result<Vec<StoredBlock>> {
         self.provider.get_all_dag_blocks(cid)
     }
-
-    // pub fn get_dag_blocks(&self, cid: &str) -> Result<Vec<StoredBlock>> {
-    //     // Get StoredBlock by cid and check for links
-    //     let root_block = self.provider.get_block_by_cid(cid)?;
-    //     // If links, grab all appropriate StoredBlocks
-    //     let mut blocks = vec![];
-    //     for link in &root_block.links {
-    //         let block = self.provider.get_block_by_cid(&link)?;
-    //         if !block.links.is_empty() {
-    //             blocks.append(&mut self.get_dag_blocks(&block.cid)?);
-    //         }
-    //         blocks.push(block);
-    //     }
-    //     blocks.push(root_block);
-    //     Ok(blocks)
-    // }
 
     pub fn import_block(&self, block: &StoredBlock) -> Result<()> {
         info!("Importing block {}", block.cid);
@@ -280,7 +249,7 @@ pub mod tests {
         }
     }
 
-    // #[test]
+    #[test]
     pub fn test_get_dag_blocks_by_window() {
         let harness = TestHarness::new();
         let temp_dir = assert_fs::TempDir::new().unwrap();
@@ -300,22 +269,16 @@ pub mod tests {
         let all_dag_blocks = harness.storage.get_all_dag_blocks(&cid).unwrap();
 
         for chunk in all_dag_blocks.chunks(window_size as usize).into_iter() {
-            println!("comparing blocks for {window_num} of {window_size}");
             let window_blocks = harness
                 .storage
                 .get_dag_blocks_by_window(&cid, window_size, window_num)
                 .unwrap();
-            println!(
-                "chunk len {} - window len {}",
-                chunk.len(),
-                window_blocks.len()
-            );
             assert_eq!(chunk, &window_blocks);
             window_num += 1;
         }
     }
 
-    // #[test]
+    #[test]
     pub fn compare_get_blocks_to_get_cids() {
         let harness = TestHarness::new();
         let temp_dir = assert_fs::TempDir::new().unwrap();

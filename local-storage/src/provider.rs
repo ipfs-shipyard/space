@@ -217,7 +217,6 @@ impl StorageProvider for SqliteStorageProvider {
         offset: u32,
         window_size: u32,
     ) -> Result<Vec<StoredBlock>> {
-        println!("LIMIT {window_size} OFFSET {offset}");
         let blocks: Vec<StoredBlock> = self
             .conn
             .prepare(
@@ -252,17 +251,7 @@ impl StorageProvider for SqliteStorageProvider {
             .filter_map(|b| b.ok())
             .collect();
 
-        println!("provider found {} blocks", blocks.len());
-
         Ok(blocks)
-
-        //  {
-        //     Ok(mut block) => {
-        //         block.links = self.get_links_by_cid(cid)?;
-        //         Ok(block)
-        //     }
-        //     Err(e) => bail!(StorageError::BlockNotFound(cid.to_string(), e.to_string())),
-        // }
     }
 
     fn get_all_dag_cids(&self, cid: &str) -> Result<Vec<String>> {
@@ -284,8 +273,6 @@ impl StorageProvider for SqliteStorageProvider {
             })?
             .filter_map(|b| b.ok())
             .collect();
-
-        println!("provider found {} cids", cids.len());
 
         Ok(cids)
     }
@@ -321,8 +308,6 @@ impl StorageProvider for SqliteStorageProvider {
             .filter_map(|b| b.ok())
             .collect();
 
-        println!("provider found {} blocks", blocks.len());
-
         Ok(blocks)
     }
 
@@ -356,8 +341,6 @@ impl StorageProvider for SqliteStorageProvider {
             })?
             .filter_map(|b| b.ok())
             .collect();
-
-        println!("provider found {} blocks", blocks.len());
 
         Ok(blocks)
     }

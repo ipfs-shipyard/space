@@ -65,8 +65,4 @@ pub enum DataProtocol {
         cid: String,
         blocks: Vec<String>,
     },
-    // Sets current connected state
-    // SetConnected {
-    //     connected: bool,
-    // },
 }

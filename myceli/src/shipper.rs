@@ -162,13 +162,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                 if *self.connected.lock().unwrap() {
                     self.resume_all_dag_window_sessions()?;
                 }
-            } // DataProtocol::SetConnected { connected } => {
-              //     let prev_connected = self.connected;
-              //     self.connected = connected;
-              //     if !prev_connected && connected {
-              //         self.resume_all_dag_window_sessions()?;
-              //     }
-              // }
+            }
         }
         Ok(())
     }
@@ -262,7 +256,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
     // and running the last sent window again
     fn resume_dag_window_session(&mut self, cid: &str) -> Result<()> {
         if *self.connected.lock().unwrap() {
-            let session = if let Some(session) = self.window_sessions.get(cid).clone() {
+            let session = if let Some(session) = self.window_sessions.get(cid) {
                 session.clone()
             } else {
                 info!("session not found for {cid}");
@@ -270,8 +264,8 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             };
             info!("start dag window session for {cid}");
             // Need to reset the window retries here
-            self.dag_window_session_run(cid, session.window_num, &session.target_addr.clone())?;
-            self.start_dag_window_retry_timeout(cid, &session.target_addr.clone());
+            self.dag_window_session_run(cid, session.window_num, &session.target_addr)?;
+            self.start_dag_window_retry_timeout(cid, &session.target_addr);
         }
 
         Ok(())
@@ -392,29 +386,6 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             .storage
             .get_dag_blocks_by_window(cid, self.window_size, window_num)?;
         Ok(blocks)
-        // let root_block = self.storage.get_block_by_cid(cid)?;
-        // let blocks = self.storage.get_all_blocks_under_cid(cid)?;
-        // let mut all_blocks = vec![root_block];
-        // all_blocks.extend(blocks);
-
-        // TODO: Push this windowing down into the storage layer instead of
-        // grabbing all blocks every time
-        // println!("window_start = {} * {}", self.window_size, window_num);
-        // let window_start: usize = (self.window_size * window_num).try_into()?;
-        // println!("window_end = {window_start} + {}", self.window_size);
-        // let window_end: usize = window_start + TryInto::<usize>::try_into(self.window_size)?;
-
-        // if window_start > all_blocks.len() {
-        //     Ok(vec![])
-        // } else {
-        //     if window_end < all_blocks.len() {
-        //         all_blocks.drain(window_end..);
-        //     }
-
-        //     all_blocks.drain(..window_start);
-
-        //     Ok(all_blocks)
-        // }
     }
 
     fn receive_block(&mut self, block: TransmissionBlock) -> Result<()> {
