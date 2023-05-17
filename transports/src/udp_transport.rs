@@ -6,7 +6,7 @@ use std::net::{ToSocketAddrs, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
-use tracing::debug;
+use tracing::{debug, info};
 
 pub struct UdpTransport {
     pub socket: UdpSocket,
@@ -37,7 +37,7 @@ impl UdpTransport {
 
 impl Transport for UdpTransport {
     fn receive(&self) -> Result<(Message, String)> {
-        let mut buf = vec![0; usize::from(self.mtu)];
+        let mut buf = vec![0; 1024];
         let mut sender_addr;
         let mut read_attempts = 0;
         loop {
@@ -68,8 +68,16 @@ impl Transport for UdpTransport {
                 .expect("Lock failed, this is really bad")
                 .unchunk(&buf)
             {
-                Ok(Some(msg)) => return Ok((msg, sender_addr.to_string())),
-                Ok(None) => debug!("No msg yet"),
+                Ok(Some(msg)) => {
+                    info!("Received: {msg:?}");
+                    info!("Received: {}", &msg.to_hex());
+                    return Ok((msg, sender_addr.to_string()));
+                }
+                Ok(None) => {
+                    info!("Received: no msg yet");
+                    let hex_str = buf.iter().map(|b| format!("{b:02X}")).collect::<String>();
+                    info!("Received: {hex_str}");
+                }
                 Err(err) => {
                     bail!("Error unchunking message: {err}");
                 }
@@ -78,6 +86,9 @@ impl Transport for UdpTransport {
     }
 
     fn send(&self, msg: Message, addr: &str) -> Result<()> {
+        let hex_str = msg.to_hex();
+        info!("Transmitting: {msg:?}");
+        info!("Transmitting: {hex_str}");
         let addr = addr
             .to_socket_addrs()?
             .next()

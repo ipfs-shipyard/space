@@ -24,7 +24,7 @@ impl Default for Config {
             // Default storage dir
             storage_path: "storage".to_string(),
             // Default MTU appropriate for dev radio
-            mtu: 60,
+            mtu: 512,
             window_size: 5,
         }
     }
