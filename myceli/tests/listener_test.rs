@@ -7,6 +7,9 @@ use utils::{TestController, TestListener};
 
 #[test]
 pub fn test_verify_listener_alive() {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
     let listener = TestListener::new();
     listener.start().unwrap();
 

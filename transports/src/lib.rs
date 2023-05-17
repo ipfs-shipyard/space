@@ -1,4 +1,5 @@
 mod chunking;
+mod tcp_transport;
 mod udp_chunking;
 mod udp_transport;
 
@@ -10,4 +11,5 @@ pub trait Transport: Send + Sync {
     fn send(&self, msg: Message, addr: &str) -> Result<()>;
 }
 
+pub use tcp_transport::TcpTransport;
 pub use udp_transport::UdpTransport;

@@ -11,7 +11,7 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread::{sleep, spawn};
-use transports::{Transport, UdpTransport};
+use transports::{TcpTransport, Transport, UdpTransport};
 
 pub struct TestListener {
     pub listen_addr: String,
@@ -61,11 +61,12 @@ impl TestListener {
 fn start_listener_thread(listen_addr: SocketAddr, db_path: ChildPath) {
     let db_path = db_path.path().to_str().unwrap();
     let listen_addr_str = listen_addr.to_string();
-    let mut transport = UdpTransport::new(&listen_addr_str, 60).unwrap();
-    transport
-        .set_read_timeout(Some(Duration::from_millis(10)))
-        .unwrap();
-    transport.set_max_read_attempts(Some(1));
+    // let mut transport = UdpTransport::new(&listen_addr_str, 60).unwrap();
+    // transport
+    //     .set_read_timeout(Some(Duration::from_millis(10)))
+    //     .unwrap();
+    // transport.set_max_read_attempts(Some(1));
+    let transport = TcpTransport::new(&listen_addr_str, 60).unwrap();
     let transport = Arc::new(transport);
     let mut listener = Listener::new(&listen_addr, db_path, transport).unwrap();
     listener
@@ -74,16 +75,17 @@ fn start_listener_thread(listen_addr: SocketAddr, db_path: ChildPath) {
 }
 
 pub struct TestController {
-    pub transport: UdpTransport,
+    pub transport: TcpTransport,
 }
 
 impl TestController {
     pub fn new() -> Self {
-        let mut transport = UdpTransport::new("127.0.0.1:0", 60).unwrap();
-        transport
-            .set_read_timeout(Some(Duration::from_millis(50)))
-            .unwrap();
-        transport.set_max_read_attempts(Some(1));
+        // let mut transport = UdpTransport::new("127.0.0.1:0", 60).unwrap();
+        // transport
+        //     .set_read_timeout(Some(Duration::from_millis(50)))
+        //     .unwrap();
+        // transport.set_max_read_attempts(Some(1));
+        let transport = TcpTransport::new("127.0.0.1:0", 60).unwrap();
         TestController { transport }
     }
 
