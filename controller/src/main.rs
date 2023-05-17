@@ -24,13 +24,16 @@ impl Cli {
 
         let command = Message::ApplicationAPI(self.command.clone());
         let cmd_str = serde_json::to_string(&command)?;
+        let hex_str = command.to_hex();
         println!("Transmitting: {}", &cmd_str);
+        println!("Transmitting: {hex_str}");
 
         transport.send(command, &self.instance_addr)?;
         if self.listen_mode {
             match transport.receive() {
                 Ok((msg, _)) => {
-                    println!("{msg:?}");
+                    println!("Received: {msg:?}");
+                    println!("Received: {}", msg.to_hex());
                     return Ok(());
                 }
                 Err(e) => bail!("{e:?}"),
