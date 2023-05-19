@@ -128,8 +128,17 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 Some(handlers::import_file(&path, self.storage.clone())?)
             }
             Message::ApplicationAPI(ApplicationAPI::ExportDag { cid, path }) => {
-                self.storage.export_cid(&cid, &PathBuf::from(path))?;
-                None
+                match self.storage.export_cid(&cid, &PathBuf::from(path.clone())) {
+                    Ok(()) => Some(Message::ApplicationAPI(ApplicationAPI::DagExported {
+                        cid,
+                        path,
+                    })),
+                    Err(e) => Some(Message::ApplicationAPI(ApplicationAPI::DagExportFailed {
+                        cid,
+                        path,
+                        error: e.to_string(),
+                    })),
+                }
             }
             Message::ApplicationAPI(ApplicationAPI::RequestAvailableBlocks) => {
                 Some(handlers::request_available_blocks(self.storage.clone())?)

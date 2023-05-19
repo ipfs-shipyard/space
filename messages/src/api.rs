@@ -18,6 +18,17 @@ pub enum ApplicationAPI {
         cid: String,
         path: String,
     },
+    /// Used to indicate the failure of a dag export
+    DagExportFailed {
+        cid: String,
+        path: String,
+        error: String,
+    },
+    /// Used to indicate a successful dag export
+    DagExported {
+        cid: String,
+        path: String,
+    },
     /// Sets current connected state
     SetConnected {
         #[arg(action(clap::ArgAction::Set), required(true))]
