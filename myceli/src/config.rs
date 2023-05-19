@@ -12,6 +12,7 @@ pub struct Config {
     pub storage_path: String,
     pub mtu: u16,
     pub window_size: u32,
+    pub block_size: u32,
 }
 
 impl Default for Config {
@@ -24,8 +25,11 @@ impl Default for Config {
             // Default storage dir
             storage_path: "storage".to_string(),
             // Default MTU appropriate for dev radio
-            mtu: 60,
+            mtu: 512,
+            // Default to sending five blocks at a time
             window_size: 5,
+            // Default to 3 kilobyte blocks
+            block_size: 1024 * 3,
         }
     }
 }

@@ -20,6 +20,7 @@ multihash.workspace = true
 num_enum.workspace = true
 prost.workspace = true
 tokio = { workspace = true, features = ["fs"] }
+tokio-util = { workspace = true, features = ["io-util"] }
 
 [dev-dependencies]
 # criterion = { workspace = true, features = ["async_tokio"] }

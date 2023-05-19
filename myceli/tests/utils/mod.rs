@@ -13,6 +13,8 @@ use std::sync::Arc;
 use std::thread::{sleep, spawn};
 use transports::{Transport, UdpTransport};
 
+const BLOCK_SIZE: u32 = 1024 * 3;
+
 pub struct TestListener {
     pub listen_addr: String,
     pub test_dir: TempDir,
@@ -67,9 +69,9 @@ fn start_listener_thread(listen_addr: SocketAddr, db_path: ChildPath) {
         .unwrap();
     transport.set_max_read_attempts(Some(1));
     let transport = Arc::new(transport);
-    let mut listener = Listener::new(&listen_addr, db_path, transport).unwrap();
+    let mut listener = Listener::new(&listen_addr, db_path, transport, BLOCK_SIZE).unwrap();
     listener
-        .start(10, 2)
+        .start(10, 2, BLOCK_SIZE)
         .expect("Error encountered in listener");
 }
 

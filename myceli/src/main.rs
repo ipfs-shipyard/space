@@ -36,10 +36,15 @@ fn main() -> Result<()> {
     let udp_transport =
         UdpTransport::new(&cfg.listen_address, cfg.mtu).expect("Failed to create udp transport");
 
-    let mut listener = Listener::new(&resolved_listen_addr, &db_path, Arc::new(udp_transport))
-        .expect("Listener creation failed");
+    let mut listener = Listener::new(
+        &resolved_listen_addr,
+        &db_path,
+        Arc::new(udp_transport),
+        cfg.block_size,
+    )
+    .expect("Listener creation failed");
     listener
-        .start(cfg.retry_timeout_duration, cfg.window_size)
+        .start(cfg.retry_timeout_duration, cfg.window_size, cfg.block_size)
         .expect("Error encountered in listener operation");
     Ok(())
 }

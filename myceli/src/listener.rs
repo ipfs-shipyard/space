@@ -25,10 +25,11 @@ impl<T: Transport + Send + 'static> Listener<T> {
         listen_address: &SocketAddr,
         storage_path: &str,
         transport: Arc<T>,
+        block_size: u32,
     ) -> Result<Listener<T>> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
-        let storage = Rc::new(Storage::new(Box::new(provider)));
+        let storage = Rc::new(Storage::new(Box::new(provider), block_size));
         info!("Listening on {listen_address}");
         Ok(Listener {
             storage_path: storage_path.to_string(),
@@ -38,7 +39,12 @@ impl<T: Transport + Send + 'static> Listener<T> {
         })
     }
 
-    pub fn start(&mut self, shipper_timeout_duration: u64, shipper_window_size: u32) -> Result<()> {
+    pub fn start(
+        &mut self,
+        shipper_timeout_duration: u64,
+        shipper_window_size: u32,
+        block_size: u32,
+    ) -> Result<()> {
         // First setup the shipper and its pieces
         let (shipper_sender, shipper_receiver) = mpsc::channel();
         let shipper_storage_path = self.storage_path.to_string();
@@ -54,6 +60,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 shipper_window_size,
                 shipper_transport,
                 initial_connected,
+                block_size,
             )
             .expect("Shipper creation failed");
             shipper.receive_msg_loop();

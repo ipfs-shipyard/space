@@ -45,6 +45,7 @@ pub struct Shipper<T> {
 }
 
 impl<T: Transport + Send + 'static> Shipper<T> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         storage_path: &str,
         receiver: Receiver<(DataProtocol, String)>,
@@ -53,11 +54,11 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         window_size: u32,
         transport: Arc<T>,
         connected: Arc<Mutex<bool>>,
+        block_size: u32,
     ) -> Result<Shipper<T>> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
-        let storage = Rc::new(Storage::new(Box::new(provider)));
-
+        let storage = Rc::new(Storage::new(Box::new(provider), block_size));
         Ok(Shipper {
             storage,
             window_sessions: BTreeMap::new(),
@@ -442,6 +443,8 @@ mod tests {
         test_dir: TempDir,
     }
 
+    const BLOCK_SIZE: u32 = 1024 * 3;
+
     impl TestShipper {
         pub fn new() -> Self {
             let mut rng = thread_rng();
@@ -459,7 +462,7 @@ mod tests {
             let db_path = test_dir.child("storage.db");
             let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
             provider.setup().unwrap();
-            let _storage = Rc::new(Storage::new(Box::new(provider)));
+            let _storage = Rc::new(Storage::new(Box::new(provider), BLOCK_SIZE));
             let (shipper_sender, shipper_receiver) = mpsc::channel();
 
             let shipper = Shipper::new(
@@ -470,6 +473,7 @@ mod tests {
                 5,
                 shipper_transport,
                 Arc::new(Mutex::new(true)),
+                BLOCK_SIZE,
             )
             .unwrap();
             TestShipper {

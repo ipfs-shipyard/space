@@ -25,6 +25,7 @@ pub(crate) fn verify_dag(blocks: &[StoredBlock]) -> Result<()> {
             // If the linked CID exists in our collection of blocks, set that CID's degree
             if let Some(degree) = indegree.get_mut(&link_cid) {
                 *degree = 1;
+                // println!("Setting degree of {link_cid} to {}", *degree);
             } else {
                 bail!("Links do not match blocks");
             }
@@ -51,7 +52,7 @@ pub(crate) fn verify_dag(blocks: &[StoredBlock]) -> Result<()> {
     while !queue.is_empty() {
         // this is a safe unwrap as the queue is not empty
         let node: &StoredBlock = queue.pop_front().unwrap();
-        // ignore a visite node
+        // ignore a visited node
         if visited.contains(&node.cid.as_str()) {
             continue;
         }
@@ -68,6 +69,7 @@ pub(crate) fn verify_dag(blocks: &[StoredBlock]) -> Result<()> {
             let cid = link.as_str();
             // Grab the degree of the linked cid
             if let Some(degree) = indegree.get_mut(&cid) {
+                // println!("walking to {cid} with {degree}");
                 // mark the degree as seen
                 *degree -= 1;
                 // push a block with in-degree 0 to the queue

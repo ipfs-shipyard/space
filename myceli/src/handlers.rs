@@ -74,6 +74,8 @@ pub mod tests {
     use local_storage::provider::SqliteStorageProvider;
     use rand::{thread_rng, RngCore};
 
+    const BLOCK_SIZE: u32 = 1024 * 3;
+
     struct TestHarness {
         storage: Rc<Storage>,
         db_dir: TempDir,
@@ -85,7 +87,7 @@ pub mod tests {
             let db_path = db_dir.child("storage.db");
             let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
             provider.setup().unwrap();
-            let storage = Rc::new(Storage::new(Box::new(provider)));
+            let storage = Rc::new(Storage::new(Box::new(provider), BLOCK_SIZE));
             TestHarness { storage, db_dir }
         }
 
