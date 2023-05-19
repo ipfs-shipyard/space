@@ -37,7 +37,6 @@ pub enum DataProtocol {
     // in order to continue transmitting the dag
     RetryDagSession {
         cid: String,
-        target_addr: String,
     },
     // Requests windowed transmission of a dag
     RequestTransmitDag {

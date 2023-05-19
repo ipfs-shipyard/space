@@ -62,7 +62,7 @@ impl Storage {
                 root_cid = Some(stored.cid);
             }
         });
-        info!("Validating imported blocks {}", blocks.len());
+        println!("Validating imported blocks {}", blocks.len());
         if blocks.len() == 1 {
             if let Some(first) = blocks.first() {
                 root_cid = Some(first.cid().to_string());
@@ -135,7 +135,6 @@ impl Storage {
         window_size: u32,
         window_num: u32,
     ) -> Result<Vec<StoredBlock>> {
-        println!("offset = {} * {}", window_size, window_num);
         let offset = window_size * window_num;
 
         self.provider
