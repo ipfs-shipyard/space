@@ -429,7 +429,7 @@ checksum = "13418e745008f7349ec7e449155f419a61b92b58a99cc3616942b926825ec76b"
 
 [[package]]
 name = "controller"
-version = "0.6.3"
+version = "0.6.5"
 dependencies = [
  "anyhow",
  "clap",
@@ -928,7 +928,7 @@ dependencies = [
 
 [[package]]
 name = "hyphae"
-version = "0.6.3"
+version = "0.6.5"
 dependencies = [
  "anyhow",
  "clap",
@@ -1012,7 +1012,7 @@ dependencies = [
 
 [[package]]
 name = "ipfs-unixfs"
-version = "0.6.3"
+version = "0.6.5"
 dependencies = [
  "anyhow",
  "async-recursion",
@@ -1194,7 +1194,7 @@ checksum = "ece97ea872ece730aed82664c424eb4c8291e1ff2480247ccf7409044bc6479f"
 
 [[package]]
 name = "local-storage"
-version = "0.6.3"
+version = "0.6.5"
 dependencies = [
  "anyhow",
  "assert_fs",
@@ -1263,7 +1263,7 @@ dependencies = [
 
 [[package]]
 name = "messages"
-version = "0.6.3"
+version = "0.6.5"
 dependencies = [
  "cid",
  "clap",
@@ -1390,7 +1390,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "myceli"
-version = "0.6.3"
+version = "0.6.5"
 dependencies = [
  "anyhow",
  "assert_fs",
@@ -2286,7 +2286,7 @@ dependencies = [
 
 [[package]]
 name = "transports"
-version = "0.6.3"
+version = "0.6.5"
 dependencies = [
  "anyhow",
  "cid",

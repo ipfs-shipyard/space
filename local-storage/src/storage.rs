@@ -259,17 +259,14 @@ pub mod tests {
         let cid = harness.storage.import_path(test_file.path()).unwrap();
 
         let window_size: u32 = 10;
-        let mut window_num = 0;
-
         let all_dag_blocks = harness.storage.get_all_dag_blocks(&cid).unwrap();
 
-        for chunk in all_dag_blocks.chunks(window_size as usize).into_iter() {
+        for (window_num, chunk) in all_dag_blocks.chunks(window_size as usize).enumerate() {
             let window_blocks = harness
                 .storage
-                .get_dag_blocks_by_window(&cid, window_size, window_num)
+                .get_dag_blocks_by_window(&cid, window_size, window_num.try_into().unwrap())
                 .unwrap();
             assert_eq!(chunk, &window_blocks);
-            window_num += 1;
         }
     }
 

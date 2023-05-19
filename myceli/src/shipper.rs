@@ -123,7 +123,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                 if *self.connected.lock().unwrap() {
                     let missing_blocks_msg =
                         handlers::get_missing_dag_blocks(&cid, Rc::clone(&self.storage))?;
-                    self.transmit_msg(missing_blocks_msg, &sender_addr)?;
+                    self.transmit_msg(missing_blocks_msg, sender_addr)?;
                 }
             }
             DataProtocol::MissingDagBlocks { cid, blocks } => {
