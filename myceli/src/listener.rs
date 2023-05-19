@@ -192,6 +192,17 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 info!("Received FileImported from {sender_addr}: {path} -> {cid}");
                 None
             }
+            Message::ApplicationAPI(ApplicationAPI::DagTransmissionComplete { cid }) => {
+                let dag_blocks = self.storage.get_all_dag_blocks(&cid)?;
+                match local_storage::block::validate_dag(&dag_blocks) {
+                    Ok(_) => info!("Sucessfully received and validated dag {cid}"),
+                    Err(e) => {
+                        error!("Failure in receiving dag {cid}: {}", e.to_string());
+                        // TOOD: Delete dag and restart transmission at this point?
+                    }
+                }
+                None
+            }
             // Default case for valid messages which don't have handling code implemented yet
             message => {
                 info!("Received unhandled message: {:?}", message);

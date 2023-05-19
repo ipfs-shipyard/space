@@ -248,6 +248,12 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             } else {
                 info!("Dag transfer session for {cid} is complete");
                 self.end_dag_window_session(cid);
+                self.transmit_msg(
+                    Message::ApplicationAPI(messages::ApplicationAPI::DagTransmissionComplete {
+                        cid: cid.to_string(),
+                    }),
+                    target_addr,
+                )?;
             }
         }
         Ok(())

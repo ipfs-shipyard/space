@@ -55,6 +55,10 @@ pub enum ApplicationAPI {
         target_addr: String,
         retries: u8,
     },
+    /// Indicates that a Dag has been transmitted completely successfully
+    DagTransmissionComplete {
+        cid: String,
+    },
     /// Initiates transmission of block corresponding to the given CID
     TransmitBlock {
         cid: String,
