@@ -25,10 +25,11 @@ impl<T: Transport + Send + 'static> Listener<T> {
         listen_address: &SocketAddr,
         storage_path: &str,
         transport: Arc<T>,
+        block_size: u32,
     ) -> Result<Listener<T>> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
-        let storage = Rc::new(Storage::new(Box::new(provider)));
+        let storage = Rc::new(Storage::new(Box::new(provider), block_size));
         info!("Listening on {listen_address}");
         Ok(Listener {
             storage_path: storage_path.to_string(),
@@ -38,7 +39,12 @@ impl<T: Transport + Send + 'static> Listener<T> {
         })
     }
 
-    pub fn start(&mut self, shipper_timeout_duration: u64, shipper_window_size: u32) -> Result<()> {
+    pub fn start(
+        &mut self,
+        shipper_timeout_duration: u64,
+        shipper_window_size: u32,
+        block_size: u32,
+    ) -> Result<()> {
         // First setup the shipper and its pieces
         let (shipper_sender, shipper_receiver) = mpsc::channel();
         let shipper_storage_path = self.storage_path.to_string();
@@ -54,6 +60,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 shipper_window_size,
                 shipper_transport,
                 initial_connected,
+                block_size,
             )
             .expect("Shipper creation failed");
             shipper.receive_msg_loop();
@@ -121,8 +128,17 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 Some(handlers::import_file(&path, self.storage.clone())?)
             }
             Message::ApplicationAPI(ApplicationAPI::ExportDag { cid, path }) => {
-                self.storage.export_cid(&cid, &PathBuf::from(path))?;
-                None
+                match self.storage.export_cid(&cid, &PathBuf::from(path.clone())) {
+                    Ok(()) => Some(Message::ApplicationAPI(ApplicationAPI::DagExported {
+                        cid,
+                        path,
+                    })),
+                    Err(e) => Some(Message::ApplicationAPI(ApplicationAPI::DagExportFailed {
+                        cid,
+                        path,
+                        error: e.to_string(),
+                    })),
+                }
             }
             Message::ApplicationAPI(ApplicationAPI::RequestAvailableBlocks) => {
                 Some(handlers::request_available_blocks(self.storage.clone())?)
@@ -174,6 +190,17 @@ impl<T: Transport + Send + 'static> Listener<T> {
             }
             Message::ApplicationAPI(ApplicationAPI::FileImported { path, cid }) => {
                 info!("Received FileImported from {sender_addr}: {path} -> {cid}");
+                None
+            }
+            Message::ApplicationAPI(ApplicationAPI::DagTransmissionComplete { cid }) => {
+                let dag_blocks = self.storage.get_all_dag_blocks(&cid)?;
+                match local_storage::block::validate_dag(&dag_blocks) {
+                    Ok(_) => info!("Sucessfully received and validated dag {cid}"),
+                    Err(e) => {
+                        error!("Failure in receiving dag {cid}: {}", e.to_string());
+                        // TOOD: Delete dag and restart transmission at this point?
+                    }
+                }
                 None
             }
             // Default case for valid messages which don't have handling code implemented yet

@@ -3,9 +3,10 @@ use anyhow::{anyhow, bail, Result};
 use bytes::Bytes;
 use cid::Cid;
 use ipfs_unixfs::Block;
+use std::fmt;
 use std::str::FromStr;
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub struct StoredBlock {
     pub cid: String,
     pub data: Vec<u8>,
@@ -18,6 +19,20 @@ impl StoredBlock {
         // into unixfs::Block
         let block: Block = self.try_into()?;
         block.validate()
+    }
+}
+
+impl fmt::Debug for StoredBlock {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let cid_str = Cid::try_from(self.cid.clone())
+            .map(|c| c.to_string())
+            .unwrap();
+
+        f.debug_struct("StoredBlock")
+            .field("cid", &cid_str)
+            .field("data", &self.data.len())
+            .field("links", &self.links.len())
+            .finish()
     }
 }
 
@@ -39,9 +54,6 @@ impl TryInto<Block> for &StoredBlock {
 pub fn validate_dag(stored_blocks: &[StoredBlock]) -> Result<()> {
     if stored_blocks.is_empty() {
         bail!("No blocks found in dag")
-    }
-    for block in stored_blocks.iter() {
-        block.validate()?;
     }
     verify_dag(stored_blocks)?;
     Ok(())

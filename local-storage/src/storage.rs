@@ -15,15 +15,15 @@ use tracing::{error, info};
 
 pub struct Storage {
     pub provider: Box<dyn StorageProvider>,
+    block_size: u32,
 }
 
-// TODO: Make this configurable
-// Changing to 1MB to optimize for larger files
-const BLOCK_SIZE: usize = 1024 * 100;
-
 impl Storage {
-    pub fn new(provider: Box<dyn StorageProvider>) -> Self {
-        Storage { provider }
+    pub fn new(provider: Box<dyn StorageProvider>, block_size: u32) -> Self {
+        Storage {
+            provider,
+            block_size,
+        }
     }
 
     pub fn import_path(&self, path: &Path) -> Result<String> {
@@ -31,7 +31,7 @@ impl Storage {
         let blocks: Result<Vec<Block>> = rt.block_on(async {
             let file: File = FileBuilder::new()
                 .path(path)
-                .fixed_chunker(BLOCK_SIZE)
+                .fixed_chunker(self.block_size.try_into()?)
                 .build()
                 .await?;
             let blocks: Vec<_> = file.encode().await?.try_collect().await?;
@@ -39,8 +39,6 @@ impl Storage {
         });
         let blocks = blocks?;
         let mut root_cid: Option<String> = None;
-
-        let mut stored_blocks = vec![];
 
         blocks.iter().for_each(|b| {
             let links = b
@@ -61,14 +59,9 @@ impl Storage {
                 error!("Failed to import block {e}");
             }
             if !stored.links.is_empty() {
-                root_cid = Some(stored.cid.clone());
+                root_cid = Some(stored.cid);
             }
-            stored_blocks.push(stored);
         });
-        info!("Validating imported blocks {}", blocks.len());
-        if let Err(e) = crate::block::validate_dag(&stored_blocks) {
-            error!("Failed to validate dag on import: {e}");
-        }
         if blocks.len() == 1 {
             if let Some(first) = blocks.first() {
                 root_cid = Some(first.cid().to_string());
@@ -141,7 +134,6 @@ impl Storage {
         window_size: u32,
         window_num: u32,
     ) -> Result<Vec<StoredBlock>> {
-        println!("offset = {} * {}", window_size, window_num);
         let offset = window_size * window_num;
 
         self.provider
@@ -156,6 +148,8 @@ pub mod tests {
     use assert_fs::{fixture::FileWriteBin, fixture::PathChild, TempDir};
     use rand::{thread_rng, RngCore};
 
+    const BLOCK_SIZE: usize = 1024 * 10;
+
     struct TestHarness {
         storage: Storage,
         _db_dir: TempDir,
@@ -167,7 +161,7 @@ pub mod tests {
             let db_path = db_dir.child("storage.db");
             let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
             provider.setup().unwrap();
-            let storage = Storage::new(Box::new(provider));
+            let storage = Storage::new(Box::new(provider), BLOCK_SIZE.try_into().unwrap());
             TestHarness {
                 storage,
                 _db_dir: db_dir,
@@ -264,17 +258,14 @@ pub mod tests {
         let cid = harness.storage.import_path(test_file.path()).unwrap();
 
         let window_size: u32 = 10;
-        let mut window_num = 0;
-
         let all_dag_blocks = harness.storage.get_all_dag_blocks(&cid).unwrap();
 
-        for chunk in all_dag_blocks.chunks(window_size as usize).into_iter() {
+        for (window_num, chunk) in all_dag_blocks.chunks(window_size as usize).enumerate() {
             let window_blocks = harness
                 .storage
-                .get_dag_blocks_by_window(&cid, window_size, window_num)
+                .get_dag_blocks_by_window(&cid, window_size, window_num.try_into().unwrap())
                 .unwrap();
             assert_eq!(chunk, &window_blocks);
-            window_num += 1;
         }
     }
 

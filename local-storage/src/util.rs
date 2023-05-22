@@ -51,7 +51,7 @@ pub(crate) fn verify_dag(blocks: &[StoredBlock]) -> Result<()> {
     while !queue.is_empty() {
         // this is a safe unwrap as the queue is not empty
         let node: &StoredBlock = queue.pop_front().unwrap();
-        // ignore a visite node
+        // ignore a visited node
         if visited.contains(&node.cid.as_str()) {
             continue;
         }

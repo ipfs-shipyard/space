@@ -8,6 +8,8 @@ use transports::{Transport, UdpTransport};
 #[clap(about = "Control a Myceli instance")]
 pub struct Cli {
     instance_addr: String,
+    #[arg(short, long, default_value = "512")]
+    mtu: u16,
     #[arg(short, long)]
     listen_mode: bool,
     #[arg(short, long, default_value = "0.0.0.0:8090")]
@@ -18,7 +20,7 @@ pub struct Cli {
 
 impl Cli {
     pub async fn run(&self) -> Result<()> {
-        let transport = UdpTransport::new(&self.bind_address, 512)?;
+        let transport = UdpTransport::new(&self.bind_address, self.mtu)?;
 
         let command = Message::ApplicationAPI(self.command.clone());
         let cmd_str = serde_json::to_string(&command)?;

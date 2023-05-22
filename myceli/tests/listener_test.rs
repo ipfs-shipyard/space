@@ -42,7 +42,7 @@ pub fn test_transmit_receive_block() {
         &transmitter.listen_addr,
     );
 
-    sleep(Duration::from_millis(100));
+    utils::wait_receiving_done(&receiver, &mut controller);
 
     let resp = controller.send_and_recv(&receiver.listen_addr, Message::request_available_blocks());
 
@@ -73,7 +73,7 @@ pub fn test_transmit_receive_dag() {
         &transmitter.listen_addr,
     );
 
-    sleep(Duration::from_millis(2_000));
+    utils::wait_receiving_done(&receiver, &mut controller);
 
     let receiver_blocks =
         controller.send_and_recv(&receiver.listen_addr, Message::request_available_blocks());
@@ -110,7 +110,7 @@ pub fn test_transmit_receive_dag_with_retries() {
         &transmitter.listen_addr,
     );
 
-    sleep(Duration::from_millis(500));
+    utils::wait_receiving_done(&receiver, &mut controller);
 
     let receiver_blocks =
         controller.send_and_recv(&receiver.listen_addr, Message::request_available_blocks());
@@ -147,7 +147,7 @@ pub fn test_import_transmit_export_file() {
         &transmitter.listen_addr,
     );
 
-    sleep(Duration::from_millis(600));
+    utils::wait_receiving_done(&receiver, &mut controller);
 
     let export_path = format!("{}/export", &receiver.test_dir.to_str().unwrap());
     controller.send_msg(
@@ -246,7 +246,7 @@ pub fn test_resume_dag_after_reconnect() {
         &transmitter.listen_addr,
     );
 
-    sleep(Duration::from_millis(2_000));
+    utils::wait_receiving_done(&receiver, &mut controller);
 
     let receiver_blocks =
         controller.send_and_recv(&receiver.listen_addr, Message::request_available_blocks());
@@ -261,7 +261,7 @@ pub fn test_resume_dag_after_reconnect() {
         &transmitter.listen_addr,
     );
 
-    sleep(Duration::from_millis(2_000));
+    utils::wait_receiving_done(&receiver, &mut controller);
 
     let receiver_blocks =
         controller.send_and_recv(&receiver.listen_addr, Message::request_available_blocks());
@@ -303,7 +303,7 @@ pub fn test_no_transmit_after_disconnect() {
         &transmitter.listen_addr,
     );
 
-    sleep(Duration::from_millis(2_000));
+    utils::wait_receiving_done(&receiver, &mut controller);
 
     let receiver_blocks =
         controller.send_and_recv(&receiver.listen_addr, Message::request_available_blocks());
@@ -337,7 +337,7 @@ pub fn test_transmit_resume_after_timeout() {
         &transmitter.listen_addr,
     );
 
-    sleep(Duration::from_millis(2_000));
+    sleep(Duration::from_secs(1));
 
     receiver.start().unwrap();
 
@@ -354,7 +354,7 @@ pub fn test_transmit_resume_after_timeout() {
         &transmitter.listen_addr,
     );
 
-    sleep(Duration::from_millis(2_000));
+    utils::wait_receiving_done(&receiver, &mut controller);
 
     let receiver_blocks =
         controller.send_and_recv(&receiver.listen_addr, Message::request_available_blocks());

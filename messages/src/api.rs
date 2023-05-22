@@ -18,6 +18,17 @@ pub enum ApplicationAPI {
         cid: String,
         path: String,
     },
+    /// Used to indicate the failure of a dag export
+    DagExportFailed {
+        cid: String,
+        path: String,
+        error: String,
+    },
+    /// Used to indicate a successful dag export
+    DagExported {
+        cid: String,
+        path: String,
+    },
     /// Sets current connected state
     SetConnected {
         #[arg(action(clap::ArgAction::Set), required(true))]
@@ -43,6 +54,10 @@ pub enum ApplicationAPI {
         cid: String,
         target_addr: String,
         retries: u8,
+    },
+    /// Indicates that a Dag has been transmitted completely successfully
+    DagTransmissionComplete {
+        cid: String,
     },
     /// Initiates transmission of block corresponding to the given CID
     TransmitBlock {

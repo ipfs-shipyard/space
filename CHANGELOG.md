@@ -1,7 +1,20 @@
 # Changelog
 
+## [0.6.5] - Unreleased
 
-## [0.6.4] - Unreleased
+### Added
+
+- Added `DagExported` and `DagExportFailed` responses to `ExportDag` command.
+- Added `DagTransmissionComplete` response when a DAG has been completely transmitted.
+
+### Changed
+
+- MTU is now an optional flag on `controller`
+- Added `block_size` as a `myceli` config option for controlling IPFS block size in file chunking
+- Changed default `block_size` to 3072 bytes
+- Fixed cases where responses inside of dag transfer session weren't sent to original target address
+
+## [0.6.4] - 2023-05-15
 
 ### Added
 
