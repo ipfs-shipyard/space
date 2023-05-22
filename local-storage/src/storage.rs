@@ -62,7 +62,6 @@ impl Storage {
                 root_cid = Some(stored.cid);
             }
         });
-        println!("Validating imported blocks {}", blocks.len());
         if blocks.len() == 1 {
             if let Some(first) = blocks.first() {
                 root_cid = Some(first.cid().to_string());
