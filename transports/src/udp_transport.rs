@@ -40,12 +40,14 @@ impl Transport for UdpTransport {
         let mut buf = vec![0; 1024];
         let mut sender_addr;
         let mut read_attempts = 0;
+        let mut read_len = 0;
         loop {
             loop {
                 read_attempts += 1;
                 match self.socket.recv_from(&mut buf) {
                     Ok((len, sender)) => {
                         if len > 0 {
+                            read_len = len;
                             sender_addr = sender;
                             break;
                         }
@@ -62,21 +64,25 @@ impl Transport for UdpTransport {
                 sleep(Duration::from_millis(10));
             }
 
+            info!("Received possible chunk of {} bytes", read_len);
+            let hex_str = buf[0..read_len]
+                .iter()
+                .map(|b| format!("{b:02X}"))
+                .collect::<String>();
+            info!("Received possible chunk of hex {hex_str}");
+
             match self
                 .chunker
                 .lock()
                 .expect("Lock failed, this is really bad")
-                .unchunk(&buf)
+                .unchunk(&buf[0..read_len])
             {
                 Ok(Some(msg)) => {
-                    info!("Received: {msg:?}");
-                    info!("Received: {}", &msg.to_hex());
+                    info!("Assembled msg: {msg:?}");
                     return Ok((msg, sender_addr.to_string()));
                 }
                 Ok(None) => {
-                    info!("Received: no msg yet");
-                    let hex_str = buf.iter().map(|b| format!("{b:02X}")).collect::<String>();
-                    info!("Received: {hex_str}");
+                    debug!("Received: no msg ready for assembly yet");
                 }
                 Err(err) => {
                     bail!("Error unchunking message: {err}");
@@ -86,9 +92,7 @@ impl Transport for UdpTransport {
     }
 
     fn send(&self, msg: Message, addr: &str) -> Result<()> {
-        let hex_str = msg.to_hex();
-        info!("Transmitting: {msg:?}");
-        info!("Transmitting: {hex_str}");
+        info!("Transmitting msg: {msg:?}");
         let addr = addr
             .to_socket_addrs()?
             .next()
@@ -99,6 +103,9 @@ impl Transport for UdpTransport {
             .expect("Lock failed, this is really bad")
             .chunk(msg)?
         {
+            info!("Transmitting chunk of {} bytes", chunk.len());
+            let hex_str = chunk.iter().map(|b| format!("{b:02X}")).collect::<String>();
+            info!("Transmitting chunk of hex {hex_str}");
             self.socket.send_to(&chunk, addr)?;
         }
         Ok(())
