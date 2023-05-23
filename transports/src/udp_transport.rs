@@ -37,7 +37,7 @@ impl UdpTransport {
 
 impl Transport for UdpTransport {
     fn receive(&self) -> Result<(Message, String)> {
-        let mut buf = vec![0; 1024];
+        let mut buf = vec![0; usize::from(self.mtu)];
         let mut sender_addr;
         let mut read_attempts = 0;
         let mut read_len = 0;
