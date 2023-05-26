@@ -34,7 +34,8 @@ fn main() -> Result<()> {
     let db_path = format!("{}/storage.db", cfg.storage_path);
 
     let udp_transport =
-        UdpTransport::new(&cfg.listen_address, cfg.mtu).expect("Failed to create udp transport");
+        UdpTransport::new(&cfg.listen_address, cfg.mtu, cfg.chunk_transmit_throttle)
+            .expect("Failed to create udp transport");
 
     let mut listener = Listener::new(
         &resolved_listen_addr,

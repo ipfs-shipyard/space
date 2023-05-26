@@ -99,6 +99,7 @@ fn main() -> Result<()> {
         &cfg.myceli_address,
         &cfg.listen_to_myceli_address,
         cfg.myceli_mtu,
+        cfg.chunk_transmit_throttle,
     )
     .expect("Failed to create MyceliAPi");
 

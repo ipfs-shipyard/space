@@ -13,16 +13,18 @@ pub struct UdpTransport {
     mtu: u16,
     chunker: Arc<Mutex<SimpleChunker>>,
     max_read_attempts: Option<u16>,
+    chunk_transmit_throttle: Option<u32>,
 }
 
 impl UdpTransport {
-    pub fn new(listen_addr: &str, mtu: u16) -> Result<Self> {
+    pub fn new(listen_addr: &str, mtu: u16, chunk_transmit_throttle: Option<u32>) -> Result<Self> {
         let socket = UdpSocket::bind(listen_addr)?;
         Ok(UdpTransport {
             mtu,
             socket,
             chunker: Arc::new(Mutex::new(SimpleChunker::new(mtu))),
             max_read_attempts: None,
+            chunk_transmit_throttle,
         })
     }
 
@@ -107,6 +109,9 @@ impl Transport for UdpTransport {
             let hex_str = chunk.iter().map(|b| format!("{b:02X}")).collect::<String>();
             info!("Transmitting chunk of hex {hex_str}");
             self.socket.send_to(&chunk, addr)?;
+            if let Some(throttle) = self.chunk_transmit_throttle {
+                sleep(Duration::from_millis(throttle.into()));
+            }
         }
         Ok(())
     }

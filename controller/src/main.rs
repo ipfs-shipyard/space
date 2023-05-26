@@ -11,6 +11,8 @@ pub struct Cli {
     #[arg(short, long, default_value = "512")]
     mtu: u16,
     #[arg(short, long)]
+    chunk_transmit_throttle: Option<u32>,
+    #[arg(short, long)]
     listen_mode: bool,
     #[arg(short, long, default_value = "0.0.0.0:8090")]
     bind_address: String,
@@ -20,7 +22,8 @@ pub struct Cli {
 
 impl Cli {
     pub async fn run(&self) -> Result<()> {
-        let transport = UdpTransport::new(&self.bind_address, self.mtu)?;
+        let transport =
+            UdpTransport::new(&self.bind_address, self.mtu, self.chunk_transmit_throttle)?;
 
         let command = Message::ApplicationAPI(self.command.clone());
         let cmd_str = serde_json::to_string(&command)?;

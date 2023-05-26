@@ -12,6 +12,7 @@ pub struct Config {
     pub kubo_address: String,
     pub sync_interval: u64,
     pub myceli_mtu: u16,
+    pub chunk_transmit_throttle: Option<u32>,
 }
 
 impl Default for Config {
@@ -22,6 +23,7 @@ impl Default for Config {
             kubo_address: "0.0.0.0:5001".to_string(),
             sync_interval: 10_000,
             myceli_mtu: 60,
+            chunk_transmit_throttle: None,
         }
     }
 }

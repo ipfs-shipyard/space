@@ -13,6 +13,7 @@ pub struct Config {
     pub mtu: u16,
     pub window_size: u32,
     pub block_size: u32,
+    pub chunk_transmit_throttle: Option<u32>,
 }
 
 impl Default for Config {
@@ -30,6 +31,8 @@ impl Default for Config {
             window_size: 5,
             // Default to 3 kilobyte blocks
             block_size: 1024 * 3,
+            // Default to no throttling of chunks
+            chunk_transmit_throttle: None,
         }
     }
 }
