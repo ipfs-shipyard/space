@@ -42,6 +42,8 @@ pub struct Shipper<T> {
     window_size: u32,
     // Current connection status
     connected: Arc<Mutex<bool>>,
+    // Radio address
+    radio_address: Option<String>,
 }
 
 impl<T: Transport + Send + 'static> Shipper<T> {
@@ -55,6 +57,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         transport: Arc<T>,
         connected: Arc<Mutex<bool>>,
         block_size: u32,
+        radio_address: Option<String>,
     ) -> Result<Shipper<T>> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
@@ -68,6 +71,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             window_size,
             transport,
             connected,
+            radio_address,
         })
     }
 
@@ -116,22 +120,34 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                         blocks,
                         Rc::clone(&self.storage),
                     )?;
-                    self.transmit_msg(missing_blocks_msg, sender_addr)?;
+                    let target_addr = if let Some(radio_address) = &self.radio_address {
+                        radio_address.to_owned()
+                    } else {
+                        sender_addr.to_owned()
+                    };
+                    self.transmit_msg(missing_blocks_msg, &target_addr)?;
                 }
             }
             DataProtocol::RequestMissingDagBlocks { cid } => {
                 if *self.connected.lock().unwrap() {
                     let missing_blocks_msg =
                         handlers::get_missing_dag_blocks(&cid, Rc::clone(&self.storage))?;
-                    self.transmit_msg(missing_blocks_msg, sender_addr)?;
+                    let target_addr = if let Some(radio_address) = &self.radio_address {
+                        radio_address.to_owned()
+                    } else {
+                        sender_addr.to_owned()
+                    };
+                    self.transmit_msg(missing_blocks_msg, &target_addr)?;
                 }
             }
             DataProtocol::MissingDagBlocks { cid, blocks } => {
                 if *self.connected.lock().unwrap() {
                     let target_addr = if let Some(session) = self.window_sessions.get(&cid) {
-                        session.target_addr.to_string()
+                        session.target_addr.to_owned()
+                    } else if let Some(radio_address) = &self.radio_address {
+                        radio_address.to_owned()
                     } else {
-                        sender_addr.to_string()
+                        sender_addr.to_owned()
                     };
                     // If no blocks are missing, then attempt to move to next window
                     if blocks.is_empty() {

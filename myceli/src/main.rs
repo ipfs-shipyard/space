@@ -42,6 +42,7 @@ fn main() -> Result<()> {
         &db_path,
         Arc::new(udp_transport),
         cfg.block_size,
+        cfg.radio_address,
     )
     .expect("Listener creation failed");
     listener

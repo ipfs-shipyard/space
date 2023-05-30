@@ -18,6 +18,7 @@ pub struct Listener<T> {
     storage: Rc<Storage>,
     transport: Arc<T>,
     connected: Arc<Mutex<bool>>,
+    radio_address: Option<String>,
 }
 
 impl<T: Transport + Send + 'static> Listener<T> {
@@ -26,6 +27,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
         storage_path: &str,
         transport: Arc<T>,
         block_size: u32,
+        radio_address: Option<String>,
     ) -> Result<Listener<T>> {
         let provider = SqliteStorageProvider::new(storage_path)?;
         provider.setup()?;
@@ -36,6 +38,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
             storage,
             transport,
             connected: Arc::new(Mutex::new(true)),
+            radio_address,
         })
     }
 
@@ -51,6 +54,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
         let shipper_sender_clone = shipper_sender.clone();
         let shipper_transport = Arc::clone(&self.transport);
         let initial_connected = Arc::clone(&self.connected);
+        let shipper_radio = self.radio_address.clone();
         spawn(move || {
             let mut shipper = Shipper::new(
                 &shipper_storage_path,
@@ -61,6 +65,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 shipper_transport,
                 initial_connected,
                 block_size,
+                shipper_radio,
             )
             .expect("Shipper creation failed");
             shipper.receive_msg_loop();
@@ -69,16 +74,21 @@ impl<T: Transport + Send + 'static> Listener<T> {
         loop {
             match self.transport.receive() {
                 Ok((message, sender_addr)) => {
-                    match self.handle_message(message, &sender_addr, shipper_sender.clone()) {
+                    let target_addr = if let Some(radio_address) = &self.radio_address {
+                        radio_address.to_owned()
+                    } else {
+                        sender_addr.to_owned()
+                    };
+                    match self.handle_message(message, &target_addr, shipper_sender.clone()) {
                         Ok(Some(resp)) => {
-                            if let Err(e) = self.transmit_response(resp, &sender_addr) {
+                            if let Err(e) = self.transmit_response(resp, &target_addr) {
                                 error!("TransmitResponse error: {e}");
                             }
                         }
                         Ok(None) => {}
                         Err(e) => {
                             if let Err(e) =
-                                self.transmit_response(Message::Error(e.to_string()), &sender_addr)
+                                self.transmit_response(Message::Error(e.to_string()), &target_addr)
                             {
                                 error!("TransmitResponse error: {e}");
                             }
@@ -205,15 +215,15 @@ impl<T: Transport + Send + 'static> Listener<T> {
             }
             // Default case for valid messages which don't have handling code implemented yet
             message => {
-                info!("Received unhandled message: {:?}", message);
+                info!("Received message: {:?}", message);
                 None
             }
         };
         Ok(resp)
     }
 
-    fn transmit_response(&self, message: Message, sender_addr: &str) -> Result<()> {
-        self.transport.send(message, sender_addr)?;
+    fn transmit_response(&self, message: Message, target_addr: &str) -> Result<()> {
+        self.transport.send(message, target_addr)?;
         Ok(())
     }
 }

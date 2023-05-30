@@ -14,6 +14,7 @@ pub struct Config {
     pub window_size: u32,
     pub block_size: u32,
     pub chunk_transmit_throttle: Option<u32>,
+    pub radio_address: Option<String>,
 }
 
 impl Default for Config {
@@ -33,6 +34,8 @@ impl Default for Config {
             block_size: 1024 * 3,
             // Default to no throttling of chunks
             chunk_transmit_throttle: None,
+            // Default to no set radio address
+            radio_address: None,
         }
     }
 }
