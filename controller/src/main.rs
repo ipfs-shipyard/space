@@ -1,7 +1,8 @@
 use anyhow::{bail, Result};
 use clap::{arg, Parser};
 use messages::{ApplicationAPI, Message};
-use tracing::{info, Level};
+use tracing::{info, metadata::LevelFilter};
+use tracing_subscriber::{fmt, EnvFilter};
 use transports::{Transport, UdpTransport};
 
 #[derive(Parser, Debug, Clone)]
@@ -48,6 +49,14 @@ impl Cli {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+
+    fmt::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
+
     cli.run().await
 }

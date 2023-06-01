@@ -4,7 +4,8 @@ use myceli::config::Config;
 use myceli::listener::Listener;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
-use tracing::Level;
+use tracing::metadata::LevelFilter;
+use tracing_subscriber::{fmt, EnvFilter};
 use transports::UdpTransport;
 
 #[derive(Parser, Debug)]
@@ -15,7 +16,13 @@ struct Args {
 }
 
 fn main() -> Result<()> {
-    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+    fmt::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
 
     let args = Args::parse();
 
