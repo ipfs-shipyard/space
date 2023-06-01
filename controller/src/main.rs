@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use clap::{arg, Parser};
 use messages::{ApplicationAPI, Message};
+use tracing::{info, Level};
 use transports::{Transport, UdpTransport};
 
 #[derive(Parser, Debug, Clone)]
@@ -27,16 +28,13 @@ impl Cli {
 
         let command = Message::ApplicationAPI(self.command.clone());
         let cmd_str = serde_json::to_string(&command)?;
-        let hex_str = command.to_hex();
-        println!("Transmitting: {}", &cmd_str);
-        println!("Transmitting: {hex_str}");
+        info!("Transmitting: {}", &cmd_str);
 
         transport.send(command, &self.instance_addr)?;
         if self.listen_mode {
             match transport.receive() {
                 Ok((msg, _)) => {
-                    println!("Received: {msg:?}");
-                    println!("Received: {}", msg.to_hex());
+                    info!("Received: {msg:?}");
                     return Ok(());
                 }
                 Err(e) => bail!("{e:?}"),
@@ -50,5 +48,6 @@ impl Cli {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
     cli.run().await
 }

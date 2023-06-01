@@ -6,7 +6,7 @@ use std::net::{ToSocketAddrs, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
-use tracing::{debug, info};
+use tracing::debug;
 
 pub struct UdpTransport {
     pub socket: UdpSocket,
@@ -42,7 +42,7 @@ impl Transport for UdpTransport {
         let mut buf = vec![0; usize::from(self.mtu)];
         let mut sender_addr;
         let mut read_attempts = 0;
-        let mut read_len = 0;
+        let mut read_len;
         loop {
             loop {
                 read_attempts += 1;
@@ -66,12 +66,12 @@ impl Transport for UdpTransport {
                 sleep(Duration::from_millis(10));
             }
 
-            info!("Received possible chunk of {} bytes", read_len);
+            debug!("Received possible chunk of {} bytes", read_len);
             let hex_str = buf[0..read_len]
                 .iter()
                 .map(|b| format!("{b:02X}"))
                 .collect::<String>();
-            info!("Received possible chunk of hex {hex_str}");
+            debug!("Received possible chunk of hex {hex_str}");
 
             match self
                 .chunker
@@ -80,7 +80,7 @@ impl Transport for UdpTransport {
                 .unchunk(&buf[0..read_len])
             {
                 Ok(Some(msg)) => {
-                    info!("Assembled msg: {msg:?}");
+                    debug!("Assembled msg: {msg:?}");
                     return Ok((msg, sender_addr.to_string()));
                 }
                 Ok(None) => {
@@ -94,7 +94,7 @@ impl Transport for UdpTransport {
     }
 
     fn send(&self, msg: Message, addr: &str) -> Result<()> {
-        info!("Transmitting msg: {msg:?}");
+        debug!("Transmitting msg: {msg:?}");
         let addr = addr
             .to_socket_addrs()?
             .next()
@@ -105,9 +105,9 @@ impl Transport for UdpTransport {
             .expect("Lock failed, this is really bad")
             .chunk(msg)?
         {
-            info!("Transmitting chunk of {} bytes", chunk.len());
+            debug!("Transmitting chunk of {} bytes", chunk.len());
             let hex_str = chunk.iter().map(|b| format!("{b:02X}")).collect::<String>();
-            info!("Transmitting chunk of hex {hex_str}");
+            debug!("Transmitting chunk of hex {hex_str}");
             self.socket.send_to(&chunk, addr)?;
             if let Some(throttle) = self.chunk_transmit_throttle {
                 sleep(Duration::from_millis(throttle.into()));

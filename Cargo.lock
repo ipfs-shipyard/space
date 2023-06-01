@@ -436,6 +436,8 @@ dependencies = [
  "messages",
  "serde_json",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
  "transports",
 ]
 

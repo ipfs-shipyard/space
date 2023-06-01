@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread::{sleep, spawn};
 use std::time::Duration;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use transports::Transport;
 
 #[derive(Clone)]
@@ -215,7 +215,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
     fn start_dag_window_retry_timeout(&mut self, cid: &str) {
         let sender_clone = self.sender.clone();
         let cid_str = cid.to_string();
-        info!("Starting retry timer at {}", self.retry_timeout_duration);
+        debug!("Starting retry timer at {}", self.retry_timeout_duration);
         let timeout_duration = Duration::from_millis(self.retry_timeout_duration);
         spawn(move || {
             sleep(timeout_duration);
@@ -283,7 +283,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                 info!("session not found for {cid}");
                 return Ok(());
             };
-            info!("start dag window session for {cid}");
+            debug!("start dag window session for {cid}");
             // Need to reset the window retries here
             self.dag_window_session_run(cid, session.window_num, &session.target_addr)?;
             self.start_dag_window_retry_timeout(cid);
