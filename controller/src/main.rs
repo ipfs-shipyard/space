@@ -3,7 +3,7 @@ use clap::{arg, Parser};
 use messages::{ApplicationAPI, Message};
 use tracing::{info, metadata::LevelFilter};
 use tracing_subscriber::{fmt, EnvFilter};
-use transports::{Transport, UdpTransport};
+use transports::{Transport, UdpTransport, MAX_MTU};
 
 #[derive(Parser, Debug, Clone)]
 #[clap(version, long_about = None, propagate_version = true)]
@@ -48,8 +48,6 @@ impl Cli {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
-    let cli = Cli::parse();
-
     fmt::fmt()
         .with_env_filter(
             EnvFilter::builder()
@@ -57,6 +55,12 @@ async fn main() -> Result<()> {
                 .from_env_lossy(),
         )
         .init();
+
+    let cli = Cli::parse();
+
+    if cli.mtu > MAX_MTU {
+        bail!("Configured MTU is too large, cannot exceed {MAX_MTU}",);
+    }
 
     cli.run().await
 }

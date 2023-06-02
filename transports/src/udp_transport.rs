@@ -1,5 +1,5 @@
 use crate::udp_chunking::SimpleChunker;
-use crate::Transport;
+use crate::{Transport, MAX_MTU};
 use anyhow::{anyhow, bail, Result};
 use messages::Message;
 use std::net::{ToSocketAddrs, UdpSocket};
@@ -10,7 +10,6 @@ use tracing::debug;
 
 pub struct UdpTransport {
     pub socket: UdpSocket,
-    mtu: u16,
     chunker: Arc<Mutex<SimpleChunker>>,
     max_read_attempts: Option<u16>,
     chunk_transmit_throttle: Option<u32>,
@@ -20,7 +19,6 @@ impl UdpTransport {
     pub fn new(listen_addr: &str, mtu: u16, chunk_transmit_throttle: Option<u32>) -> Result<Self> {
         let socket = UdpSocket::bind(listen_addr)?;
         Ok(UdpTransport {
-            mtu,
             socket,
             chunker: Arc::new(Mutex::new(SimpleChunker::new(mtu))),
             max_read_attempts: None,
@@ -39,7 +37,7 @@ impl UdpTransport {
 
 impl Transport for UdpTransport {
     fn receive(&self) -> Result<(Message, String)> {
-        let mut buf = vec![0; usize::from(self.mtu)];
+        let mut buf = vec![0; usize::from(MAX_MTU)];
         let mut sender_addr;
         let mut read_attempts = 0;
         let mut read_len;

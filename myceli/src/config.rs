@@ -1,9 +1,10 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use figment::{
     providers::{Format, Serialized, Toml},
     Figment,
 };
 use serde::{Deserialize, Serialize};
+use transports::MAX_MTU;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
@@ -27,6 +28,7 @@ impl Default for Config {
             // Default storage dir
             storage_path: "storage".to_string(),
             // Default MTU appropriate for dev radio
+            // Maxes out at 1024 * 3 bytes
             mtu: 512,
             // Default to sending five blocks at a time
             window_size: 5,
@@ -46,6 +48,12 @@ impl Config {
         if let Some(path) = path {
             config = config.merge(Toml::file(path));
         }
-        Ok(config.extract()?)
+        let config: Self = config.extract()?;
+
+        if config.mtu > MAX_MTU {
+            bail!("Configured MTU is too large, cannot exceed {MAX_MTU}",);
+        }
+
+        Ok(config)
     }
 }
