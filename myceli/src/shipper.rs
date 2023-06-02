@@ -470,7 +470,7 @@ mod tests {
             let mut rng = thread_rng();
             let port_num = rng.gen_range(6000..9000);
             let listen_addr = format!("127.0.0.1:{port_num}");
-            let mut listen_transport = UdpTransport::new(&listen_addr, 60).unwrap();
+            let mut listen_transport = UdpTransport::new(&listen_addr, 60, None).unwrap();
             listen_transport
                 .set_read_timeout(Some(Duration::from_millis(10)))
                 .unwrap();
@@ -494,6 +494,7 @@ mod tests {
                 shipper_transport,
                 Arc::new(Mutex::new(true)),
                 BLOCK_SIZE,
+                None,
             )
             .unwrap();
             TestShipper {
