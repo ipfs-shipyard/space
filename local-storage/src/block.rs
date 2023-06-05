@@ -9,6 +9,7 @@ use std::str::FromStr;
 #[derive(PartialEq)]
 pub struct StoredBlock {
     pub cid: String,
+    pub filename: Option<String>,
     pub data: Vec<u8>,
     pub links: Vec<String>,
 }
@@ -30,6 +31,7 @@ impl fmt::Debug for StoredBlock {
 
         f.debug_struct("StoredBlock")
             .field("cid", &cid_str)
+            .field("filename", &self.filename)
             .field("data", &self.data.len())
             .field("links", &self.links.len())
             .finish()
@@ -99,6 +101,7 @@ mod tests {
                 cid: b.cid().to_string(),
                 data: b.data().to_vec(),
                 links,
+                filename: None,
             };
 
             stored_blocks.push(stored);
@@ -214,6 +217,7 @@ mod tests {
                 cid: cid.to_string(),
                 data,
                 links: vec![],
+                filename: None,
             },
         );
 
@@ -236,6 +240,7 @@ mod tests {
             cid: cid.to_string(),
             data,
             links: vec![],
+            filename: None,
         });
 
         assert_eq!(

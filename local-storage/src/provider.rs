@@ -83,8 +83,8 @@ impl SqliteStorageProvider {
 impl StorageProvider for SqliteStorageProvider {
     fn import_block(&self, block: &StoredBlock) -> Result<()> {
         self.conn.execute(
-            "INSERT OR IGNORE INTO blocks (cid, data) VALUES (?1, ?2)",
-            (&block.cid, &block.data),
+            "INSERT OR IGNORE INTO blocks (cid, data, filename) VALUES (?1, ?2, ?3)",
+            (&block.cid, &block.data, &block.filename),
         )?;
         // TODO: Should we have another indicator for root blocks that isn't just the number of links?
         // TODO: This logic should probably get pulled up and split into two parts:
@@ -148,16 +148,18 @@ impl StorageProvider for SqliteStorageProvider {
 
     fn get_block_by_cid(&self, cid: &str) -> Result<StoredBlock> {
         match self.conn.query_row(
-            "SELECT cid, data FROM blocks b
+            "SELECT cid, data, filename FROM blocks b
             WHERE cid == (?1)",
             [&cid],
             |row| {
                 let cid_str: String = row.get(0)?;
                 let data: Vec<u8> = row.get(1)?;
+                let filename: Option<String> = row.get(2).ok();
                 Ok(StoredBlock {
                     cid: cid_str,
                     data,
                     links: vec![],
+                    filename,
                 })
             },
         ) {
@@ -233,14 +235,14 @@ impl StorageProvider for SqliteStorageProvider {
             .conn
             .prepare(
                 "
-            WITH RECURSIVE cids(x,y) AS (
-                SELECT cid,data FROM blocks WHERE cid = (?1)
+            WITH RECURSIVE cids(x,y,z) AS (
+                SELECT cid,data,filename FROM blocks WHERE cid = (?1)
                 UNION
-                SELECT cid,data FROM blocks b 
+                SELECT cid,data,filename FROM blocks b 
                     INNER JOIN links l ON b.cid==l.block_cid 
                     INNER JOIN cids ON (root_cid=x)
             )
-            SELECT x,y FROM cids
+            SELECT x,y,z FROM cids
             LIMIT (?2) OFFSET (?3);
             ",
             )?
@@ -249,6 +251,7 @@ impl StorageProvider for SqliteStorageProvider {
                 |row| {
                     let cid_str: String = row.get(0)?;
                     let data: Vec<u8> = row.get(1)?;
+                    let filename: Option<String> = row.get(2).ok();
                     let links = match self.get_links_by_cid(&cid_str) {
                         Ok(links) => links,
                         Err(_) => vec![],
@@ -257,6 +260,7 @@ impl StorageProvider for SqliteStorageProvider {
                         cid: cid_str,
                         data,
                         links,
+                        filename,
                     })
                 },
             )?
@@ -294,19 +298,20 @@ impl StorageProvider for SqliteStorageProvider {
             .conn
             .prepare(
                 "
-            WITH RECURSIVE cids(x,y) AS (
-                SELECT cid,data FROM blocks WHERE cid = (?1)
+            WITH RECURSIVE cids(x,y,z) AS (
+                SELECT cid,data,filename FROM blocks WHERE cid = (?1)
                 UNION
-                SELECT cid,data FROM blocks b 
+                SELECT cid,data,filename FROM blocks b 
                     INNER JOIN links l ON b.cid==l.block_cid 
                     INNER JOIN cids ON (root_cid=x)
             )
-            SELECT x,y FROM cids
+            SELECT x,y,z FROM cids
             ",
             )?
             .query_map([cid], |row| {
                 let cid_str: String = row.get(0)?;
                 let data: Vec<u8> = row.get(1)?;
+                let filename: Option<String> = row.get(2).ok();
                 let links = match self.get_links_by_cid(&cid_str) {
                     Ok(links) => links,
                     Err(_) => vec![],
@@ -315,6 +320,7 @@ impl StorageProvider for SqliteStorageProvider {
                     cid: cid_str,
                     data,
                     links,
+                    filename,
                 })
             })?
             .filter_map(|b| b.ok())
@@ -328,19 +334,20 @@ impl StorageProvider for SqliteStorageProvider {
             .conn
             .prepare(
                 "
-            WITH RECURSIVE cids(x,y) AS (
-                SELECT cid,data FROM blocks WHERE cid = (?1)
+            WITH RECURSIVE cids(x,y,z) AS (
+                SELECT cid,data,filename FROM blocks WHERE cid = (?1)
                 UNION
-                SELECT cid,data FROM blocks b 
+                SELECT cid,data,filename FROM blocks b 
                     INNER JOIN links l ON b.cid==l.block_cid 
                     INNER JOIN cids ON (root_cid=x)
             )
-            SELECT x,y FROM cids
+            SELECT x,y,z FROM cids
             ",
             )?
             .query_map([cid], |row| {
                 let cid_str: String = row.get(0)?;
                 let data: Vec<u8> = row.get(1)?;
+                let filename: Option<String> = row.get(2).ok();
                 let links = match self.get_links_by_cid(&cid_str) {
                     Ok(links) => links,
                     Err(_) => vec![],
@@ -349,6 +356,7 @@ impl StorageProvider for SqliteStorageProvider {
                     cid: cid_str,
                     data,
                     links,
+                    filename,
                 })
             })?
             .filter_map(|b| b.ok())
@@ -402,6 +410,7 @@ pub mod tests {
             cid: cid_str.to_string(),
             data: b"1010101".to_vec(),
             links: vec![],
+            filename: None,
         };
 
         harness.provider.import_block(&block).unwrap();
@@ -430,6 +439,7 @@ pub mod tests {
                 cid: c.to_string(),
                 data: b"123412341234".to_vec(),
                 links: vec![],
+                filename: None,
             };
             harness.provider.import_block(&block).unwrap()
         });
@@ -451,6 +461,7 @@ pub mod tests {
             cid: cid.to_string(),
             data: b"1010101".to_vec(),
             links: vec![],
+            filename: None,
         };
 
         harness.provider.import_block(&block).unwrap();
@@ -472,6 +483,7 @@ pub mod tests {
             cid: cid.to_string(),
             data: b"1010101".to_vec(),
             links: vec![block_cid.to_string()],
+            filename: None,
         };
 
         harness.provider.import_block(&block).unwrap();
@@ -493,6 +505,7 @@ pub mod tests {
             cid: cid.to_string(),
             data: vec![],
             links: vec![block_cid.to_string()],
+            filename: None,
         };
 
         harness.provider.import_block(&block).unwrap();
@@ -524,12 +537,14 @@ pub mod tests {
             cid: cid_str.to_string(),
             data: vec![],
             links: vec![block_cid.to_string()],
+            filename: None,
         };
 
         let child_block = StoredBlock {
             cid: block_cid.to_string(),
             data: b"101293910101".to_vec(),
             links: vec![],
+            filename: None,
         };
 
         harness.provider.import_block(&block).unwrap();

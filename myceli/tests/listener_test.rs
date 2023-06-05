@@ -163,6 +163,45 @@ pub fn test_import_transmit_export_file() {
 }
 
 #[test]
+pub fn test_compare_dag_list_after_transfer() {
+    let transmitter = TestListener::new();
+    let receiver = TestListener::new();
+    let mut controller = TestController::new();
+
+    transmitter.start().unwrap();
+    receiver.start().unwrap();
+
+    let test_file_path = transmitter.generate_file().unwrap();
+    let resp = controller.send_and_recv(
+        &transmitter.listen_addr,
+        Message::import_file(&test_file_path),
+    );
+    let root_cid = match resp {
+        Message::ApplicationAPI(ApplicationAPI::FileImported { cid, .. }) => cid,
+        other => panic!("Failed to receive FileImported msg {other:?}"),
+    };
+
+    controller.send_msg(
+        Message::transmit_dag(&root_cid, &receiver.listen_addr, 0),
+        &transmitter.listen_addr,
+    );
+
+    utils::wait_receiving_done(&receiver, &mut controller);
+
+    let transmitter_dags = controller.send_and_recv(
+        &transmitter.listen_addr,
+        Message::ApplicationAPI(ApplicationAPI::RequestAvailableDags),
+    );
+
+    let receiver_dags = controller.send_and_recv(
+        &receiver.listen_addr,
+        Message::ApplicationAPI(ApplicationAPI::RequestAvailableDags),
+    );
+
+    assert_eq!(transmitter_dags, receiver_dags);
+}
+
+#[test]
 pub fn test_transmit_dag_no_response_exceed_retries() {
     let transmitter = TestListener::new();
     let mut controller = TestController::new();

@@ -50,6 +50,7 @@ impl Storage {
                 cid: b.cid().to_string(),
                 data: b.data().to_vec(),
                 links,
+                filename: None,
             };
             // First validate each block
             if let Err(e) = stored.validate() {
@@ -121,7 +122,7 @@ impl Storage {
     }
 
     pub fn import_block(&self, block: &StoredBlock) -> Result<()> {
-        info!("Importing block {}", block.cid);
+        info!("Importing block {:?}", block);
         self.provider.import_block(block)
     }
 
