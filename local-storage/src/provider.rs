@@ -172,7 +172,7 @@ impl StorageProvider for SqliteStorageProvider {
     fn list_available_dags(&self) -> Result<Vec<(String, String)>> {
         let roots = self
             .conn
-            .prepare("SELECT DISTINCT root_cid, filename FROM links INNER JOIN blocks ON links.root_cid = blocks.cid")?
+            .prepare("SELECT DISTINCT cid, filename FROM blocks")?
             .query_map([], |row| {
                 let cid_str: String = row.get(0)?;
                 let filename_str: String = row.get(1)?;

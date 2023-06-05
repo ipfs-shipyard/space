@@ -175,7 +175,30 @@ pub mod tests {
     }
 
     #[test]
-    pub fn test_import_path_to_storage() {
+    pub fn test_import_path_to_storage_single_block() {
+        let harness = TestHarness::new();
+
+        let temp_dir = assert_fs::TempDir::new().unwrap();
+        let test_file = temp_dir.child("data.txt");
+        test_file
+            .write_binary(
+                "654684646847616846846876168468416874616846416846846186468464684684648684684"
+                    .repeat(10)
+                    .as_bytes(),
+            )
+            .unwrap();
+        let root_cid = harness.storage.import_path(test_file.path()).unwrap();
+
+        let available_cids = harness.storage.list_available_cids().unwrap();
+
+        assert!(available_cids.contains(&root_cid));
+
+        let available_dags = harness.storage.list_available_dags().unwrap();
+        assert_eq!(available_dags, vec![(root_cid, "data.txt".to_string())]);
+    }
+
+    #[test]
+    pub fn test_import_path_to_storage_multi_block() {
         let harness = TestHarness::new();
 
         let temp_dir = assert_fs::TempDir::new().unwrap();
