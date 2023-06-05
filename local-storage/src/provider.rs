@@ -12,7 +12,9 @@ pub trait StorageProvider {
     fn get_block_by_cid(&self, cid: &str) -> Result<StoredBlock>;
     // Requests the links associated with the given CID
     fn get_links_by_cid(&self, cid: &str) -> Result<Vec<String>>;
-    fn list_available_dags(&self) -> Result<Vec<String>>;
+    fn list_available_dags(&self) -> Result<Vec<(String, String)>>;
+    // Attaches filename to dag
+    fn name_dag(&self, cid: &str, file_name: &str) -> Result<()>;
     fn get_missing_cid_blocks(&self, cid: &str) -> Result<Vec<String>>;
     fn get_dag_blocks_by_window(
         &self,
@@ -42,6 +44,7 @@ impl SqliteStorageProvider {
             "CREATE TABLE IF NOT EXISTS blocks (
                 id INTEGER PRIMARY KEY,
                 cid TEXT NOT NULL,
+                filename TEXT,
                 data BLOB
             )",
             (),
@@ -166,18 +169,27 @@ impl StorageProvider for SqliteStorageProvider {
         }
     }
 
-    fn list_available_dags(&self) -> Result<Vec<String>> {
+    fn list_available_dags(&self) -> Result<Vec<(String, String)>> {
         let roots = self
             .conn
-            .prepare("SELECT DISTINCT root_cid FROM links")?
+            .prepare("SELECT DISTINCT root_cid, filename FROM links INNER JOIN blocks ON links.root_cid = blocks.cid")?
             .query_map([], |row| {
                 let cid_str: String = row.get(0)?;
-                Ok(cid_str)
+                let filename_str: String = row.get(1)?;
+                Ok((cid_str, filename_str))
             })?
             // TODO: Correctly catch/log/handle errors here
             .filter_map(|cid| cid.ok())
             .collect();
         Ok(roots)
+    }
+
+    fn name_dag(&self, cid: &str, file_name: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE blocks SET filename = ?1 WHERE cid = ?2",
+            (file_name, cid),
+        )?;
+        Ok(())
     }
 
     fn get_missing_cid_blocks(&self, cid: &str) -> Result<Vec<String>> {

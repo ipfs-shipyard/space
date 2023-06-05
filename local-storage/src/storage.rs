@@ -68,7 +68,12 @@ impl Storage {
             }
         }
         if let Some(root_cid) = root_cid {
+            if let Some(filename) = path.file_name().and_then(|p| p.to_str()) {
+                println!("name dag {root_cid} -> {filename}");
+                self.provider.name_dag(&root_cid, filename)?;
+            }
             info!("Imported path {} to {}", path.display(), root_cid);
+            info!("Importing {} blocks for {root_cid}", blocks.len());
             Ok(root_cid)
         } else {
             bail!("Failed to find root block for {path:?}")
@@ -124,7 +129,7 @@ impl Storage {
         self.provider.get_missing_cid_blocks(cid)
     }
 
-    pub fn list_available_dags(&self) -> Result<Vec<String>> {
+    pub fn list_available_dags(&self) -> Result<Vec<(String, String)>> {
         self.provider.list_available_dags()
     }
 
@@ -178,7 +183,7 @@ pub mod tests {
         test_file
             .write_binary(
                 "654684646847616846846876168468416874616846416846846186468464684684648684684"
-                    .repeat(10)
+                    .repeat(500)
                     .as_bytes(),
             )
             .unwrap();
@@ -187,6 +192,9 @@ pub mod tests {
         let available_cids = harness.storage.list_available_cids().unwrap();
 
         assert!(available_cids.contains(&root_cid));
+
+        let available_dags = harness.storage.list_available_dags().unwrap();
+        assert_eq!(available_dags, vec![(root_cid, "data.txt".to_string())]);
     }
 
     #[test]
