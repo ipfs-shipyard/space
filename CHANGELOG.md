@@ -6,6 +6,7 @@
 
 - Added `chunk_transmit_throttle` config option, which adds a throttle delay between transmission of chunks.
 - Added `radio_address` config option, which hardcodes an address for `myceli` to send responses to.
+- Added `RequestAvailableDags` API, and association between DAGs and filename.
 
 ### Changed
 
