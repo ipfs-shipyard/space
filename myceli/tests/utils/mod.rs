@@ -90,13 +90,13 @@ impl TestListener {
 fn start_listener_thread(listen_addr: SocketAddr, db_path: ChildPath) {
     let db_path = db_path.path().to_str().unwrap();
     let listen_addr_str = listen_addr.to_string();
-    let mut transport = UdpTransport::new(&listen_addr_str, 60).unwrap();
+    let mut transport = UdpTransport::new(&listen_addr_str, 60, None).unwrap();
     transport
         .set_read_timeout(Some(Duration::from_millis(10)))
         .unwrap();
     transport.set_max_read_attempts(Some(1));
     let transport = Arc::new(transport);
-    let mut listener = Listener::new(&listen_addr, db_path, transport, BLOCK_SIZE).unwrap();
+    let mut listener = Listener::new(&listen_addr, db_path, transport, BLOCK_SIZE, None).unwrap();
     listener
         .start(10, 2, BLOCK_SIZE)
         .expect("Error encountered in listener");
@@ -108,7 +108,7 @@ pub struct TestController {
 
 impl TestController {
     pub fn new() -> Self {
-        let mut transport = UdpTransport::new("127.0.0.1:0", 60).unwrap();
+        let mut transport = UdpTransport::new("127.0.0.1:0", 60, None).unwrap();
         transport
             .set_read_timeout(Some(Duration::from_millis(50)))
             .unwrap();

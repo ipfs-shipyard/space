@@ -1,6 +1,19 @@
 # Changelog
 
-## [0.6.5] - Unreleased
+## [0.6.6] - Unreleased
+
+### Added
+
+- Added `chunk_transmit_throttle` config option, which adds a throttle delay between transmission of chunks.
+- Added `radio_address` config option, which hardcodes an address for `myceli` to send responses to.
+
+### Changed
+
+- MTU now maxes out at 3072. This max value is now used as the size of the receive buffer, fixing any MTU mismatch errors.
+- Logging level for `myceli`, `hyphae`, and `controller` can now be controlled using the `RUST_LOG` environment variable.
+- Added additional debug logging around chunk sending and receiving.
+
+## [0.6.5] - 05-22-23
 
 ### Added
 

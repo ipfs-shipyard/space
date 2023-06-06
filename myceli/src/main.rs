@@ -4,7 +4,8 @@ use myceli::config::Config;
 use myceli::listener::Listener;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
-use tracing::Level;
+use tracing::metadata::LevelFilter;
+use tracing_subscriber::{fmt, EnvFilter};
 use transports::UdpTransport;
 
 #[derive(Parser, Debug)]
@@ -15,7 +16,13 @@ struct Args {
 }
 
 fn main() -> Result<()> {
-    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+    fmt::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
 
     let args = Args::parse();
 
@@ -34,13 +41,15 @@ fn main() -> Result<()> {
     let db_path = format!("{}/storage.db", cfg.storage_path);
 
     let udp_transport =
-        UdpTransport::new(&cfg.listen_address, cfg.mtu).expect("Failed to create udp transport");
+        UdpTransport::new(&cfg.listen_address, cfg.mtu, cfg.chunk_transmit_throttle)
+            .expect("Failed to create udp transport");
 
     let mut listener = Listener::new(
         &resolved_listen_addr,
         &db_path,
         Arc::new(udp_transport),
         cfg.block_size,
+        cfg.radio_address,
     )
     .expect("Listener creation failed");
     listener

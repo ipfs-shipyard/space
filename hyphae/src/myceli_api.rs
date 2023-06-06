@@ -11,8 +11,17 @@ pub struct MyceliApi {
 }
 
 impl MyceliApi {
-    pub fn new(myceli_address: &str, listen_address: &str, mtu: u16) -> Result<Self> {
-        let transport = Rc::new(UdpTransport::new(listen_address, mtu)?);
+    pub fn new(
+        myceli_address: &str,
+        listen_address: &str,
+        mtu: u16,
+        chunk_transmit_throttle: Option<u32>,
+    ) -> Result<Self> {
+        let transport = Rc::new(UdpTransport::new(
+            listen_address,
+            mtu,
+            chunk_transmit_throttle,
+        )?);
         Ok(MyceliApi {
             address: myceli_address.to_string(),
             listen_address: listen_address.to_string(),

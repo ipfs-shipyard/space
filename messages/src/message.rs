@@ -18,6 +18,16 @@ impl Message {
         self.encode()
     }
 
+    pub fn to_hex(&self) -> String {
+        let mut hex_str = String::new();
+
+        for b in self.to_bytes() {
+            hex_str = format!("{}{:02X}", hex_str, b);
+        }
+
+        hex_str
+    }
+
     pub fn available_blocks(cids: Vec<String>) -> Self {
         Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids })
     }

@@ -1,9 +1,10 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use figment::{
     providers::{Format, Serialized, Toml},
     Figment,
 };
 use serde::{Deserialize, Serialize};
+use transports::MAX_MTU;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
@@ -12,6 +13,7 @@ pub struct Config {
     pub kubo_address: String,
     pub sync_interval: u64,
     pub myceli_mtu: u16,
+    pub chunk_transmit_throttle: Option<u32>,
 }
 
 impl Default for Config {
@@ -21,7 +23,8 @@ impl Default for Config {
             listen_to_myceli_address: "0.0.0.0:8090".to_string(),
             kubo_address: "0.0.0.0:5001".to_string(),
             sync_interval: 10_000,
-            myceli_mtu: 60,
+            myceli_mtu: 512,
+            chunk_transmit_throttle: None,
         }
     }
 }
@@ -32,6 +35,12 @@ impl Config {
         if let Some(path) = path {
             config = config.merge(Toml::file(path));
         }
-        Ok(config.extract()?)
+        let config: Self = config.extract()?;
+
+        if config.myceli_mtu > MAX_MTU {
+            bail!("Configured MTU is too large, cannot exceed {MAX_MTU}",);
+        }
+
+        Ok(config)
     }
 }

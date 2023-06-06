@@ -12,7 +12,8 @@ use myceli_api::MyceliApi;
 use std::collections::HashSet;
 use std::thread::sleep;
 use std::time::Duration;
-use tracing::{error, info, warn, Level};
+use tracing::{error, info, metadata::LevelFilter, warn};
+use tracing_subscriber::{fmt, EnvFilter};
 
 pub const RAW_CODEC_PREFIX: &str = "bafkrei";
 pub const DAG_PB_CODEC_PREFIX: &str = "bafybei";
@@ -85,7 +86,13 @@ fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+    fmt::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
 
     let args = Args::parse();
     let cfg: Config = Config::parse(args.config_path).expect("Configuration parsing failed");
@@ -99,6 +106,7 @@ fn main() -> Result<()> {
         &cfg.myceli_address,
         &cfg.listen_to_myceli_address,
         cfg.myceli_mtu,
+        cfg.chunk_transmit_throttle,
     )
     .expect("Failed to create MyceliAPi");
 

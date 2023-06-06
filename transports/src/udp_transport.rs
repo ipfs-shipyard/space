@@ -1,5 +1,5 @@
 use crate::udp_chunking::SimpleChunker;
-use crate::Transport;
+use crate::{Transport, MAX_MTU};
 use anyhow::{anyhow, bail, Result};
 use messages::Message;
 use std::net::{ToSocketAddrs, UdpSocket};
@@ -10,19 +10,19 @@ use tracing::debug;
 
 pub struct UdpTransport {
     pub socket: UdpSocket,
-    mtu: u16,
     chunker: Arc<Mutex<SimpleChunker>>,
     max_read_attempts: Option<u16>,
+    chunk_transmit_throttle: Option<u32>,
 }
 
 impl UdpTransport {
-    pub fn new(listen_addr: &str, mtu: u16) -> Result<Self> {
+    pub fn new(listen_addr: &str, mtu: u16, chunk_transmit_throttle: Option<u32>) -> Result<Self> {
         let socket = UdpSocket::bind(listen_addr)?;
         Ok(UdpTransport {
-            mtu,
             socket,
             chunker: Arc::new(Mutex::new(SimpleChunker::new(mtu))),
             max_read_attempts: None,
+            chunk_transmit_throttle,
         })
     }
 
@@ -37,15 +37,17 @@ impl UdpTransport {
 
 impl Transport for UdpTransport {
     fn receive(&self) -> Result<(Message, String)> {
-        let mut buf = vec![0; usize::from(self.mtu)];
+        let mut buf = vec![0; usize::from(MAX_MTU)];
         let mut sender_addr;
         let mut read_attempts = 0;
+        let mut read_len;
         loop {
             loop {
                 read_attempts += 1;
                 match self.socket.recv_from(&mut buf) {
                     Ok((len, sender)) => {
                         if len > 0 {
+                            read_len = len;
                             sender_addr = sender;
                             break;
                         }
@@ -62,14 +64,26 @@ impl Transport for UdpTransport {
                 sleep(Duration::from_millis(10));
             }
 
+            debug!("Received possible chunk of {} bytes", read_len);
+            let hex_str = buf[0..read_len]
+                .iter()
+                .map(|b| format!("{b:02X}"))
+                .collect::<String>();
+            debug!("Received possible chunk of hex {hex_str}");
+
             match self
                 .chunker
                 .lock()
                 .expect("Lock failed, this is really bad")
-                .unchunk(&buf)
+                .unchunk(&buf[0..read_len])
             {
-                Ok(Some(msg)) => return Ok((msg, sender_addr.to_string())),
-                Ok(None) => debug!("No msg yet"),
+                Ok(Some(msg)) => {
+                    debug!("Assembled msg: {msg:?}");
+                    return Ok((msg, sender_addr.to_string()));
+                }
+                Ok(None) => {
+                    debug!("Received: no msg ready for assembly yet");
+                }
                 Err(err) => {
                     bail!("Error unchunking message: {err}");
                 }
@@ -78,6 +92,7 @@ impl Transport for UdpTransport {
     }
 
     fn send(&self, msg: Message, addr: &str) -> Result<()> {
+        debug!("Transmitting msg: {msg:?}");
         let addr = addr
             .to_socket_addrs()?
             .next()
@@ -88,7 +103,13 @@ impl Transport for UdpTransport {
             .expect("Lock failed, this is really bad")
             .chunk(msg)?
         {
+            debug!("Transmitting chunk of {} bytes", chunk.len());
+            let hex_str = chunk.iter().map(|b| format!("{b:02X}")).collect::<String>();
+            debug!("Transmitting chunk of hex {hex_str}");
             self.socket.send_to(&chunk, addr)?;
+            if let Some(throttle) = self.chunk_transmit_throttle {
+                sleep(Duration::from_millis(throttle.into()));
+            }
         }
         Ok(())
     }
