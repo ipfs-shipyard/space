@@ -343,7 +343,6 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         info!("Transmitting {} blocks to {}", blocks.len(), target_addr);
 
         for block in blocks {
-            println!("transmitting {block:?}");
             let transmission = stored_block_to_transmission_block(block)?;
 
             info!(

@@ -70,7 +70,6 @@ impl Storage {
         }
         if let Some(root_cid) = root_cid {
             if let Some(filename) = path.file_name().and_then(|p| p.to_str()) {
-                println!("name dag {root_cid} -> {filename}");
                 self.provider.name_dag(&root_cid, filename)?;
             }
             info!("Imported path {} to {}", path.display(), root_cid);
