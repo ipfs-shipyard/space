@@ -248,7 +248,16 @@ impl StorageProvider for SqliteStorageProvider {
         // First get all block cid+id associated with root cid
         let blocks: Vec<(String, Option<i32>)> = self
             .conn
-            .prepare("SELECT block_cid, block_id FROM links WHERE root_cid == (?1)")?
+            .prepare(
+                "
+                WITH RECURSIVE cids(x,y) AS (
+                    SELECT cid, id FROM blocks WHERE cid = (?1)
+                    UNION
+                    SELECT block_cid, block_id FROM links JOIN cids ON root_cid=x
+                )
+                SELECT x,y FROM cids;
+            ",
+            )?
             .query_map([cid], |row| {
                 let block_cid: String = row.get(0)?;
                 let block_id: Option<i32> = row.get(1)?;
