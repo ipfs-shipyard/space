@@ -4,6 +4,7 @@ use myceli::config::Config;
 use myceli::listener::Listener;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
+use tracing::info;
 use tracing::metadata::LevelFilter;
 use tracing_subscriber::{fmt, EnvFilter};
 use transports::UdpTransport;
@@ -43,7 +44,7 @@ fn main() -> Result<()> {
     let udp_transport =
         UdpTransport::new(&cfg.listen_address, cfg.mtu, cfg.chunk_transmit_throttle)
             .expect("Failed to create udp transport");
-
+    info!("pid={}", std::process::id());
     let mut listener = Listener::new(
         &resolved_listen_addr,
         &db_path,
