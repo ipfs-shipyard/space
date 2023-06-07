@@ -1,6 +1,6 @@
 use anyhow::Result;
 use local_storage::storage::Storage;
-use messages::{ApplicationAPI, DataProtocol, Message};
+use messages::{ApplicationAPI, DagInfo, DataProtocol, Message};
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -60,6 +60,20 @@ pub fn get_missing_dag_blocks_window_protocol(
     Ok(Message::DataProtocol(DataProtocol::MissingDagBlocks {
         cid: cid.to_string(),
         blocks: missing_blocks,
+    }))
+}
+
+pub fn get_available_dags(storage: Rc<Storage>) -> Result<Message> {
+    let local_dags: Vec<DagInfo> = storage
+        .list_available_dags()?
+        .iter()
+        .map(|(cid, filename)| DagInfo {
+            cid: cid.to_string(),
+            filename: filename.to_string(),
+        })
+        .collect();
+    Ok(Message::ApplicationAPI(ApplicationAPI::AvailableDags {
+        dags: local_dags,
     }))
 }
 
@@ -126,6 +140,7 @@ pub mod tests {
                 cid: b.cid().to_string(),
                 data: b.data().to_vec(),
                 links,
+                filename: None,
             };
 
             stored_blocks.push(stored);

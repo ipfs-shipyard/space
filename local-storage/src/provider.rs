@@ -1,7 +1,7 @@
 use crate::{block::StoredBlock, error::StorageError};
 
 use anyhow::{bail, Result};
-use rusqlite::Connection;
+use rusqlite::{params_from_iter, Connection};
 
 pub trait StorageProvider {
     // Import a stored block
@@ -12,7 +12,9 @@ pub trait StorageProvider {
     fn get_block_by_cid(&self, cid: &str) -> Result<StoredBlock>;
     // Requests the links associated with the given CID
     fn get_links_by_cid(&self, cid: &str) -> Result<Vec<String>>;
-    fn list_available_dags(&self) -> Result<Vec<String>>;
+    fn list_available_dags(&self) -> Result<Vec<(String, String)>>;
+    // Attaches filename to dag
+    fn name_dag(&self, cid: &str, file_name: &str) -> Result<()>;
     fn get_missing_cid_blocks(&self, cid: &str) -> Result<Vec<String>>;
     fn get_dag_blocks_by_window(
         &self,
@@ -22,7 +24,6 @@ pub trait StorageProvider {
     ) -> Result<Vec<StoredBlock>>;
     fn get_all_dag_cids(&self, cid: &str) -> Result<Vec<String>>;
     fn get_all_dag_blocks(&self, cid: &str) -> Result<Vec<StoredBlock>>;
-    fn get_all_blocks_under_cid(&self, cid: &str) -> Result<Vec<StoredBlock>>;
 }
 
 pub struct SqliteStorageProvider {
@@ -42,6 +43,7 @@ impl SqliteStorageProvider {
             "CREATE TABLE IF NOT EXISTS blocks (
                 id INTEGER PRIMARY KEY,
                 cid TEXT NOT NULL,
+                filename TEXT,
                 data BLOB
             )",
             (),
@@ -75,13 +77,64 @@ impl SqliteStorageProvider {
 
         Ok(())
     }
+
+    fn get_blocks_recursive_query(
+        &self,
+        cid: &str,
+        offset: Option<u32>,
+        window_size: Option<u32>,
+    ) -> Result<Vec<StoredBlock>> {
+        let mut base_query = "
+        WITH RECURSIVE cids(x,y,z) AS (
+            SELECT cid,data,filename FROM blocks WHERE cid = (?1)
+            UNION
+            SELECT cid,data,filename FROM blocks b 
+                INNER JOIN links l ON b.cid==l.block_cid 
+                INNER JOIN cids ON (root_cid=x)
+        )
+        SELECT x,y,z FROM cids
+        "
+        .to_string();
+        let mut params = vec![cid.to_string()];
+
+        if let Some(offset) = offset {
+            if let Some(window_size) = window_size {
+                base_query.push_str(" LIMIT (?2) OFFSET (?3);");
+                params.push(format!("{window_size}"));
+                params.push(format!("{offset}"));
+            }
+        }
+        let params = params_from_iter(params.into_iter());
+        let blocks = self
+            .conn
+            .prepare(&base_query)?
+            .query_map(params, |row| {
+                let cid_str: String = row.get(0)?;
+                let data: Vec<u8> = row.get(1)?;
+                let filename: Option<String> = row.get(2).ok();
+                let links = match self.get_links_by_cid(&cid_str) {
+                    Ok(links) => links,
+                    Err(_) => vec![],
+                };
+                Ok(StoredBlock {
+                    cid: cid_str,
+                    data,
+                    links,
+                    filename,
+                })
+            })?
+            .filter_map(|b| b.ok())
+            .collect();
+
+        Ok(blocks)
+    }
 }
 
 impl StorageProvider for SqliteStorageProvider {
     fn import_block(&self, block: &StoredBlock) -> Result<()> {
         self.conn.execute(
-            "INSERT OR IGNORE INTO blocks (cid, data) VALUES (?1, ?2)",
-            (&block.cid, &block.data),
+            "INSERT OR IGNORE INTO blocks (cid, data, filename) VALUES (?1, ?2, ?3)",
+            (&block.cid, &block.data, &block.filename),
         )?;
         // TODO: Should we have another indicator for root blocks that isn't just the number of links?
         // TODO: This logic should probably get pulled up and split into two parts:
@@ -145,16 +198,18 @@ impl StorageProvider for SqliteStorageProvider {
 
     fn get_block_by_cid(&self, cid: &str) -> Result<StoredBlock> {
         match self.conn.query_row(
-            "SELECT cid, data FROM blocks b
+            "SELECT cid, data, filename FROM blocks b
             WHERE cid == (?1)",
             [&cid],
             |row| {
                 let cid_str: String = row.get(0)?;
                 let data: Vec<u8> = row.get(1)?;
+                let filename: Option<String> = row.get(2).ok();
                 Ok(StoredBlock {
                     cid: cid_str,
                     data,
                     links: vec![],
+                    filename,
                 })
             },
         ) {
@@ -166,13 +221,14 @@ impl StorageProvider for SqliteStorageProvider {
         }
     }
 
-    fn list_available_dags(&self) -> Result<Vec<String>> {
+    fn list_available_dags(&self) -> Result<Vec<(String, String)>> {
         let roots = self
             .conn
-            .prepare("SELECT DISTINCT root_cid FROM links")?
+            .prepare("SELECT DISTINCT cid, filename FROM blocks")?
             .query_map([], |row| {
                 let cid_str: String = row.get(0)?;
-                Ok(cid_str)
+                let filename_str: String = row.get(1)?;
+                Ok((cid_str, filename_str))
             })?
             // TODO: Correctly catch/log/handle errors here
             .filter_map(|cid| cid.ok())
@@ -180,11 +236,28 @@ impl StorageProvider for SqliteStorageProvider {
         Ok(roots)
     }
 
+    fn name_dag(&self, cid: &str, file_name: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE blocks SET filename = ?1 WHERE cid = ?2",
+            (file_name, cid),
+        )?;
+        Ok(())
+    }
+
     fn get_missing_cid_blocks(&self, cid: &str) -> Result<Vec<String>> {
         // First get all block cid+id associated with root cid
         let blocks: Vec<(String, Option<i32>)> = self
             .conn
-            .prepare("SELECT block_cid, block_id FROM links WHERE root_cid == (?1)")?
+            .prepare(
+                "
+                WITH RECURSIVE cids(x,y) AS (
+                    SELECT cid, id FROM blocks WHERE cid = (?1)
+                    UNION
+                    SELECT block_cid, block_id FROM links JOIN cids ON root_cid=x
+                )
+                SELECT x,y FROM cids;
+            ",
+            )?
             .query_map([cid], |row| {
                 let block_cid: String = row.get(0)?;
                 let block_id: Option<i32> = row.get(1)?;
@@ -217,39 +290,7 @@ impl StorageProvider for SqliteStorageProvider {
         offset: u32,
         window_size: u32,
     ) -> Result<Vec<StoredBlock>> {
-        let blocks: Vec<StoredBlock> = self
-            .conn
-            .prepare(
-                "
-            WITH RECURSIVE cids(x,y) AS (
-                SELECT cid,data FROM blocks WHERE cid = (?1)
-                UNION
-                SELECT cid,data FROM blocks b 
-                    INNER JOIN links l ON b.cid==l.block_cid 
-                    INNER JOIN cids ON (root_cid=x)
-            )
-            SELECT x,y FROM cids
-            LIMIT (?2) OFFSET (?3);
-            ",
-            )?
-            .query_map(
-                [cid, &format!("{window_size}"), &format!("{offset}")],
-                |row| {
-                    let cid_str: String = row.get(0)?;
-                    let data: Vec<u8> = row.get(1)?;
-                    let links = match self.get_links_by_cid(&cid_str) {
-                        Ok(links) => links,
-                        Err(_) => vec![],
-                    };
-                    Ok(StoredBlock {
-                        cid: cid_str,
-                        data,
-                        links,
-                    })
-                },
-            )?
-            .filter_map(|b| b.ok())
-            .collect();
+        let blocks = self.get_blocks_recursive_query(cid, Some(offset), Some(window_size))?;
 
         Ok(blocks)
     }
@@ -278,71 +319,7 @@ impl StorageProvider for SqliteStorageProvider {
     }
 
     fn get_all_dag_blocks(&self, cid: &str) -> Result<Vec<StoredBlock>> {
-        let blocks: Vec<StoredBlock> = self
-            .conn
-            .prepare(
-                "
-            WITH RECURSIVE cids(x,y) AS (
-                SELECT cid,data FROM blocks WHERE cid = (?1)
-                UNION
-                SELECT cid,data FROM blocks b 
-                    INNER JOIN links l ON b.cid==l.block_cid 
-                    INNER JOIN cids ON (root_cid=x)
-            )
-            SELECT x,y FROM cids
-            ",
-            )?
-            .query_map([cid], |row| {
-                let cid_str: String = row.get(0)?;
-                let data: Vec<u8> = row.get(1)?;
-                let links = match self.get_links_by_cid(&cid_str) {
-                    Ok(links) => links,
-                    Err(_) => vec![],
-                };
-                Ok(StoredBlock {
-                    cid: cid_str,
-                    data,
-                    links,
-                })
-            })?
-            .filter_map(|b| b.ok())
-            .collect();
-
-        Ok(blocks)
-    }
-
-    fn get_all_blocks_under_cid(&self, cid: &str) -> Result<Vec<StoredBlock>> {
-        let blocks: Vec<StoredBlock> = self
-            .conn
-            .prepare(
-                "
-            WITH RECURSIVE cids(x,y) AS (
-                SELECT cid,data FROM blocks WHERE cid = (?1)
-                UNION
-                SELECT cid,data FROM blocks b 
-                    INNER JOIN links l ON b.cid==l.block_cid 
-                    INNER JOIN cids ON (root_cid=x)
-            )
-            SELECT x,y FROM cids
-            ",
-            )?
-            .query_map([cid], |row| {
-                let cid_str: String = row.get(0)?;
-                let data: Vec<u8> = row.get(1)?;
-                let links = match self.get_links_by_cid(&cid_str) {
-                    Ok(links) => links,
-                    Err(_) => vec![],
-                };
-                Ok(StoredBlock {
-                    cid: cid_str,
-                    data,
-                    links,
-                })
-            })?
-            .filter_map(|b| b.ok())
-            .collect();
-
-        Ok(blocks)
+        self.get_blocks_recursive_query(cid, None, None)
     }
 }
 
@@ -390,6 +367,7 @@ pub mod tests {
             cid: cid_str.to_string(),
             data: b"1010101".to_vec(),
             links: vec![],
+            filename: None,
         };
 
         harness.provider.import_block(&block).unwrap();
@@ -418,6 +396,7 @@ pub mod tests {
                 cid: c.to_string(),
                 data: b"123412341234".to_vec(),
                 links: vec![],
+                filename: None,
             };
             harness.provider.import_block(&block).unwrap()
         });
@@ -439,6 +418,7 @@ pub mod tests {
             cid: cid.to_string(),
             data: b"1010101".to_vec(),
             links: vec![],
+            filename: None,
         };
 
         harness.provider.import_block(&block).unwrap();
@@ -460,6 +440,7 @@ pub mod tests {
             cid: cid.to_string(),
             data: b"1010101".to_vec(),
             links: vec![block_cid.to_string()],
+            filename: None,
         };
 
         harness.provider.import_block(&block).unwrap();
@@ -481,6 +462,7 @@ pub mod tests {
             cid: cid.to_string(),
             data: vec![],
             links: vec![block_cid.to_string()],
+            filename: None,
         };
 
         harness.provider.import_block(&block).unwrap();
@@ -512,12 +494,14 @@ pub mod tests {
             cid: cid_str.to_string(),
             data: vec![],
             links: vec![block_cid.to_string()],
+            filename: None,
         };
 
         let child_block = StoredBlock {
             cid: block_cid.to_string(),
             data: b"101293910101".to_vec(),
             links: vec![],
+            filename: None,
         };
 
         harness.provider.import_block(&block).unwrap();

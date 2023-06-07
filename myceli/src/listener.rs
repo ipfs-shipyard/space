@@ -213,6 +213,9 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 }
                 None
             }
+            Message::ApplicationAPI(ApplicationAPI::RequestAvailableDags) => {
+                Some(handlers::get_available_dags(self.storage.clone())?)
+            }
             // Default case for valid messages which don't have handling code implemented yet
             message => {
                 info!("Received message: {:?}", message);

@@ -418,6 +418,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             cid: Cid::try_from(block.cid)?.to_string(),
             data: block.data,
             links,
+            filename: block.filename,
         };
         stored_block.validate()?;
         self.storage.import_block(&stored_block)
@@ -435,6 +436,7 @@ fn stored_block_to_transmission_block(stored: &StoredBlock) -> Result<Transmissi
         cid: block_cid.to_bytes(),
         data: stored.data.to_vec(),
         links,
+        filename: stored.filename.to_owned(),
     })
 }
 
@@ -532,6 +534,7 @@ mod tests {
             cid: cid.to_bytes(),
             data,
             links: vec![],
+            filename: None,
         });
 
         let res = harness.shipper.receive(block_msg, "127.0.0.1:8080");
@@ -551,6 +554,7 @@ mod tests {
             cid: cid.to_bytes(),
             data,
             links: vec![],
+            filename: None,
         });
 
         let res = harness.shipper.receive(block_msg.clone(), "127.0.0.1:8080");

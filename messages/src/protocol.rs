@@ -8,6 +8,7 @@ pub struct TransmissionBlock {
     pub cid: Vec<u8>,
     pub data: Vec<u8>,
     pub links: Vec<Vec<u8>>,
+    pub filename: Option<String>,
 }
 
 impl fmt::Debug for TransmissionBlock {

@@ -2,6 +2,12 @@ use clap::Subcommand;
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
 use serde::Serialize;
 
+#[derive(Clone, Debug, ParityEncode, ParityDecode, Serialize, Eq, PartialEq)]
+pub struct DagInfo {
+    pub cid: String,
+    pub filename: String,
+}
+
 #[derive(Clone, Debug, ParityEncode, ParityDecode, Serialize, Subcommand, Eq, PartialEq)]
 pub enum ApplicationAPI {
     /// Asks IPFS instance to import a file path into the local IPFS store
@@ -9,6 +15,7 @@ pub enum ApplicationAPI {
         path: String,
     },
     /// Response message to ImportFile containing file's root CID
+    #[command(skip)]
     FileImported {
         path: String,
         cid: String,
@@ -19,12 +26,14 @@ pub enum ApplicationAPI {
         path: String,
     },
     /// Used to indicate the failure of a dag export
+    #[command(skip)]
     DagExportFailed {
         cid: String,
         path: String,
         error: String,
     },
     /// Used to indicate a successful dag export
+    #[command(skip)]
     DagExported {
         cid: String,
         path: String,
@@ -37,6 +46,7 @@ pub enum ApplicationAPI {
     /// Requests the current connected state
     GetConnected,
     /// Response to GetConnected, with current connected state
+    #[command(skip)]
     ConnectedState {
         connected: bool,
     },
@@ -45,6 +55,7 @@ pub enum ApplicationAPI {
         cid: String,
     },
     /// Response to ValidateDag request, contains requested CID and a text response
+    #[command(skip)]
     ValidateDagResponse {
         cid: String,
         result: String,
@@ -78,6 +89,7 @@ pub enum ApplicationAPI {
     /// Request Available Blocks
     RequestAvailableBlocks,
     /// Advertise all available blocks by CID
+    #[command(skip)]
     AvailableBlocks {
         cids: Vec<String>,
     },
@@ -94,6 +106,7 @@ pub enum ApplicationAPI {
         cid: String,
     },
     /// List of missing blocks and associated DAG's CID
+    #[command(skip)]
     MissingDagBlocks {
         cid: String,
         blocks: Vec<String>,
@@ -102,6 +115,11 @@ pub enum ApplicationAPI {
     #[command(skip)]
     Version {
         version: String,
+    },
+    RequestAvailableDags,
+    #[command(skip)]
+    AvailableDags {
+        dags: Vec<DagInfo>,
     },
     // TODO: Implement later
     // Information about the next pass used for calculating

@@ -50,6 +50,7 @@ impl Storage {
                 cid: b.cid().to_string(),
                 data: b.data().to_vec(),
                 links,
+                filename: None,
             };
             // First validate each block
             if let Err(e) = stored.validate() {
@@ -68,7 +69,11 @@ impl Storage {
             }
         }
         if let Some(root_cid) = root_cid {
+            if let Some(filename) = path.file_name().and_then(|p| p.to_str()) {
+                self.provider.name_dag(&root_cid, filename)?;
+            }
             info!("Imported path {} to {}", path.display(), root_cid);
+            info!("Importing {} blocks for {root_cid}", blocks.len());
             Ok(root_cid)
         } else {
             bail!("Failed to find root block for {path:?}")
@@ -116,7 +121,7 @@ impl Storage {
     }
 
     pub fn import_block(&self, block: &StoredBlock) -> Result<()> {
-        info!("Importing block {}", block.cid);
+        info!("Importing block {:?}", block);
         self.provider.import_block(block)
     }
 
@@ -124,7 +129,7 @@ impl Storage {
         self.provider.get_missing_cid_blocks(cid)
     }
 
-    pub fn list_available_dags(&self) -> Result<Vec<String>> {
+    pub fn list_available_dags(&self) -> Result<Vec<(String, String)>> {
         self.provider.list_available_dags()
     }
 
@@ -170,7 +175,7 @@ pub mod tests {
     }
 
     #[test]
-    pub fn test_import_path_to_storage() {
+    pub fn test_import_path_to_storage_single_block() {
         let harness = TestHarness::new();
 
         let temp_dir = assert_fs::TempDir::new().unwrap();
@@ -187,6 +192,32 @@ pub mod tests {
         let available_cids = harness.storage.list_available_cids().unwrap();
 
         assert!(available_cids.contains(&root_cid));
+
+        let available_dags = harness.storage.list_available_dags().unwrap();
+        assert_eq!(available_dags, vec![(root_cid, "data.txt".to_string())]);
+    }
+
+    #[test]
+    pub fn test_import_path_to_storage_multi_block() {
+        let harness = TestHarness::new();
+
+        let temp_dir = assert_fs::TempDir::new().unwrap();
+        let test_file = temp_dir.child("data.txt");
+        test_file
+            .write_binary(
+                "654684646847616846846876168468416874616846416846846186468464684684648684684"
+                    .repeat(500)
+                    .as_bytes(),
+            )
+            .unwrap();
+        let root_cid = harness.storage.import_path(test_file.path()).unwrap();
+
+        let available_cids = harness.storage.list_available_cids().unwrap();
+
+        assert!(available_cids.contains(&root_cid));
+
+        let available_dags = harness.storage.list_available_dags().unwrap();
+        assert_eq!(available_dags, vec![(root_cid, "data.txt".to_string())]);
     }
 
     #[test]
