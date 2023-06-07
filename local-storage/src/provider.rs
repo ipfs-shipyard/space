@@ -540,12 +540,14 @@ pub mod tests {
             cid: cid_str.to_string(),
             data: vec![],
             links: vec![block_cid.to_string(), other_child_cid.to_string()],
+            filename: None,
         };
 
         let child_block = StoredBlock {
             cid: block_cid.to_string(),
             data: b"101293910101".to_vec(),
             links: vec![],
+            filename: None,
         };
 
         harness.provider.import_block(&block).unwrap();
@@ -558,7 +560,7 @@ pub mod tests {
         let dag_cids = harness.provider.get_all_dag_cids(&cid_str).unwrap();
         assert_eq!(
             dag_cids,
-            vec![cid_str.to_string(), child_cid_str.to_string()]
+            vec![child_cid_str.to_string(), cid_str.to_string()]
         );
     }
 }

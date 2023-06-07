@@ -230,6 +230,7 @@ pub mod tests {
                 cid: b.cid().to_string(),
                 data: b.data().to_vec(),
                 links,
+                filename: None,
             };
 
             stored_blocks.push(stored);
