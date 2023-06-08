@@ -17,7 +17,7 @@ pub struct KuboApi {
 impl KuboApi {
     pub fn new(address: &str) -> Self {
         let client = Client::builder()
-            .timeout(Duration::from_millis(5000))
+            .timeout(Duration::from_millis(120000))
             .build()
             .expect("Failed to build reqwest client");
         KuboApi {
@@ -47,6 +47,7 @@ impl KuboApi {
 
     pub fn get_local_blocks(&self) -> Result<HashSet<String>> {
         let local_refs_addr = format!("{}/refs/local", self.address);
+        info!("Requesting from Kubo:{}", &local_refs_addr);
         let resp: String = self.client.post(local_refs_addr).send()?.text()?;
         let de = Deserializer::from_str(&resp);
         let mut de_stream = de.into_iter::<Value>();

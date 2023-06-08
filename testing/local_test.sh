@@ -6,12 +6,19 @@ then
   exit 4
 fi
 
-killall myceli || true
+kill_all() {
+  for p in myceli controller hyphae
+  do
+    killall ${p} || echo "${p} is stopped"
+  done
+}
+kill_all
 if [ "${1}" = 'die' ]
 then
-  sleep 99
-  killall myceli || true
-  killall controller
+  sleep 999
+  echo -e '\n\n\n\t###\t###\tTop-level timeout!\t###\t###\n\n'
+  kill_all
+  fuser "${0}" | xargs kill
   exit
 fi
 ( "${0}" die 2>/dev/null >/dev/null <&- & ) &
@@ -56,9 +63,37 @@ start_myceli() {
   export c="$1"
   ( cargo run --bin myceli -- "${c}/config.toml" 2>&1 <&- | tee "${c}/log" & ) &
   check_log 'Listening on 0.0.0.0:' ${c}
+  sleep 1
 }
+port_open() {
+  if echo > /dev/tcp/127.0.0.1/${1}
+  then
+    return 0
+  else
+    echo "port ${1} not yet open"
+  fi
+}
+if port_open 5001
+then
+  echo "Port 5001 is already open, assuming ipfs daemon is running."
+else
+  echo "Starting IPFS"
+  ( ipfs daemon <&- 2>/dev/null >/dev/null & ) &
+fi
 start_myceli sat
 start_myceli grnd
+for p in 5001 8765
+do
+  if ! port_open ${p}
+  then
+    sleep 9
+  fi
+done
+for p in 5001 876{5,4}
+do
+  sleep 1
+  port_open ${p}
+done
 
 controller() {
   port=${1}
@@ -74,6 +109,7 @@ transmit() {
   timeout 9 cargo run --bin controller -- 127.0.0.1:${1} transmit-dag "${cid}" 127.0.0.1:${2} 9 | tee log
   for i in {0..9}
   do
+    grep -n "${cid}" log */log
     if sqlite3 ${4}/storage.db "select * from blocks where cid = '${cid}';" | grep --color=always '[a-z]'
     then
       return 0
@@ -168,7 +204,22 @@ controller 8765 export-dag "${cid}" "${o}/exported2"
 
 diff "${o}/"{im,ex}ported2
 
+echo -e '\n\n\t###\tStarting hyphae...\t###\n'
+( ( cargo run --bin hyphae -- grnd/h.toml <&- 2>&1 | tee grnd/h.log & ) & ) &
+echo -e '\nNow waiting for sync to Kubo...\n'
+set -x
+for i in {0..99}
+do
+  if timeout $[ 9 + i ] ipfs block get ${cid}
+  then
+    break
+  else
+    echo "${cid} not yet in Kubo"
+  fi
+done
+ipfs block get ${cid}
+ipfs dag get ${cid} | jq .
+
 echo -e '\n\t###\tDONE\t###\n'
 
-killall myceli
-
+kill_all
