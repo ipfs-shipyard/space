@@ -285,7 +285,17 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             };
             debug!("start dag window session for {cid}");
             // Need to reset the window retries here
-            self.dag_window_session_run(cid, session.window_num, &session.target_addr)?;
+            // Instead of resending the whole window, just send the RequestMissingDagWindowBlocks msg
+            // and then send whichever blocks are missing for the last window in transit
+            let blocks = self.get_dag_window_blocks(cid, session.window_num)?;
+            let blocks = blocks.iter().map(|b| b.cid.to_string()).collect();
+            self.transmit_msg(
+                Message::DataProtocol(DataProtocol::RequestMissingDagWindowBlocks {
+                    cid: cid.to_string(),
+                    blocks,
+                }),
+                &session.target_addr,
+            )?;
             self.start_dag_window_retry_timeout(cid);
         }
 
