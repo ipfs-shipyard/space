@@ -112,8 +112,13 @@ impl Storage {
         self.provider.get_block_by_cid(cid)
     }
 
-    pub fn get_all_dag_cids(&self, cid: &str) -> Result<Vec<String>> {
-        self.provider.get_all_dag_cids(cid)
+    pub fn get_all_dag_cids(
+        &self,
+        cid: &str,
+        offset: Option<u32>,
+        window_size: Option<u32>,
+    ) -> Result<Vec<String>> {
+        self.provider.get_all_dag_cids(cid, offset, window_size)
     }
 
     pub fn get_all_dag_blocks(&self, cid: &str) -> Result<Vec<StoredBlock>> {
@@ -315,7 +320,7 @@ pub mod tests {
         let cid = harness.storage.import_path(test_file.path()).unwrap();
 
         let blocks = harness.storage.get_all_dag_blocks(&cid).unwrap();
-        let cids = harness.storage.get_all_dag_cids(&cid).unwrap();
+        let cids = harness.storage.get_all_dag_cids(&cid, None, None).unwrap();
 
         assert_eq!(blocks.len(), cids.len());
     }
