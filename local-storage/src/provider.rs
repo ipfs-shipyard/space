@@ -22,7 +22,12 @@ pub trait StorageProvider {
         offset: u32,
         window_size: u32,
     ) -> Result<Vec<StoredBlock>>;
-    fn get_all_dag_cids(&self, cid: &str) -> Result<Vec<String>>;
+    fn get_all_dag_cids(
+        &self,
+        cid: &str,
+        offset: Option<u32>,
+        window_size: Option<u32>,
+    ) -> Result<Vec<String>>;
     fn get_all_dag_blocks(&self, cid: &str) -> Result<Vec<StoredBlock>>;
 }
 
@@ -295,20 +300,34 @@ impl StorageProvider for SqliteStorageProvider {
         Ok(blocks)
     }
 
-    fn get_all_dag_cids(&self, cid: &str) -> Result<Vec<String>> {
-        let cids: Vec<String> = self
-            .conn
-            .prepare(
-                "
+    fn get_all_dag_cids(
+        &self,
+        cid: &str,
+        offset: Option<u32>,
+        window_size: Option<u32>,
+    ) -> Result<Vec<String>> {
+        let mut base_query = "
                 WITH RECURSIVE cids(x) AS (
                     VALUES(?1)
                     UNION
                     SELECT block_cid FROM links JOIN cids ON root_cid=x
                 )
-                SELECT x FROM cids;
-            ",
-            )?
-            .query_map([cid], |row| {
+                SELECT x FROM cids
+            "
+        .to_string();
+        let mut params = vec![cid.to_string()];
+        if let Some(offset) = offset {
+            if let Some(window_size) = window_size {
+                base_query.push_str(" LIMIT (?2) OFFSET (?3);");
+                params.push(format!("{window_size}"));
+                params.push(format!("{offset}"));
+            }
+        }
+        let params = params_from_iter(params.into_iter());
+        let cids: Vec<String> = self
+            .conn
+            .prepare(&base_query)?
+            .query_map(params, |row| {
                 let cid_str: String = row.get(0)?;
                 Ok(cid_str)
             })?
