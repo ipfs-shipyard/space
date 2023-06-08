@@ -1,4 +1,11 @@
 #!/bin/bash -e
+
+if ! ( uname | grep Linux )
+then
+  echo "This script only works on linux."
+  exit 4
+fi
+
 killall myceli || true
 if [ "${1}" = 'die' ]
 then
@@ -47,7 +54,7 @@ kill_myceli() {
 start_myceli() {
   kill_myceli "${1}"
   export c="$1"
-  ( /mnt/big/lbl/cargobuild/debug/myceli "${c}/config.toml" 2>&1 <&- | tee "${c}/log" & ) &
+  ( cargo run --bin myceli -- "${c}/config.toml" 2>&1 <&- | tee "${c}/log" & ) &
   check_log 'Listening on 0.0.0.0:' ${c}
 }
 start_myceli sat
