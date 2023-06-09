@@ -111,12 +111,16 @@ pub enum ApplicationAPI {
         cid: String,
         blocks: Vec<String>,
     },
+    /// Requests current version of myceli
     RequestVersion,
+    /// Provides current version of myceli
     #[command(skip)]
     Version {
         version: String,
     },
+    /// Request available DAGs
     RequestAvailableDags,
+    /// Lists available DAGs and corresponding filenames
     #[command(skip)]
     AvailableDags {
         dags: Vec<DagInfo>,

@@ -57,6 +57,7 @@ pub enum DataProtocol {
         cid: String,
         blocks: Vec<String>,
     },
+    // Message to request list of blocks missing from CID sent
     RequestMissingDagBlocks {
         cid: String,
     },

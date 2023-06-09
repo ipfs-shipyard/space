@@ -47,25 +47,19 @@ Milestone five focuses on DAG and block validation
 
 ## Milestone 6
 
-Milestone six focuses on implementing minimum retry methods for reliability.
+Milestone six focuses on implementing retry & resume methods for reliability.
 
 - [x] [**PoC - Define and implement block re-transmissions**](https://github.com/ipfs-shipyard/space/pull/40) - The initial implementation of the block transfer protocol is a very simple one-way stream of DAG blocks. Define a mechanism for detecting missing blocks, requesting transmission of specific blocks, and responding to those requests. Implement in myceli both transmissions and responses.
-- [ ] **MVP v0.6 - Demonstrate block retransmit over radio** - Establish a myceli session over the dev radio link at a speed which ensures minor packet loss and tune the re-transmission mechanism to overcome the packet loss.
+- [x] [**PoC - Implement Connectivity API and Modify data transfer protocol to account for connectedness**](https://github.com/ipfs-shipyard/space/pull/60) - Implement APIs to be used by external systems to indicate if the system is connected, and modify data transfer protocol to pause/resume transfer based on connected state.
+- [x] **MVP v0.6 - Demonstrate block retransmit over radio** - Establish a myceli session over the dev radio link at a speed which ensures minor packet loss and tune the re-transmission mechanism to overcome the packet loss.
 
 ## Milestone 7
 
 Milestone seven focuses beginning integrating myceli with kubo.
 
-- [ ] **PoC - Implement initial myceli to kubo bridge** - Utilize the kubo rpc api to implement a bridge process which syncs blocks received by a myceli node into a kubo node.
-- [ ] **MVP 0.7 - Demonstrate first myceli to kubo integration** - Demonstrate downlinking a dag over the radio to a myceli ground node, syncing that dag to a kubo node, and then viewing the representative file hosted on IPFS.
-## Milestone 8
-
-Milestone seven focuses on APIs for gathering pass/connectedness info, and incorporating that info into the transfer process.
-
-- [ ] **PoC - Implement `Is Connected` and `Next Pass Info` APIs** - Implement APIs to be used by external systems to indicate if the system is connected and to give information about the next pass.
-- [ ] **PoC - Modify data transfer protocol to account for pass/connectedness info** - Update the data transfer protocol to track pass/connectedness information and determine when it should be transmitting data based on known pass information.
-- [ ] **PoC - Implement baseline metrics** - Implement a baseline set of metrics, perhaps [this list](https://github.com/n0-computer/test-plans/tree/main/movethebytes/data-transfer#metrics) suggested by move the bytes, and build into logging of block-ship transmitter and receiver.
-- [ ] **MVP 0.8 - Simulate a "pass" using implemented APIs and demonstrate how data transfer responds**
+- [x] [**PoC - Implement initial myceli to kubo bridge**](https://github.com/ipfs-shipyard/space/pull/44) - Utilize the kubo rpc api to implement a bridge process which syncs blocks received by a myceli node into a kubo node.
+- [ ] **PoC - Implement kubo to public IPFS bridge** - Determine a method for sharing data from a local Kubo node with a publicly accessible IPFS gateway.
+- [ ] **MVP 0.7 - Demonstrate myceli to kubo integration** - Demonstrate downlinking a dag over the radio to a myceli ground node, syncing that dag to a kubo node, and then viewing the representative file hosted on IPFS via a public gateway.
 
 ## Future Epics
 
@@ -83,6 +77,7 @@ All current milestones have been building out MVP-grade software, which will nee
 - Controls and constraints should be built around memory and storage usage.
 - Tests at scale should be run to determine performance limits inside of a variety of realistic simulated environments.
 - Gather and construct a production payload dataset for realistic ground and mission testing.
+- Implement a baseline set of metrics, perhaps [this list](https://github.com/n0-computer/test-plans/tree/main/movethebytes/data-transfer#metrics) suggested by move the bytes, and build into logging of block-ship transmitter and receiver.
 
 ### Integrate Space IPFS with other IPFS
 

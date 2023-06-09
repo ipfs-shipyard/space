@@ -25,9 +25,9 @@ The first step in using `myceli` to transfer data is building it for the raspber
 
 ### Building for the raspberry-pi
 
-Navigate to the `space/myceli` directory and run the following build command:
+Navigate to the root `space` directory and run the following build command:
 
-    $ CROSS_CONFIG=Cross.toml cross build --target armv7-unknown-linux-gnueabihf
+    $ CROSS_CONFIG=Cross.toml cross build --bin myceli --target armv7-unknown-linux-gnueabihf
 
 This will kick off the cross-compiling process for the `myceli` project. After it has completed, you will find the finished binary at `space/target/armv7-unknown-linux-gnueabihf/debug/myceli`. This binary can now be transferred to the raspberry-pi for usage. A typical way to transfer this binary is with `scpp`, like so:
 
@@ -35,9 +35,9 @@ This will kick off the cross-compiling process for the `myceli` project. After i
 
 ### Building for the local computer
 
-Navigate to the `space/myceli` directory and run the following build command:
+Navigate to the root `space` directory and run the following build command:
 
-    $ cargo build
+    $ cargo build --bin myceli
 
 This will kick off the build process for the `myceli` binary. After it has completed, you will find the finished binary at `space/target/debug/myceli`. 
 
@@ -51,11 +51,11 @@ Use ssh to access the raspberry-pi and navigate to the `/home/pi` directory. Sta
 
     $ ./myceli
 
-This command assumes that the pi currently has a radio service running which is downlinking to the address `127.0.0.1:8080`, as specified in the local environment setup guide. 
+This command assumes that the pi currently has a radio service running which is downlinking to the address `127.0.0.1:8001`, as specified in the local environment setup guide. 
 
 A log message should appear indicating that `myceli` is up and listening:
 
-    $ INFO myceli::listener: Listening for messages on 127.0.0.1:8080
+    $ INFO myceli::listener: Listening for messages on 127.0.0.1:8001
 
 ### Running on the local computer
 
@@ -63,20 +63,25 @@ Navigate to the `space/myceli` directory and run the following command:
 
     $ cargo run
 
-This command assumes that the local computer has a radio service running which is downlinking to the address `127.0.0.1:8080`, as specified in the local environment setup guide.
+This command assumes that the local computer has a radio service running which is downlinking to the address `127.0.0.1:8001`, as specified in the local environment setup guide.
 
 A log message should appear indicating that `myceli` is up and listening:
 
-    $ INFO myceli::listener: Listening for messages on 127.0.0.1:8080
+    $ INFO myceli::listener: Listening for messages on 127.0.0.1:8001
 
 ## Configuring Myceli
 
 `myceli` has a few configuration options which ship with default values, or can be tuned to fit system requirements.
 
 Current configuration values and defaults are:
-- `listen_address` - The network address `myceli` will listen on for incoming messages. Defaults to `127.0.0.1:8080`.
+- `listen_address` - The network address `myceli` will listen on for incoming messages. Defaults to `127.0.0.1:8001`.
 - `retry_timeout_duration` - Timeout before `myceli` will retry a dag transfer, measured in milliseconds. The default value is 120_00 or two minutes.
 - `storage_path` - Directory path for `myceli` to use for storage. If this directory does not exist it will be created. Defaults to `storage/` in the process working directory.
+- `mtu` - The MTU (in bytes) used to chunk up messages into UDP packets. This defaults to `512`.
+- `window_size` - DAG transfers are broken up into windows of blocks. This value controls the number of blocks in a window. This defaults to `5` blocks in a window.
+- `block_size` - The size (in bytes) of blocks that a file should be broken up into when importing. This defaults to 3kB or 3072.
+- `chunk_transmit_throttle` - If set, this will cause the UDP transport to throttle or delay by the specified number of milliseconds between chunk transmissions. Defaults to none.
+- `radio_address` - The network address of the radio that myceli should respond to by default, if not set then myceli will respond to the sending address (or address set in relevant request).
 
 These configuration values can be set via a TOML config file which is passed as an argument when running `myceli`.
 
@@ -92,15 +97,15 @@ If this configuration is saved to "myceli.toml", then we would run `myceli mycel
 
 Now that `myceli` has been built and is running on both the raspberry-pi and local computer, commands may be sent to the instances to control them.
 
-Navigate to `space/app-api-cli` and run `cargo build` to build the tool we'll use for interacting with `myceli`. After the `app-api-cli` is built we'll walk through some basic commands.
+Navigate to root `space` dir and run `cargo build --bin controller` to build the tool we'll use for interacting with `myceli`. After the `controller` is built we'll walk through some basic commands.
 
 ### Importing a file
 
-One of the fundamental actions `myceli` can take is importing a file into it's internal IPFS store. Navigate to `space/app-api-cli` and run the following command to import a local file:
+One of the fundamental actions `myceli` can take is importing a file into it's internal IPFS store. Navigate to root `space` dir and run the following command to import a local file:
 
-    $ cargo run -- -l 127.0.0.1:8080 import-file Cargo.toml
+    $ cargo run --bin controller -- -l 127.0.0.1:8001 import-file Cargo.toml
 
-This will send the `ImportFile` command to the local `myceli` instance listening at `127.0.0.1:8080` with the local `Cargo.toml` as the file to import. In this case we'll use the `-l` flag to listen for a response, as `myceli` will respond with the root CID if the file is correctly imported. Here is what the output may look like for a successful file import:
+This will send the `ImportFile` command to the local `myceli` instance listening at `127.0.0.1:8001` with the local `Cargo.toml` as the file to import. In this case we'll use the `-l` flag to listen for a response, as `myceli` will respond with the root CID if the file is correctly imported. Here is what the output may look like for a successful file import:
 
     Transmitting: {"ApplicationAPI":{"ImportFile":{"path":"Cargo.toml"}}}
     ApplicationAPI(FileImported { path: "Cargo.toml", cid: "bafybeicwxyav7jde73wb5svahp53qi5okq2p4bguyflfw6hsbmwbbl4bw4" })
@@ -109,21 +114,21 @@ This will send the `ImportFile` command to the local `myceli` instance listening
 
 Once a file has been imported, and the root CID is known, it is possible to ask the `myceli` instance holding that file in storage to transmit it to another `myceli` instance. In this case we'll transmit from the local computer to the raspberry-pi.
 
-On the local computer, in the `app-api-cli` directory, run the following command:
+On the local computer, in the root `space` directory, run the following command:
 
-    $ cargo run -- 127.0.0.1:8080 transmit-dag [root-cid-here] 127.0.0.1:8081 5
+    $ cargo run --bin controller -- 127.0.0.1:8001 transmit-dag [root-cid-here] 127.0.0.1:8002 5
 
-This will send the `TransmitDag` command to the `myceli` instance listening on `127.0.0.1:8080`, which will ask it to transmit the blocks associated with the specified root CID to `127.0.0.1:8081` with `5` specified as the number of retries. After sending this command you should see several `Transmitting block ...` messages from the local computer's `myceli`, and several `Received block ...` messages from the raspberry-pi's `myceli`.
+This will send the `TransmitDag` command to the `myceli` instance listening on `127.0.0.1:8001`, which will ask it to transmit the blocks associated with the specified root CID to `127.0.0.1:8002` with `5` specified as the number of retries. After sending this command you should see several `Transmitting block ...` messages from the local computer's `myceli`, and several `Received block ...` messages from the raspberry-pi's `myceli`.
 
 ### Validating a dag
 
 After a dag has been transmitted, it must be verified that it is complete and valid at the destination. 
 
-To verify the status of the dag on the raspberry-pi, run the following app-api-cli command:
+To verify the status of the dag on the raspberry-pi, run the following `controller` command:
 
-    $ cargo run -- 127.0.0.1:8081 validate-dag [root-cid-here]
+    $ cargo run --bin controller -- 127.0.0.1:8002 -l validate-dag [root-cid-here]
 
-This will send the `ValidateDag` command to the radio listening at `127.0.0.1:8081`, which will then send it to the `myceli` instance on the raspberry-pi. In this case, the response will appear in the logs for the local computer's `myceli` instance. Check over there for `ValidateDagResponse` and the `result` string. If it says `Dag is valid`, then we know the transfer was complete and valid.
+This will send the `ValidateDag` command to the radio listening at `127.0.0.1:8002`, which will then send it to the `myceli` instance on the raspberry-pi. In this case, the response will appear in the logs for the local computer's `myceli` instance. Check over there for `ValidateDagResponse` and the `result` string. If it says `Dag is valid`, then we know the transfer was complete and valid.
 
 
 ### Exporting a dag
@@ -132,7 +137,7 @@ Once a dag has been transmitted and validated, it can be exported as a file on t
 
 To export the received dag on the raspberry-pi, run the following app-api-cli command:
 
-    $ cargo run -- 127.0.0.1:8081 export-dag [root-cid-here] [/file/system/path]
+    $ cargo run -- 127.0.0.1:8002 export-dag [root-cid-here] [/file/system/path]
 
-This will send the `ExportDag` command to the radio listening at `127.0.0.1:8081`, which will send it to the `myceli` instance on the rasberry-pi. This command includes the specified root cid and path to export to. After the command has been received and executed, you should find a file at the specified path containing the dag data.
+This will send the `ExportDag` command to the radio listening at `127.0.0.1:8002`, which will send it to the `myceli` instance on the rasberry-pi. This command includes the specified root cid and path to export to. After the command has been received and executed, you should find a file at the specified path containing the dag data.
 

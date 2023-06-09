@@ -6,12 +6,12 @@ The myceli application acts as the "node" in this IPFS-for-space project. The cu
 
 Start an instance:
 
-    $ cargo run -- 127.0.0.1:8080
+    $ cargo run --bin myceli
 
-This command will start a `myceli` instance which is listening at `127.0.0.1:8080` and will respond to any valid messages received on that address.
+This command will start a `myceli` instance which is listening at `127.0.0.1:8001` and will respond to any valid messages received on that address.
 
-Next, send a command. The `app-api-cli` utility is a CLI tool used to generate and send messages to `myceli` instances. For example, we can ask the running instance which blocks it currently has available:
+Next, send a command. The `controller` utility is a CLI tool used to generate and send messages to `myceli` instances. For example, we can ask the running instance which blocks it currently has available:
 
-    $ cd app-api-cli && cargo run -- -l 127.0.0.1:8080 request-available-blocks
+    $ cargo run --bin controller -- -l 127.0.0.1:8001 request-available-blocks
 
-This will send a `RequestAvailableBlocks` message to the instance listening at `127.0.0.1:8080` and display the response when it is received.
+This will send a `RequestAvailableBlocks` message to the instance listening at `127.0.0.1:8001` and display the response when it is received.

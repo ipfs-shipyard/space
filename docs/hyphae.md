@@ -9,8 +9,8 @@ After building from source, or downloading a binary, `hyphae` can be run with no
     $ hyphae
 
 Starting hyphae with no config file will run with a few default settings: 
-- Looking for `myceli` at `127.0.0.1:8080`
-- Using an MTU of 60 when communicating with `myceli`
+- Looking for `myceli` at `127.0.0.1:8001`
+- Using an MTU of 512 when communicating with `myceli`
 - Looking for `kubo` at `127.0.0.1:5001`
 - Syncing data every 10 seconds
 
@@ -21,7 +21,7 @@ Every ten seconds, `hyphae` will query `myceli` for it's available blocks, query
 `hypahe` has a few configuration options which ship with default values, or can be tuned to fit system requirements.
 
 Current configuration values and defaults are:
-- `myceli_address` - The network address of the `myceli` instance. Defaults to `127.0.0.1:8080`.
+- `myceli_address` - The network address of the `myceli` instance. Defaults to `127.0.0.1:8001`.
 - `kubo_address` - The network address of the `kubo` instance. Defaults to `127.0.0.1:5001`.
 - `sync_interval` - Duration in milliseconds between sync operations. Defaults to 10_000 ms.
 - `mtu` - The MTU used when chunking messages to/from `myceli`
@@ -30,8 +30,8 @@ These configuration values can be set via a TOML config file which is passed as 
 
 Here is an example configuration file:
 
-    myceli_address="127.0.0.1:9090"
-    kubo_address="127.0.0.1:600"
+    myceli_address="127.0.0.1:8002"
+    kubo_address="127.0.0.1:8200"
     sync_interval=30_000
     mtu=1024
 

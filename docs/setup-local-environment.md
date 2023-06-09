@@ -38,12 +38,12 @@ This will cover the setup of the udp-to-radio service.
 1. Build the radio service with `cargo build`.
 1. Start the radio service with following parameters:
 
-    $ cargo run -- --uplink-address 127.0.0.1:8081 --downlink-address 127.0.0.1:8080 --serial-device /dev/radio-dev-path
+    $ cargo run -- --uplink-address 127.0.0.1:8002 --downlink-address 127.0.0.1:8001 --serial-device /dev/radio-dev-path
 
-This command configures the radio service to listen for data to uplink on the socket address `127.0.0.1:8081`, and to downlink any radio data received to the socket address `127.0.0.1:8080`. Upon starting the service should output something like this:
+This command configures the radio service to listen for data to uplink on the socket address `127.0.0.1:8002`, and to downlink any radio data received to the socket address `127.0.0.1:8001`. Upon starting the service should output something like this:
 
-    UDP Uplink on:  127.0.0.1:8081
-    UPD Downlink on: 127.0.0.1:8080
+    UDP Uplink on:  127.0.0.1:8002
+    UPD Downlink on: 127.0.0.1:8001
     Serial radio on: /dev/radio-dev-path
 
 The desktop side of the radio service is now up and ready for communication!
@@ -76,12 +76,12 @@ This will cover the installation of the udp-to-radio service.
 1. Access the raspberry pi with an SSH or serial console and navigate to the `/home/pi` directory.
 1. Start the radio service with the following parameters:
 
-    $ python3 service.py 127.0.0.1:8081 127.0.0.1:8080
+    $ python3 service.py 127.0.0.1:8002 127.0.0.1:8001
 
-This command configures the radio service to listen for data to uplink on the socket address `127.0.0.1:8081`, and to downlink any radio data received to the socket address `127.0.0.1:8080`. Upon starting the service should output something like this:
+This command configures the radio service to listen for data to uplink on the socket address `127.0.0.1:8002`, and to downlink any radio data received to the socket address `127.0.0.1:8001`. Upon starting the service should output something like this:
 
-    Listening for UDP traffic on 127.0.0.1:8081
-    Downlinking radio data to 127.0.0.1:8080
+    Listening for UDP traffic on 127.0.0.1:8002
+    Downlinking radio data to 127.0.0.1:8001
 
 The raspberry pi side of the radio service is now up and ready for communication!
 
@@ -91,10 +91,10 @@ Once the desktop and raspberry pi environments have been setup and have their ra
 
 On the raspberry pi, run this command to setup a netcat instance listening for traffic from the radio:
 
-    $ nc -ul 127.0.0.1 8080
+    $ nc -ul 127.0.0.1 8001
 
 On the computer, run this command to send a UDP packet over the radio:
 
-    $ echo "Hello Radio" | nc -u -w 0 127.0.0.1 8081
+    $ echo "Hello Radio" | nc -u -w 0 127.0.0.1 8002
 
 The text "Hello Radio" should appear on the raspberry pi console!

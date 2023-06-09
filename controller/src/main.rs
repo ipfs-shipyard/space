@@ -9,14 +9,29 @@ use transports::{Transport, UdpTransport, MAX_MTU};
 #[clap(version, long_about = None, propagate_version = true)]
 #[clap(about = "Control a Myceli instance")]
 pub struct Cli {
+    #[arg(help = "The network address that a myceli instance is listening on")]
     instance_addr: String,
-    #[arg(short, long, default_value = "512")]
+    #[arg(
+        short,
+        long,
+        default_value = "512",
+        help = "The MTU (in bytes) that messages are chunked into."
+    )]
     mtu: u16,
-    #[arg(short, long)]
+    #[arg(
+        short,
+        long,
+        help = "An optional delay (in milliseconds) between sending chunks."
+    )]
     chunk_transmit_throttle: Option<u32>,
-    #[arg(short, long)]
+    #[arg(short, long, help = "Listens for a response from the myceli instance")]
     listen_mode: bool,
-    #[arg(short, long, default_value = "0.0.0.0:8090")]
+    #[arg(
+        short,
+        long,
+        default_value = "0.0.0.0:8200",
+        help = "An optional network address to bind to"
+    )]
     bind_address: String,
     #[clap(subcommand)]
     command: ApplicationAPI,
