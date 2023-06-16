@@ -8,11 +8,13 @@ jobs:
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - id: rust
+        run: echo "toolchain=$(cat rust-toolchain)" >> $GITHUB_OUTPUT
+        shell: bash
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ steps.rust.outputs.toolchain }}
           components: clippy
       - name: Run clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all
+        run: cargo clippy --all
+        shell: bash

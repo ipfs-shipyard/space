@@ -9,18 +9,16 @@ jobs:
   start_release:
     name: build_release
     runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
       - uses: actions/checkout@v3
       - name: Create release
-        uses: actions/create-release@v1
+        uses: ncipollo/release-action@v1
         id: create_release
         with:
           draft: true
           prerelease: false
-          release_name: ${{ github.ref_name }}
-          tag_name: ${{ github.ref }}
+          name: ${{ github.ref_name }}
+          tag: ${{ github.ref }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
   build_upload_artifacts:
@@ -38,9 +36,7 @@ jobs:
           ]
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+      - uses: dtolnay/rust-toolchain@stable
       - name: install cross
         run: cargo install cross --git https://github.com/cross-rs/cross
       - name: clean cargo
@@ -50,14 +46,14 @@ jobs:
       - name: Archive binary
         run: tar -czvf ${{ matrix.project }}-${{ matrix.target }}.tar.gz -C ./target/${{ matrix.target }}/release ${{ matrix.project }}
       - name: upload binary
-        uses: actions/upload-release-asset@v1
+        run: |
+          mv "$SOURCE_PATH" "$TARGET_PATH"
+          gh release upload "$GITHUB_REF" "$TARGET_PATH"
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ needs.start_release.outputs.upload_url }}
-          asset_path: ./${{ matrix.project }}-${{ matrix.target }}.tar.gz
-          asset_name: ${{ matrix.project }}-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
-          asset_content_type: application/gzip
+          SOURCE_PATH: ./${{ matrix.project }}-${{ matrix.target }}.tar.gz
+          TARGET_PATH: ./${{ matrix.project }}-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+        shell: bash
 
   build_upload_docker:
     needs: [start_release]

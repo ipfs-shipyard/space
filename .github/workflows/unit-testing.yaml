@@ -8,15 +8,10 @@ jobs:
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+      - uses: dtolnay/rust-toolchain@stable
       - name: Build workspace
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
+        run: cargo build --release
+        shell: bash
       - name: Test workspace
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
+        run: cargo test
+        shell: bash
