@@ -3,7 +3,7 @@ members = [
     "controller",
     "hyphae",
     "ipfs-unixfs",
-    "local-dev-environment/desktop/radio-service",
+    "local-dev-environment/desktop/rfm69-service",
     "local-storage",
     "messages",
     "myceli",
