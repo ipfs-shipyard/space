@@ -19,7 +19,7 @@ repository = "https://github.com/ipfs-shipyard/space"
 
 [workspace.dependencies]
 # External deps
-anyhow = { version = "1.0.71", default-features = false, features = ["backtrace"] }
+anyhow = { version = "1.0.71", default-features = false, features = ["backtrace", "std"] }
 assert_fs = "1.0.13"
 async-recursion = "1.0.4"
 async-stream = "0.3.3"

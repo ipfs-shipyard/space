@@ -28,6 +28,8 @@ impl Message {
         hex_str
     }
 
+    // All functions below are helper functions for generating messages
+
     pub fn available_blocks(cids: Vec<String>) -> Self {
         Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids })
     }

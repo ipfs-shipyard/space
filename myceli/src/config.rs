@@ -8,13 +8,22 @@ use transports::MAX_MTU;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
+    // The network address myceli will listen on for incoming messages.
     pub listen_address: String,
+    // The timeout before retrying a dag transfer, measured in milliseconds. This is reset every window.
     pub retry_timeout_duration: u64,
+    // Directory path for myceli to use for storage.
     pub storage_path: String,
+    // The MTU (in bytes) used to chunk up messages into UDP packets. Maximum value is 3072.
     pub mtu: u16,
+    // The number of blocks to send in each window of a DAG transfer.
     pub window_size: u32,
+    // The size (in bytes) of the blocks that a file is broken up into when imported.
     pub block_size: u32,
+    // The number of milliseconds to wait between sending chunks of a DAG transfer, optional.
     pub chunk_transmit_throttle: Option<u32>,
+    // The network address of the radio that myceli should respond to by default, if not set then
+    // myceli will respond to the sending address (or address set in relevant request).
     pub radio_address: Option<String>,
 }
 
@@ -22,7 +31,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             // Default listening address
-            listen_address: "0.0.0.0:8080".to_string(),
+            listen_address: "0.0.0.0:8001".to_string(),
             // Default retry timeout of 120_000 ms = 120 s = 2 minutes
             retry_timeout_duration: 120_000,
             // Default storage dir
