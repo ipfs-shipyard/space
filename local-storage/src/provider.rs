@@ -75,10 +75,6 @@ impl SqliteStorageProvider {
             "CREATE INDEX IF NOT EXISTS links_root_cid on links(root_cid)",
             (),
         )?;
-        self.conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS links_block_cid on links(block_cid)",
-            (),
-        )?;
 
         Ok(())
     }
