@@ -24,7 +24,7 @@ pub(crate) fn verify_dag(blocks: &[StoredBlock]) -> Result<()> {
             let link_cid = link.as_str();
             // If the linked CID exists in our collection of blocks, set that CID's degree
             if let Some(degree) = indegree.get_mut(&link_cid) {
-                *degree = 1;
+                *degree += 1;
             } else {
                 bail!("Links do not match blocks");
             }

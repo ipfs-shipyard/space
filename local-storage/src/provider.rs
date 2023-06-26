@@ -75,10 +75,6 @@ impl SqliteStorageProvider {
             "CREATE INDEX IF NOT EXISTS links_root_cid on links(root_cid)",
             (),
         )?;
-        self.conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS links_block_cid on links(block_cid)",
-            (),
-        )?;
 
         Ok(())
     }
@@ -147,6 +143,7 @@ impl StorageProvider for SqliteStorageProvider {
         // 2. import_block_links - Handles correctly updating links store to account for block
         // If root block with links, then insert links
         if !block.links.is_empty() {
+            self.conn.execute("DELETE FROM links WHERE root_cid = ?1", [&block.cid])?;
             for link_cid in &block.links {
                 let mut maybe_block_id = None;
                 if let Ok(block_id) = self.conn.query_row(
