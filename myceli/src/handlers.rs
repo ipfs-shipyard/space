@@ -97,20 +97,33 @@ pub mod tests {
 
     impl TestHarness {
         pub fn new() -> Self {
+            Self::with_block_size(BLOCK_SIZE)
+        }
+        pub fn with_block_size(block_sz: u32) -> Self {
             let db_dir = TempDir::new().unwrap();
             let db_path = db_dir.child("storage.db");
             let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
             provider.setup().unwrap();
-            let storage = Rc::new(Storage::new(Box::new(provider), BLOCK_SIZE));
+            let storage = Rc::new(Storage::new(Box::new(provider), block_sz));
             TestHarness { storage, db_dir }
         }
 
         pub fn generate_file(&self) -> Result<String> {
             let mut data = Vec::<u8>::new();
             data.resize(256 * 5, 1);
+            // let chunk_bytes : usize = BLOCK_SIZE.try_into().unwrap();
+            // data.resize( chunk_bytes* 174 * 174 +9, 1);
             thread_rng().fill_bytes(&mut data);
 
             let tmp_file = self.db_dir.child("test.file");
+            tmp_file.write_binary(&data)?;
+            Ok(tmp_file.path().to_str().unwrap().to_owned())
+        }
+
+        pub fn zero_file(&self) -> Result<String> {
+            let mut data = Vec::<u8>::new();
+            data.resize(1024*600, 0);
+            let tmp_file = self.db_dir.child("zero.file");
             tmp_file.write_binary(&data)?;
             Ok(tmp_file.path().to_str().unwrap().to_owned())
         }
@@ -259,5 +272,27 @@ pub mod tests {
         };
 
         assert_eq!(missing_blocks, vec![missing_block.cid]);
+    }
+    #[test]
+    pub fn test_import_zero_file() {
+        let harness = TestHarness::new();
+
+        // let test_file_path = harness.generate_file().unwrap();
+        let test_file_path = harness.zero_file().unwrap();
+
+        let imported_file_cid = match import_file(&test_file_path, harness.storage.clone()) {
+            Ok(Message::ApplicationAPI(ApplicationAPI::FileImported { cid, .. })) => cid,
+            other => panic!("ImportFile returned wrong response {other:?}"),
+        };
+
+        let (validated_cid, result) = match validate_dag(&imported_file_cid, harness.storage) {
+            Ok(Message::ApplicationAPI(ApplicationAPI::ValidateDagResponse { cid, result })) => {
+                (cid, result)
+            }
+            other => panic!("ValidateDag returned wrong response {other:?}"),
+        };
+
+        assert_eq!(imported_file_cid, validated_cid);
+        assert_eq!(result, "Dag is valid");
     }
 }
