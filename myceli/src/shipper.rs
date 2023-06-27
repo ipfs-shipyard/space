@@ -78,6 +78,10 @@ impl<T: Transport + Send + 'static> Shipper<T> {
     pub fn receive_msg_loop(&mut self) {
         loop {
             if let Ok((message, sender_addr)) = self.receiver.recv() {
+                if let DataProtocol::Terminate = message {
+                    info!("Shipper received terminate signal, exiting");
+                    break;
+                }
                 if let Err(e) = self.receive(message, &sender_addr) {
                     error!("{e:?}");
                 }
@@ -181,18 +185,42 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                     self.resume_all_dag_window_sessions()?;
                 }
             }
+            DataProtocol::ResumePriorDagTransmit {
+                cid,
+                num_received_cids,
+                target_addr,
+                retries,
+            } => {
+                // Create dag transmit session with cid, target_addr, retries
+                // Determine last window using last_received_cid and set in dag transmission session
+                // If connected then kick off transmission for session
+                let window_num = (num_received_cids / self.window_size);
+                // self.storage
+                //     .find_dag_window(&cid, &last_received_cid, self.window_size)?;
+                self.create_dag_window_session(&cid, retries, &target_addr, window_num);
+                if *self.connected.lock().unwrap() {
+                    self.resume_dag_window_session(&cid)?;
+                }
+            }
+            DataProtocol::Terminate => {}
         }
         Ok(())
     }
 
     // Helper function for adding a new session to the session list
-    fn open_dag_window_session(&mut self, cid: &str, retries: u8, target_addr: &str) {
+    fn create_dag_window_session(
+        &mut self,
+        cid: &str,
+        retries: u8,
+        target_addr: &str,
+        window_num: u32,
+    ) {
         self.window_sessions
             .entry(cid.to_string())
             .or_insert(WindowSession {
                 max_retries: retries,
                 remaining_window_retries: retries,
-                window_num: 0,
+                window_num,
                 target_addr: target_addr.to_string(),
             });
     }
@@ -310,10 +338,10 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         if *self.connected.lock().unwrap() {
             self.dag_window_session_run(cid, 0, target_addr)?;
             let retries = if retries == 0 { 0 } else { retries - 1 };
-            self.open_dag_window_session(cid, retries, target_addr);
+            self.create_dag_window_session(cid, retries, target_addr, 0);
             self.start_dag_window_retry_timeout(cid);
         } else {
-            self.open_dag_window_session(cid, retries, target_addr);
+            self.create_dag_window_session(cid, retries, target_addr, 0);
         }
 
         Ok(())

@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use local_storage::storage::Storage;
 use messages::{ApplicationAPI, DagInfo, DataProtocol, Message};
 use std::path::PathBuf;
@@ -75,6 +75,11 @@ pub fn get_available_dags(storage: Rc<Storage>) -> Result<Message> {
     Ok(Message::ApplicationAPI(ApplicationAPI::AvailableDags {
         dags: local_dags,
     }))
+}
+
+pub fn get_last_dag_cid(cid: &str, storage: Rc<Storage>) -> Result<String> {
+    let last_dag_cid = storage.get_last_dag_cid(cid)?;
+    Ok(last_dag_cid)
 }
 
 #[cfg(test)]

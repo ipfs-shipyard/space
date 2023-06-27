@@ -7,6 +7,7 @@ members = [
     "local-storage",
     "messages",
     "myceli",
+    "testing/testing-scenarios",
     "transports"
 ]
 
@@ -57,4 +58,5 @@ tracing-subscriber = { version = "0.3.14", default-features = false, features = 
 ipfs-unixfs = { path = "ipfs-unixfs" }
 local-storage = { path = "local-storage" }
 messages = { path = "messages" }
+myceli = { path = "myceli" }
 transports = { path = "transports" }
