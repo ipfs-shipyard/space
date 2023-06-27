@@ -38,6 +38,7 @@ impl Storage {
             Ok(blocks)
         });
         let blocks = blocks?;
+        info!("FileBuilder found {} blocks in {path:?}", blocks.len());
         let mut root_cid: Option<String> = None;
 
         blocks.iter().for_each(|b| {
@@ -66,6 +67,7 @@ impl Storage {
         if blocks.len() == 1 {
             if let Some(first) = blocks.first() {
                 root_cid = Some(first.cid().to_string());
+                info!("set final root {root_cid:?}");
             }
         }
         if let Some(root_cid) = root_cid {
@@ -144,6 +146,29 @@ impl Storage {
         self.provider
             .get_dag_blocks_by_window(cid, offset, window_size)
     }
+
+    pub fn get_last_dag_cid(&self, cid: &str) -> Result<String> {
+        let dag_cids = self.get_all_dag_cids(cid)?;
+        match dag_cids.last() {
+            Some(cid) => Ok(cid.to_owned()),
+            None => bail!("No last cid found for dag {cid}"),
+        }
+    }
+
+    // Given a root CID, a number of CIDs, approximate the window we should be in
+    // pub fn find_dag_window(&self, root: &str, cid_count: u32, window_size: u32) -> Result<u32> {
+
+    //     let all_cids = self.get_all_dag_cids(root)?;
+    //     let chunks = all_cids.chunks(window_size as usize);
+    //     let mut window_num = 0;
+    //     for c in chunks {
+    //         if c.contains(&child.to_string()) {
+    //             return Ok(window_num);
+    //         }
+    //         window_num += 1;
+    //     }
+    //     bail!("Failed to find child cid {child} in dag {root}");
+    // }
 }
 
 #[cfg(test)]
@@ -172,6 +197,45 @@ pub mod tests {
                 _db_dir: db_dir,
             }
         }
+    }
+
+    fn generate_stored_blocks(num_blocks: u16) -> Result<Vec<StoredBlock>> {
+        const CHUNK_SIZE: u16 = 20;
+        let data_size = CHUNK_SIZE * num_blocks;
+        let mut data = Vec::<u8>::new();
+        data.resize(data_size.into(), 1);
+        thread_rng().fill_bytes(&mut data);
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let blocks = rt.block_on(async {
+            let file: File = FileBuilder::new()
+                .content_bytes(data)
+                .name("testfile")
+                .fixed_chunker(CHUNK_SIZE.into())
+                .build()
+                .await
+                .unwrap();
+            let blocks: Vec<_> = file.encode().await.unwrap().try_collect().await.unwrap();
+            blocks
+        });
+        let mut stored_blocks = vec![];
+
+        blocks.iter().for_each(|b| {
+            let links = b
+                .links()
+                .iter()
+                .map(|c| c.to_string())
+                .collect::<Vec<String>>();
+            let stored = StoredBlock {
+                cid: b.cid().to_string(),
+                data: b.data().to_vec(),
+                links,
+            };
+
+            stored_blocks.push(stored);
+        });
+
+        Ok(stored_blocks)
     }
 
     #[test]
@@ -318,6 +382,38 @@ pub mod tests {
         let cids = harness.storage.get_all_dag_cids(&cid).unwrap();
 
         assert_eq!(blocks.len(), cids.len());
+    }
+
+    #[test]
+    pub fn test_get_all_dag_cids() {
+        let harness = TestHarness::new();
+
+        let mut dag_blocks = generate_stored_blocks(50).unwrap();
+        let total_block_count = dag_blocks.len();
+
+        let root = dag_blocks.pop().unwrap();
+
+        harness.storage.import_block(&root).unwrap();
+
+        let dag_cids = harness.storage.get_all_dag_cids(&root.cid).unwrap();
+        assert_eq!(dag_cids.len(), 1);
+
+        for _ in (1..10) {
+            harness
+                .storage
+                .import_block(&dag_blocks.pop().unwrap())
+                .unwrap();
+        }
+
+        let dag_cids = harness.storage.get_all_dag_cids(&root.cid).unwrap();
+        assert_eq!(dag_cids.len(), 10);
+
+        while let Some(block) = dag_blocks.pop() {
+            harness.storage.import_block(&block).unwrap()
+        }
+
+        let dag_cids = harness.storage.get_all_dag_cids(&root.cid).unwrap();
+        assert_eq!(dag_cids.len(), total_block_count);
     }
 
     // TODO: duplicated data is not being handled correctly right now, need to fix this

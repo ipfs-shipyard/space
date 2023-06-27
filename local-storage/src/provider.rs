@@ -303,9 +303,9 @@ impl StorageProvider for SqliteStorageProvider {
                 WITH RECURSIVE cids(x) AS (
                     VALUES(?1)
                     UNION
-                    SELECT block_cid FROM links JOIN cids ON root_cid=x
+                    SELECT block_cid FROM links JOIN cids ON root_cid=x WHERE block_id IS NOT null
                 )
-                SELECT x FROM cids;
+                SELECT cid FROM blocks WHERE cid in cids
             ",
             )?
             .query_map([cid], |row| {
@@ -522,6 +522,43 @@ pub mod tests {
                 .unwrap()
                 .len(),
             0
+        );
+    }
+
+    #[test]
+    pub fn test_verify_get_all_cids() {
+        let harness = TestHarness::new();
+
+        let cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(b"00"));
+        let cid_str = cid.to_string();
+        let block_cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(b"11"));
+        let child_cid_str = block_cid.to_string();
+
+        let other_child_cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(b"11"));
+
+        let block = StoredBlock {
+            cid: cid_str.to_string(),
+            data: vec![],
+            links: vec![block_cid.to_string(), other_child_cid.to_string()],
+        };
+
+        let child_block = StoredBlock {
+            cid: block_cid.to_string(),
+            data: b"101293910101".to_vec(),
+            links: vec![],
+        };
+
+        harness.provider.import_block(&block).unwrap();
+
+        let dag_cids = harness.provider.get_all_dag_cids(&cid_str).unwrap();
+        assert_eq!(dag_cids, vec![cid_str.to_string()]);
+
+        harness.provider.import_block(&child_block).unwrap();
+
+        let dag_cids = harness.provider.get_all_dag_cids(&cid_str).unwrap();
+        assert_eq!(
+            dag_cids,
+            vec![cid_str.to_string(), child_cid_str.to_string()]
         );
     }
 }

@@ -82,9 +82,21 @@ pub enum ApplicationAPI {
     },
     // Resumes the transmission of all dags which may be paused
     ResumeTransmitAllDags,
+    // Resumes the transmission of a dag from a prior session, given the last received CID
+    // for determining where to restart the transmission
+    ResumePriorDagTransmit {
+        cid: String,
+        num_received_cids: u32,
+        retries: u8,
+    },
     /// Listens on address for data and writes out files received
     Receive {
         listen_addr: String,
+    },
+    /// Commands a node to request another node at target_addr to resume dag transfer
+    RequestResumeDagTransfer {
+        cid: String,
+        target_addr: String,
     },
     /// Request Available Blocks
     RequestAvailableBlocks,
@@ -125,6 +137,8 @@ pub enum ApplicationAPI {
     AvailableDags {
         dags: Vec<DagInfo>,
     },
+    /// Asks IPFS instance to terminate
+    Terminate,
     // TODO: Implement later
     // Information about the next pass used for calculating
     // data transfer parameters

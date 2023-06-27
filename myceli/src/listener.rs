@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
-use std::thread::spawn;
+use std::thread::{spawn, JoinHandle};
 use tracing::{debug, error, info};
 use transports::Transport;
 
@@ -19,6 +19,7 @@ pub struct Listener<T> {
     transport: Arc<T>,
     connected: Arc<Mutex<bool>>,
     radio_address: Option<String>,
+    shipper_handle: Option<JoinHandle<()>>,
 }
 
 impl<T: Transport + Send + 'static> Listener<T> {
@@ -39,6 +40,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
             transport,
             connected: Arc::new(Mutex::new(true)),
             radio_address,
+            shipper_handle: None,
         })
     }
 
@@ -55,7 +57,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
         let shipper_transport = Arc::clone(&self.transport);
         let initial_connected = Arc::clone(&self.connected);
         let shipper_radio = self.radio_address.clone();
-        spawn(move || {
+        self.shipper_handle = Some(spawn(move || {
             let mut shipper = Shipper::new(
                 &shipper_storage_path,
                 shipper_receiver,
@@ -69,7 +71,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
             )
             .expect("Shipper creation failed");
             shipper.receive_msg_loop();
-        });
+        }));
 
         loop {
             match self.transport.receive() {
@@ -79,7 +81,14 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     } else {
                         sender_addr.to_owned()
                     };
-                    match self.handle_message(message, &target_addr, shipper_sender.clone()) {
+                    match self.handle_message(message, &sender_addr, shipper_sender.clone()) {
+                        Ok(Some(Message::ApplicationAPI(ApplicationAPI::Terminate))) => {
+                            info!("Received termination command, exiting listener");
+                            if let Some(handle) = self.shipper_handle.take() {
+                                handle.join().unwrap();
+                            }
+                            return Ok(());
+                        }
                         Ok(Some(resp)) => {
                             if let Err(e) = self.transmit_response(resp, &target_addr) {
                                 error!("TransmitResponse error: {e}");
@@ -215,6 +224,43 @@ impl<T: Transport + Send + 'static> Listener<T> {
             }
             Message::ApplicationAPI(ApplicationAPI::RequestAvailableDags) => {
                 Some(handlers::get_available_dags(self.storage.clone())?)
+            }
+            Message::ApplicationAPI(ApplicationAPI::Terminate) => {
+                shipper_sender.send((DataProtocol::Terminate, sender_addr.to_string()))?;
+                Some(Message::ApplicationAPI(ApplicationAPI::Terminate))
+            }
+            Message::ApplicationAPI(ApplicationAPI::RequestResumeDagTransfer {
+                cid,
+                target_addr,
+            }) => {
+                let all_cids = self.storage.get_all_dag_cids(&cid)?;
+                println!("found cids for {cid}, {all_cids:?}");
+                let num_received_cids = self.storage.get_all_dag_cids(&cid)?.len() as u32;
+                self.transmit_response(
+                    Message::ApplicationAPI(ApplicationAPI::ResumePriorDagTransmit {
+                        cid,
+                        num_received_cids,
+                        retries: 5,
+                    }),
+                    &target_addr,
+                )?;
+                None
+            }
+            Message::ApplicationAPI(ApplicationAPI::ResumePriorDagTransmit {
+                cid,
+                num_received_cids,
+                retries,
+            }) => {
+                shipper_sender.send((
+                    DataProtocol::ResumePriorDagTransmit {
+                        cid,
+                        num_received_cids,
+                        target_addr: sender_addr.to_string(),
+                        retries,
+                    },
+                    sender_addr.to_string(),
+                ))?;
+                None
             }
             // Default case for valid messages which don't have handling code implemented yet
             message => {

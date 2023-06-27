@@ -45,6 +45,14 @@ pub enum DataProtocol {
         target_addr: String,
         retries: u8,
     },
+    // Resumes the transmission of a dag which isn't currently tracked in sessions
+    // This accounts for resuming after restarting of transmitter
+    ResumePriorDagTransmit {
+        cid: String,
+        num_received_cids: u32,
+        target_addr: String,
+        retries: u8,
+    },
     // Resumes the transmission of a dag which may have run out of retries or
     // paused due to connectivity lost
     ResumeTransmitDag {
@@ -66,4 +74,6 @@ pub enum DataProtocol {
         cid: String,
         blocks: Vec<String>,
     },
+    // Used by listener to terminate shipper on program exit
+    Terminate,
 }
