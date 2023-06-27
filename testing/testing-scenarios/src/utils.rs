@@ -138,10 +138,12 @@ impl TestController {
     }
 
     pub fn send_and_recv(&mut self, target_addr: &str, message: Message) -> Message {
+        println!("\n\t#\tSending a msg to {}, will expect a response: {:?}\n", target_addr, &message);
         self.send_msg(message, target_addr);
         let mut retries = 0;
         loop {
             if let Ok(msg) = self.recv_msg() {
+                println!("\t#\tGot the expected response: {:?}\n\n", &msg);
                 return msg;
             }
             if retries > 50 {

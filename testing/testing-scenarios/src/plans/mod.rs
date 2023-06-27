@@ -326,6 +326,7 @@ pub fn test_transmit_20mb_dag_over_5s_passes_transmitter_off() {
     receiver.start().unwrap();
 
     let test_file_path = transmitter.generate_file(1024 * 1024 * 20).unwrap();
+    println!("Sending import-file {} to transmitter", &test_file_path);
     let resp = controller.send_and_recv(
         &transmitter.listen_addr,
         Message::import_file(&test_file_path),
@@ -356,7 +357,7 @@ pub fn test_transmit_20mb_dag_over_5s_passes_transmitter_off() {
             Message::ApplicationAPI(ApplicationAPI::SetConnected { connected: false }),
             &receiver.listen_addr,
         );
-
+        println!("Sending validate-dag");
         // Check if transfer completed in prior pass
         let resp = controller.send_and_recv(
             &receiver.listen_addr,
@@ -394,18 +395,18 @@ pub fn test_transmit_20mb_dag_over_5s_passes_transmitter_off() {
         // wait for 5s pass
         sleep(Duration::from_secs(5));
     }
-
+    println!("Sending request-available-blocks to receiver");
     // Verify complete file was passes complete
     let receiver_blocks =
         controller.send_and_recv(&receiver.listen_addr, Message::request_available_blocks());
-
+    println!("Sending request-available-blocks to transmitter");
     let transmitter_blocks = controller.send_and_recv(
         &transmitter.listen_addr,
         Message::request_available_blocks(),
     );
 
     // assert_eq!(receiver_blocks.len(), transmitter_blocks.len());
-
+    println!("Sending validate-dag to receiver");
     let receiver_validate_dag = controller.send_and_recv(
         &receiver.listen_addr,
         Message::ApplicationAPI(ApplicationAPI::ValidateDag {
