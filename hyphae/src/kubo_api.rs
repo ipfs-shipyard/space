@@ -1,13 +1,15 @@
-use anyhow::Result;
 use messages::TransmissionBlock;
 use reqwest::blocking::multipart;
 use reqwest::blocking::Client;
-use serde_json::{Deserializer, Value};
-use std::collections::HashSet;
+use serde_json::Value;
 use std::time::Duration;
-use tracing::{info, warn};
+use serde::Deserialize;
+use tracing::{warn, debug};
+use thiserror::Error;
 
 use crate::DAG_PB_CODEC_PREFIX;
+
+type Result<T> = std::result::Result<T, KuboError>;
 
 pub struct KuboApi {
     address: String,
@@ -17,7 +19,7 @@ pub struct KuboApi {
 impl KuboApi {
     pub fn new(address: &str) -> Self {
         let client = Client::builder()
-            .timeout(Duration::from_millis(5000))
+            .timeout(Duration::from_secs(30))
             .build()
             .expect("Failed to build reqwest client");
         KuboApi {
@@ -35,7 +37,7 @@ impl KuboApi {
             .and_then(|resp| resp.json::<Value>())
         {
             Ok(resp) => {
-                info!("Found Kubo version {}", resp["Version"]);
+                debug!("Found Kubo version {}", resp["Version"]);
                 true
             }
             Err(e) => {
@@ -45,33 +47,137 @@ impl KuboApi {
         }
     }
 
-    pub fn get_local_blocks(&self) -> Result<HashSet<String>> {
-        let local_refs_addr = format!("{}/refs/local", self.address);
-        let resp: String = self.client.post(local_refs_addr).send()?.text()?;
-        let de = Deserializer::from_str(&resp);
-        let mut de_stream = de.into_iter::<Value>();
-        let mut cids = HashSet::new();
-        while let Some(Ok(next)) = de_stream.next() {
-            if let Some(cid) = next.get("Ref").and_then(|c| c.as_str()) {
-                cids.insert(cid.to_owned());
-            }
+    pub fn put_block(&self, cid: &str, block: &TransmissionBlock) -> Result<PutResp> {
+        let mut put_block_url = format!("{}/block/put?pin=true", self.address);
+        if cid.starts_with(DAG_PB_CODEC_PREFIX) {
+            put_block_url.push_str("&cid-codec=dag-pb");
         }
-        Ok(cids)
-    }
-
-    pub fn put_block(&self, cid: &str, block: &TransmissionBlock) -> Result<()> {
-        let put_block_url = if cid.starts_with(DAG_PB_CODEC_PREFIX) {
-            format!("{}/block/put?cid-codec=dag-pb", self.address)
-        } else {
-            format!("{}/block/put", self.address)
-        };
         let form_part = multipart::Part::bytes(block.data.to_owned());
         let form = multipart::Form::new().part("data", form_part);
-        self.client
+        let resp = self.client
             .post(put_block_url)
             .multipart(form)
             .send()?
-            .bytes()?;
-        Ok(())
+            .json::<PutResp>()?;
+        Ok(resp)
     }
+    pub fn list_keys(&self) -> Result<KeyListResp> {
+        let url = format!("{}/key/list", self.address);
+        let resp = self.client
+            .post(url)
+            .send()?
+            .json::<KeyListResp>()?;
+        Ok(resp)
+    }
+    pub fn resolve_name(&self, name: &str) -> Result<String> {
+        let url = format!("{}/name/resolve?arg={}", self.address, name);
+        let resp = self.client
+            .post(url)
+            .send()?
+            .json::<NameResolutionResponse>()?;
+        if resp.code == Some(0) {
+            Err(KuboError::NoSuchName(name.to_string()))
+        } else if let Some(path) = resp.path {
+            Ok(path)
+        } else if let (Some(code), Some(msg)) = (resp.code, resp.message) {
+            Err(KuboError::ServerError(code, msg))
+        } else {
+            Err(KuboError::Unknown)
+        }
+    }
+    pub fn publish(&self, key_name: &str, target_ipfs_path: &str) -> Result<()> {
+        let url = format!("{}/name/publish?arg={}&lifetime=168h&ttl=48h&key={}", self.address, target_ipfs_path, key_name);
+        let resp = self.client
+            .post(url)
+            .send()?
+            .json::<GenericResponse>()?;
+        if resp.message.is_some() {
+            Err(KuboError::ServerError(resp.code.unwrap_or(0), resp.message.unwrap()))
+        } else {
+            Ok(())
+        }
+    }
+    pub fn get(&self, ipfs_path: &str) -> Result<Vec<u8>> {
+        let url = format!("{}/cat?arg={}&progress=false", self.address, ipfs_path);
+        let resp = self.client
+            .post(url)
+            .send()?
+            .bytes()?
+            .to_vec();
+        Ok(resp)
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+pub struct GenericResponse {
+    #[serde(alias = "Key")]
+    pub key: Option<String>,
+
+    #[serde(alias = "Size")]
+    pub size: Option<u64>,
+
+    #[serde(alias = "Id")]
+    pub id: Option<String>,
+
+    #[serde(alias = "Name")]
+    pub name: Option<String>,
+
+    #[serde(alias = "Keys")]
+    pub keys: Option<Vec<Key>>,
+
+    #[serde(alias = "Path")]
+    path: Option<String>,
+
+    #[serde(alias = "Message")]
+    message: Option<String>,
+
+    #[serde(alias = "Code")]
+    code: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PutResp {
+    #[serde(alias = "Key")]
+    pub key: String,
+    #[serde(alias = "Size")]
+    pub size: u64,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Key {
+    #[serde(alias = "Id")]
+    pub id: String,
+    #[serde(alias = "Name")]
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct KeyListResp {
+    #[serde(alias = "Keys")]
+    pub keys: Vec<Key>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NameResolutionResponse {
+    #[serde(alias = "Path")]
+    path: Option<String>,
+    #[serde(alias = "Message")]
+    message: Option<String>,
+    #[serde(alias = "Code")]
+    code: Option<i64>,
+}
+
+#[derive(Debug, Error)]
+pub enum KuboError {
+    // #[error("JSON response {0} did not contain expected key {1}")]
+    // JsonKeyMissing(String, String),
+    #[error("Networking problem {0}")]
+    ReqwestProblem(#[from] reqwest::Error),
+    #[error("Could not resolve the name {0}")]
+    NoSuchName(String),
+    #[error("The RPC API returned an error: {0}={1}")]
+    ServerError(i64, String),
+    #[error("Something went wrong.")]
+    Unknown,
 }

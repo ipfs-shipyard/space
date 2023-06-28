@@ -25,7 +25,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            myceli_address: "0.0.0.0:8000".to_string(),
+            myceli_address: "0.0.0.0:8001".to_string(),
             listen_to_myceli_address: "0.0.0.0:8100".to_string(),
             kubo_address: "0.0.0.0:5001".to_string(),
             sync_interval: 10_000,
