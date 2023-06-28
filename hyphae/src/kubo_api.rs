@@ -5,7 +5,7 @@ use reqwest::blocking::Client;
 use serde_json::Value;
 use std::time::Duration;
 use serde::Deserialize;
-use tracing::{info, warn, debug};
+use tracing::{ warn, debug};
 
 use crate::DAG_PB_CODEC_PREFIX;
 
@@ -20,6 +20,18 @@ pub struct PutResp {
     pub key: String,
     #[serde(alias = "Size")]
     pub size: u64,
+}
+#[derive(Debug,Deserialize,Clone)]
+pub struct Key {
+    #[serde(alias = "Id")]
+    pub id: String,
+    #[serde(alias = "Name")]
+    pub name: String,
+}
+#[derive(Debug,Deserialize)]
+pub struct KeyListResp {
+    #[serde(alias = "Keys")]
+    pub keys: Vec<Key>
 }
 
 impl KuboApi {
@@ -64,9 +76,15 @@ impl KuboApi {
             .post(put_block_url)
             .multipart(form)
             .send()?
-            // .bytes();
             .json::<PutResp>()?;
-        // info!("Synced: {:?}", &resp);
+        Ok(resp)
+    }
+    pub fn list_keys(&self) -> Result<KeyListResp> {
+        let  put_block_url = format!("{}/key/list", self.address);
+        let resp = self.client
+            .post(put_block_url)
+            .send()?
+            .json::<KeyListResp>()?;
         Ok(resp)
     }
 }
