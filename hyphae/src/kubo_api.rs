@@ -2,16 +2,24 @@ use anyhow::Result;
 use messages::TransmissionBlock;
 use reqwest::blocking::multipart;
 use reqwest::blocking::Client;
-use serde_json::{Deserializer, Value};
-use std::collections::HashSet;
+use serde_json::Value;
 use std::time::Duration;
-use tracing::{info, warn};
+use serde::Deserialize;
+use tracing::{info, warn, debug};
 
 use crate::DAG_PB_CODEC_PREFIX;
 
 pub struct KuboApi {
     address: String,
     client: Client,
+}
+
+#[derive(Debug,Deserialize)]
+pub struct PutResp {
+    #[serde(alias = "Key")]
+    pub key: String,
+    #[serde(alias = "Size")]
+    pub size: u64,
 }
 
 impl KuboApi {
@@ -35,7 +43,7 @@ impl KuboApi {
             .and_then(|resp| resp.json::<Value>())
         {
             Ok(resp) => {
-                info!("Found Kubo version {}", resp["Version"]);
+                debug!("Found Kubo version {}", resp["Version"]);
                 true
             }
             Err(e) => {
@@ -45,33 +53,20 @@ impl KuboApi {
         }
     }
 
-    pub fn get_local_blocks(&self) -> Result<HashSet<String>> {
-        let local_refs_addr = format!("{}/refs/local", self.address);
-        let resp: String = self.client.post(local_refs_addr).send()?.text()?;
-        let de = Deserializer::from_str(&resp);
-        let mut de_stream = de.into_iter::<Value>();
-        let mut cids = HashSet::new();
-        while let Some(Ok(next)) = de_stream.next() {
-            if let Some(cid) = next.get("Ref").and_then(|c| c.as_str()) {
-                cids.insert(cid.to_owned());
-            }
+    pub fn put_block(&self, cid: &str, block: &TransmissionBlock) -> Result<PutResp> {
+        let mut put_block_url = format!("{}/block/put?pin=true", self.address);
+        if cid.starts_with(DAG_PB_CODEC_PREFIX) {
+            put_block_url.push_str("&cid-codec=dag-pb");
         }
-        Ok(cids)
-    }
-
-    pub fn put_block(&self, cid: &str, block: &TransmissionBlock) -> Result<()> {
-        let put_block_url = if cid.starts_with(DAG_PB_CODEC_PREFIX) {
-            format!("{}/block/put?cid-codec=dag-pb", self.address)
-        } else {
-            format!("{}/block/put", self.address)
-        };
         let form_part = multipart::Part::bytes(block.data.to_owned());
         let form = multipart::Form::new().part("data", form_part);
-        self.client
+        let resp = self.client
             .post(put_block_url)
             .multipart(form)
             .send()?
-            .bytes()?;
-        Ok(())
+            // .bytes();
+            .json::<PutResp>()?;
+        // info!("Synced: {:?}", &resp);
+        Ok(resp)
     }
 }

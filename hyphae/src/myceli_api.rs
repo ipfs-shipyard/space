@@ -1,7 +1,8 @@
 use anyhow::{bail, Result};
 use messages::{ApplicationAPI, DataProtocol, Message, TransmissionBlock};
 use std::rc::Rc;
-use tracing::{info, warn};
+use std::time::Duration;
+use tracing::{info, warn, debug};
 use transports::{Transport, UdpTransport};
 
 pub struct MyceliApi {
@@ -17,11 +18,12 @@ impl MyceliApi {
         mtu: u16,
         chunk_transmit_throttle: Option<u32>,
     ) -> Result<Self> {
-        let transport = Rc::new(UdpTransport::new(
+        let mut transport = Rc::new(UdpTransport::new(
             listen_address,
             mtu,
             chunk_transmit_throttle,
         )?);
+        Rc::get_mut(&mut transport).unwrap().set_read_timeout(Some(Duration::from_secs(30))).expect("Error setting read timeout");
         Ok(MyceliApi {
             address: myceli_address.to_string(),
             listen_address: listen_address.to_string(),
@@ -44,7 +46,7 @@ impl MyceliApi {
             .and_then(|_| self.recv_msg())
         {
             Ok(Message::ApplicationAPI(ApplicationAPI::Version { version })) => {
-                info!("Found myceli version {version}");
+                debug!("Found myceli version {version}");
                 true
             }
             Ok(other_msg) => {
