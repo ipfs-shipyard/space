@@ -27,7 +27,7 @@ struct Args {
 
 fn get_missing_blocks(
     mut myceli_blocks: Vec<String>,
-    kubo_blocks: HashSet<String>,
+    kubo_blocks: &HashSet<String>,
 ) -> HashSet<String> {
     // Kubo will take blocks with the dag-pb codec and convert them to raw blocks, which throws off the diff.
     // So we will replace any cids with the dag-pb codec with a raw codec for the purposes of the diff,
@@ -45,21 +45,30 @@ fn get_missing_blocks(
     let mut missing_blocks = myceli_blocks.sub(&kubo_blocks);
     for cid in raw_from_dag_pb_blocks {
         if missing_blocks.contains(&cid) {
+            let as_dag = cid.replace(RAW_CODEC_PREFIX, DAG_PB_CODEC_PREFIX);
+            if !  kubo_blocks.contains(&as_dag) {
+                missing_blocks.insert(as_dag);
+            }
             missing_blocks.remove(&cid);
-            missing_blocks.insert(cid.replace(RAW_CODEC_PREFIX, DAG_PB_CODEC_PREFIX));
         }
     }
     missing_blocks
 }
 
-fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi) -> Result<()> {
-    info!("Begin syncing myceli blocks to kubo");
+fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi, kubo_blocks: &mut HashSet<String>) -> Result<()> {
     let myceli_blocks = myceli.get_available_blocks()?;
-    let kubo_blocks = kubo.get_local_blocks()?;
     let missing_blocks = get_missing_blocks(myceli_blocks, kubo_blocks);
+    if missing_blocks.is_empty() {
+        return Ok(());
+    }
+    info!("Begin syncing {} myceli blocks to kubo", missing_blocks.len());
     let mut all_blocks_synced = true;
 
     for cid in missing_blocks {
+        if kubo_blocks.contains(&cid) {
+            warn!("Set subtraction somehow missed {}", &cid);
+            continue;
+        }
         info!("Syncing block {cid} from myceli to kubo");
         let block = match myceli.get_block(&cid) {
             Ok(block) => block,
@@ -70,14 +79,21 @@ fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi) -> Result<()> {
                 continue;
             }
         };
-        if let Err(e) = kubo.put_block(&cid, &block) {
-            error!("Error sending block {cid} to kubo: {e}");
-            all_blocks_synced = false;
+        match kubo.put_block(&cid, &block) {
+            Err(e) =>  {
+                error!("Error sending block {cid} to kubo: {e}");
+                all_blocks_synced = false;
+            },
+            Ok(resp) => {
+                info!("Synchronized {} as {}", &cid, resp.key);
+                kubo_blocks.insert(cid);
+                kubo_blocks.insert(resp.key);
+            }
         }
     }
 
     if all_blocks_synced {
-        info!("All myceli blocks are synced");
+        info!("All myceli blocks are synced.");
     } else {
         warn!("Not all myceli blocks were able to sync, check logs for specific errors");
     }
@@ -109,10 +125,10 @@ fn main() -> Result<()> {
         cfg.chunk_transmit_throttle,
     )
     .expect("Failed to create MyceliAPi");
-
+    let mut synced = HashSet::default();
     loop {
         if kubo.check_alive() && myceli.check_alive() {
-            if let Err(e) = sync_blocks(&kubo, &myceli) {
+            if let Err(e) = sync_blocks(&kubo, &myceli, &mut synced) {
                 error!("Error during blocks sync: {e}");
             }
         }
