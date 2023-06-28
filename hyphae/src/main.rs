@@ -1,6 +1,7 @@
 mod config;
 mod kubo_api;
 mod myceli_api;
+mod indexer;
 
 use std::ops::Sub;
 
@@ -9,10 +10,11 @@ use clap::Parser;
 use config::Config;
 use kubo_api::KuboApi;
 use myceli_api::MyceliApi;
+use indexer::Indexer;
 use std::collections::HashSet;
 use std::thread::sleep;
 use std::time::Duration;
-use tracing::{error, info, metadata::LevelFilter, warn};
+use tracing::{error, info, metadata::LevelFilter, warn, debug};
 use tracing_subscriber::{fmt, EnvFilter};
 
 pub const RAW_CODEC_PREFIX: &str = "bafkrei";
@@ -55,13 +57,13 @@ fn get_missing_blocks(
     missing_blocks
 }
 
-fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi, kubo_blocks: &mut HashSet<String>) -> Result<()> {
+fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi, kubo_blocks: &mut HashSet<String>) -> Result<bool> {
     let myceli_blocks = myceli.get_available_blocks()?;
     let missing_blocks = get_missing_blocks(myceli_blocks, kubo_blocks);
     if missing_blocks.is_empty() {
-        return Ok(());
+        return Ok(true);
     }
-    info!("Begin syncing {} myceli blocks to kubo", missing_blocks.len());
+    debug!("Begin syncing {} myceli blocks to kubo", missing_blocks.len());
     let mut all_blocks_synced = true;
 
     for cid in missing_blocks {
@@ -88,6 +90,7 @@ fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi, kubo_blocks: &mut HashSet<Str
                 info!("Synchronized {} as {}", &cid, resp.key);
                 kubo_blocks.insert(cid);
                 kubo_blocks.insert(resp.key);
+                return Ok(false);
             }
         }
     }
@@ -97,8 +100,7 @@ fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi, kubo_blocks: &mut HashSet<Str
     } else {
         warn!("Not all myceli blocks were able to sync, check logs for specific errors");
     }
-
-    Ok(())
+    Ok(false)
 }
 
 fn main() -> Result<()> {
@@ -125,11 +127,14 @@ fn main() -> Result<()> {
         cfg.chunk_transmit_throttle,
     )
     .expect("Failed to create MyceliAPi");
+    let mut indexer = Indexer::new(&kubo);
     let mut synced = HashSet::default();
     loop {
         if kubo.check_alive() && myceli.check_alive() {
-            if let Err(e) = sync_blocks(&kubo, &myceli, &mut synced) {
-                error!("Error during blocks sync: {e}");
+            match sync_blocks(&kubo, &myceli, &mut synced) {
+                Err(e) => error!("Error during blocks sync: {e}"),
+                Ok(true) => {indexer.step().ok();},
+                Ok(false) => debug!("Synchronization happened."),
             }
         }
         sleep(Duration::from_millis(cfg.sync_interval));

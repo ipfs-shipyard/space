@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 use messages::{ApplicationAPI, DataProtocol, Message, TransmissionBlock};
 use std::rc::Rc;
 use std::time::Duration;
-use tracing::{info, warn, debug};
+use tracing::{ warn, debug};
 use transports::{Transport, UdpTransport};
 
 pub struct MyceliApi {
