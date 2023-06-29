@@ -41,7 +41,7 @@ fn get_missing_blocks(
 
 fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi, kubo_blocks: &mut Synchronized) -> Result<bool> {
     let myceli_blocks = myceli.get_available_blocks()?;
-    let missing_blocks = get_missing_blocks(myceli_blocks, &kubo_blocks);
+    let missing_blocks = get_missing_blocks(myceli_blocks, kubo_blocks);
     if missing_blocks.is_empty() {
         return Ok(false);
     }
