@@ -69,7 +69,7 @@ impl MyceliApi {
                     return Ok(cids);
                 }
                 Ok(other) => {
-                    warn!("Received wrong resp for RequestAvailableBlocks: {other:?}");
+                    debug!("Received wrong resp for RequestAvailableBlocks: {other:?}");
                 }
                 Err(e) => {
                     bail!("Error trying to fetch available block list: {e:?}");

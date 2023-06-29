@@ -24,13 +24,14 @@ pub(crate) struct Indexer<'a> {
 
 type When = DateTime<Utc>;
 
-#[derive(Debug, Clone, Ord, Eq, PartialEq, Default)]
+#[derive(Debug, Clone, Eq, PartialEq, Default)]
 struct File {
     name: String,
     cid: String,
     when: When,
 }
 
+#[derive(Default)]
 struct Index {
     files: BTreeMap<String, File>,
     arch: Option<Box<Index>>,
@@ -52,7 +53,7 @@ impl<'a> Indexer<'a> {
             let known = self.kubo.list_keys()?.keys;
             debug!("All keys Kubo currently knows: {:?}", &known);
             for pref in PREFERRED_KEYS_IN_ORDER {
-                self.key = known.iter().find(|k| k.name == *pref).map(|k| k.clone());
+                self.key = known.iter().find(|k| k.name == *pref).cloned();
                 if self.key.is_some() {
                     info!("Will be publishing to IPNS name '{}'", & pref);
                     break;
@@ -159,7 +160,7 @@ impl<'a> Indexer<'a> {
         }
     }
     fn parse_html(&mut self, files: &BTreeMap<String, TransmissionBlock>) {
-        for line in self.html.split("\n") {
+        for line in self.html.split('\n') {
             if line.starts_with(DATA_LINE_START) {
                 let mut toks = line.split_whitespace();
                 toks.next();//discard open comment
@@ -188,7 +189,7 @@ impl<'a> Indexer<'a> {
                 } else {
                     info!("Missing old file={:?}", &f);
                     if self.main.arch.is_none() {
-                        self.main.arch = Some(Box::new(Index::default()));
+                        self.main.arch = Some(Box::default());
                     }
                     self.main.arch.as_mut().unwrap().files.insert(f.cid.clone(), f);
                 }
@@ -201,7 +202,7 @@ impl<'a> Indexer<'a> {
 impl Index {
     fn is_archived(&self, cid: &String) -> bool {
         if let Some(a) = &self.arch {
-            (*a).files.contains_key(cid) || (*a).is_archived(cid)
+            a.files.contains_key(cid) || (*a).is_archived(cid)
         } else {
             false
         }
@@ -273,22 +274,28 @@ impl Index {
     }
 }
 
-impl Default for Index {
-    fn default() -> Self {
-        Self {
-            files: BTreeMap::new(),
-            arch: None,
+impl Ord for File {
+    fn cmp(&self, other: &Self) -> Ordering {
+        for o in &[self.when.cmp(&other.when).reverse(), self.name.cmp(&other.name)] {
+            if !o.is_eq() {
+                return *o;
+            }
         }
+        self.cid.cmp(&other.cid)
     }
 }
 
 impl PartialOrd<File> for File {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        for o in &[self.when.cmp(&other.when).reverse(), self.name.cmp(&other.name)] {
-            if !o.is_eq() {
-                return Some(*o);
-            }
+        Some(self.cmp(other))
+        /*
+    for o in &[self.when.cmp(&other.when).reverse(), self.name.cmp(&other.name)] {
+        if !o.is_eq() {
+            return Some(*o);
         }
-        Some(self.cid.cmp(&other.cid))
+    }
+    Some(self.cid.cmp(&other.cid))
+
+         */
     }
 }
