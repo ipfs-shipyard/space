@@ -17,18 +17,18 @@ use crate::{
     types::{Block, Link, LinkRef, Links, PbLinks},
 };
 
-pub(crate) mod unixfs_pb {
+pub mod unixfs_pb {
     #![allow(clippy::all)]
     include!(concat!(env!("OUT_DIR"), "/unixfs_pb.rs"));
 }
 
-pub(crate) mod dag_pb {
+pub mod dag_pb {
     #![allow(clippy::all)]
     include!(concat!(env!("OUT_DIR"), "/merkledag_pb.rs"));
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, num_enum::IntoPrimitive, num_enum::TryFromPrimitive,
+Debug, Clone, Copy, PartialEq, Eq, num_enum::IntoPrimitive, num_enum::TryFromPrimitive,
 )]
 #[repr(i32)]
 pub enum DataType {
@@ -71,8 +71,8 @@ pub enum UnixfsNode {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Node {
-    pub(super) outer: dag_pb::PbNode,
-    pub(super) inner: unixfs_pb::Data,
+    pub outer: dag_pb::PbNode,
+    pub inner: unixfs_pb::Data,
 }
 
 impl Node {

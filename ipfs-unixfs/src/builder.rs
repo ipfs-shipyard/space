@@ -33,7 +33,7 @@ pub enum Directory {
 }
 
 /// A basic / flat directory
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 pub struct BasicDirectory {
     name: String,
     entries: Vec<Entry>,
@@ -187,7 +187,7 @@ impl File {
         current.expect("must not be empty")
     }
 
-    pub async fn encode(self) -> Result<impl Stream<Item = Result<Block>>> {
+    pub async fn encode(self) -> Result<impl Stream<Item=Result<Block>>> {
         let reader = match self.content {
             Content::Path(path) => {
                 let f = tokio::fs::File::open(path).await?;
@@ -571,7 +571,7 @@ impl SymlinkBuilder {
     }
 }
 
-pub(crate) fn encode_unixfs_pb(
+pub fn encode_unixfs_pb(
     inner: &unixfs_pb::Data,
     links: Vec<dag_pb::PbLink>,
 ) -> Result<dag_pb::PbNode> {
@@ -596,7 +596,7 @@ pub struct Config {
     pub chunker: Option<ChunkerConfig>,
 }
 
-#[async_recursion(?Send)]
+#[async_recursion(? Send)]
 async fn make_dir_from_path<P: Into<PathBuf>>(
     path: P,
     chunker: Chunker,
@@ -745,6 +745,7 @@ mod tests {
         // TODO: check content
         Ok(())
     }
+
     #[cfg(not(windows))]
     #[tokio::test]
     async fn symlink_from_disk_test() -> Result<()> {
@@ -760,6 +761,7 @@ mod tests {
         assert_eq!(expect_target, got_symlink.target);
         Ok(())
     }
+
     #[tokio::test]
     async fn test_builder_stream_large() -> Result<()> {
         // Create a directory
@@ -887,7 +889,7 @@ mod tests {
             Chunker::Fixed(chunker::Fixed::default()),
             DEFAULT_DEGREE,
         )
-        .await?;
+            .await?;
 
         let basic_entries = |dir: Directory| match dir {
             Directory::Basic(basic) => basic.entries,
