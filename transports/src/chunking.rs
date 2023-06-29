@@ -5,6 +5,7 @@ use messages::Message;
 use parity_scale_codec::{Decode, Encode};
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
 use serde::Serialize;
+use tracing::error;
 
 // This MessageContainer struct is intended to be used inside of the chunkers
 // for verification of Message integrity during the chunking/assembly process
@@ -40,7 +41,12 @@ impl MessageContainer {
     pub fn verify_cid(&self) -> Result<bool> {
         let original_cid = Cid::try_from(self.cid.clone())?;
         let regenerated_cid = MessageContainer::gen_cid(&self.message.to_bytes());
-        Ok(original_cid == regenerated_cid)
+        if original_cid == regenerated_cid {
+            Ok(true)
+        } else {
+            error!("CID mismatch: provided={} deduced={}", original_cid.to_string(), regenerated_cid.to_string());
+            Ok(false)
+        }
     }
 
     pub fn from_bytes(bytes: &mut &[u8]) -> Result<Self> {

@@ -68,7 +68,7 @@ fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi, kubo_blocks: &mut Synchronize
                 if cid == resp.key {
                     info!("Synchronized {}", &cid);
                 } else {
-                    error!("Synchronized {} as {}", &cid, resp.key);
+                    error!("Synchronizing {} actually resulted in {}", &cid, resp.key);
                 }
                 kubo_blocks.insert(cid, block.clone());
                 sleep(Duration::from_millis(500));
@@ -102,7 +102,7 @@ fn main() -> Result<()> {
     info!("Connecting to kubo@{}", cfg.kubo_address);
 
     let kubo = KuboApi::new(&cfg.kubo_address);
-    let myceli = MyceliApi::new(
+    let mut myceli = MyceliApi::new(
         &cfg.myceli_address,
         &cfg.listen_to_myceli_address,
         cfg.myceli_mtu,
@@ -111,6 +111,7 @@ fn main() -> Result<()> {
         .expect("Failed to create MyceliAPi");
     let mut indexer = Indexer::new(&kubo);
     let mut synced = Synchronized::default();
+    let mut miss = 0;
     loop {
         if kubo.check_alive() && myceli.check_alive() {
             match sync_blocks(&kubo, &myceli, &mut synced) {
@@ -122,6 +123,17 @@ fn main() -> Result<()> {
                     }
                 }
             }
+        } else if miss > 9 {
+            info!("Connection to Myceli failed {} times, resetting.", miss);
+            miss = 0;
+            myceli = MyceliApi::new(
+                &cfg.myceli_address,
+                &cfg.listen_to_myceli_address,
+                cfg.myceli_mtu,
+                cfg.chunk_transmit_throttle,
+            ).expect("Failed to reset MyceliAPi");
+        } else {
+            miss += 1;
         }
         sleep(Duration::from_millis(cfg.sync_interval));
     }

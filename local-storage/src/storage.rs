@@ -72,8 +72,7 @@ impl Storage {
             if let Some(filename) = path.file_name().and_then(|p| p.to_str()) {
                 self.provider.name_dag(&root_cid, filename)?;
             }
-            info!("Imported path {} to {}", path.display(), root_cid);
-            info!("Importing {} blocks for {root_cid}", blocks.len());
+            info!("Imported path {} to {} in {} blocks", path.display(), root_cid, blocks.len());
             Ok(root_cid)
         } else {
             bail!("Failed to find root block for {path:?}")
@@ -81,9 +80,9 @@ impl Storage {
     }
 
     pub fn export_cid(&self, cid: &str, path: &Path) -> Result<()> {
-        info!("Exporting {cid} to {}", path.display());
         let check_missing_blocks = self.get_missing_dag_blocks(cid)?;
         if !check_missing_blocks.is_empty() {
+            error!("Can't export {cid} to {}, because we're missing blocks: {:?}", path.display(), check_missing_blocks);
             bail!(StorageError::DagIncomplete(cid.to_string()))
         }
         // Fetch all blocks tied to links under given cid
@@ -97,6 +96,7 @@ impl Storage {
             }
         }
         output_file.sync_all()?;
+        info!("Exported {cid} to {}", path.display());
         Ok(())
     }
 
