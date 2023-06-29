@@ -55,7 +55,6 @@ impl MyceliApi {
             }
             Err(e) => {
                 warn!("Could not contact myceli at this time: {e}");
-                std::thread::sleep(Duration::from_secs(1));
                 false
             }
         }
@@ -75,7 +74,6 @@ impl MyceliApi {
                     bail!("Error trying to fetch available block list: {e:?}");
                 }
             }
-            std::thread::sleep(Duration::from_secs(1));
         }
         Err(MyceliError::GiveUp.into())
     }
@@ -94,7 +92,6 @@ impl MyceliApi {
                     warn!("Received wrong resp for RequestBlock: {other:?}");
                 }
             }
-            std::thread::sleep(Duration::from_secs(1));
         }
         Err(MyceliError::GiveUp.into())
     }

@@ -59,19 +59,14 @@ fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi, kubo_blocks: &mut Synchronize
                 continue;
             }
         };
-        match kubo.put_block(&cid, &block) {
+        match kubo.put_block(&cid, &block, true) {
             Err(e) => {
                 error!("Error sending block {cid} to kubo: {e}");
                 all_blocks_synced = false;
             }
             Ok(resp) => {
-                if cid == resp.key {
-                    info!("Synchronized {}", &cid);
-                } else {
-                    error!("Synchronized {} as {}", &cid, resp.key);
-                }
+                debug!("Synchronized {} and got {:?}", &cid, resp);
                 kubo_blocks.insert(cid, block.clone());
-                sleep(Duration::from_millis(500));
             }
         }
     }
@@ -102,26 +97,39 @@ fn main() -> Result<()> {
     info!("Connecting to kubo@{}", cfg.kubo_address);
 
     let kubo = KuboApi::new(&cfg.kubo_address);
-    let myceli = MyceliApi::new(
-        &cfg.myceli_address,
-        &cfg.listen_to_myceli_address,
-        cfg.myceli_mtu,
-        cfg.chunk_transmit_throttle,
-    )
-        .expect("Failed to create MyceliAPi");
+    let mut myceli_api: Option<MyceliApi> = None;
     let mut indexer = Indexer::new(&kubo);
     let mut synced = Synchronized::default();
+    let mut miss = 0;
     loop {
-        if kubo.check_alive() && myceli.check_alive() {
-            match sync_blocks(&kubo, &myceli, &mut synced) {
-                Err(e) => error!("Error during blocks sync: {e}"),
-                Ok(true) => debug!("Synchronization happened."),
-                Ok(false) => {
-                    if let Err(e) = indexer.step(&synced) {
-                        error!("Trouble indexing: {:?}", &e);
+        if let Some(myceli) = &myceli_api {
+            if kubo.check_alive() && myceli.check_alive() {
+                match sync_blocks(&kubo, myceli, &mut synced) {
+                    Err(e) => error!("Error during blocks sync: {e}"),
+                    Ok(true) => debug!("Synchronization happened."),
+                    Ok(false) => {
+                        if let Err(e) = indexer.step(&synced) {
+                            error!("Trouble indexing: {:?}", &e);
+                        } else {
+                            miss = 0;
+                        }
                     }
                 }
+            } else if miss > 9 {
+                info!("Connection to Myceli failed {} times, resetting.", miss);
+                myceli_api = None;
+                miss = 0;
+            } else {
+                miss += 1;
             }
+        } else {
+            info!("Creating a Myceli API object...");
+            myceli_api = MyceliApi::new(
+                &cfg.myceli_address,
+                &cfg.listen_to_myceli_address,
+                cfg.myceli_mtu,
+                cfg.chunk_transmit_throttle,
+            ).ok();
         }
         sleep(Duration::from_millis(cfg.sync_interval));
     }

@@ -47,10 +47,18 @@ impl KuboApi {
         }
     }
 
-    pub fn put_block(&self, cid: &str, block: &TransmissionBlock) -> Result<PutResp> {
-        let mut put_block_url = format!("{}/block/put?pin=true", self.address);
+    pub fn put_block(&self, cid: &str, block: &TransmissionBlock, pin: bool) -> Result<PutResp> {
+        let mut put_block_url = format!("{}/block/put", self.address);
+        if pin {
+            put_block_url.push_str("?pin=true")
+        }
         if cid.starts_with(DAG_PB_CODEC_PREFIX) {
-            put_block_url.push_str("&cid-codec=dag-pb");
+            if pin {
+                put_block_url.push('&');
+            } else {
+                put_block_url.push('?');
+            }
+            put_block_url.push_str("cid-codec=dag-pb");
         }
         let form_part = multipart::Part::bytes(block.data.to_owned());
         let form = multipart::Form::new().part("data", form_part);
