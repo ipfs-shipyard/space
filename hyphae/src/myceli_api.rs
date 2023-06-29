@@ -1,8 +1,8 @@
 use anyhow::{bail, Result};
 use messages::{ApplicationAPI, DataProtocol, Message, TransmissionBlock};
-use std::rc::Rc;
-use std::time::Duration;
-use tracing::{ warn, debug};
+use std::{rc::Rc, time::Duration};
+use thiserror::Error;
+use tracing::{warn, debug};
 use transports::{Transport, UdpTransport};
 
 pub struct MyceliApi {
@@ -50,11 +50,12 @@ impl MyceliApi {
                 true
             }
             Ok(other_msg) => {
-                warn!("Myceli returned wrong version message: {other_msg:?}");
-                false
+                debug!("Got unexpected message, which nonetheless proves myceli is alive: {:?}", other_msg);
+                true
             }
             Err(e) => {
                 warn!("Could not contact myceli at this time: {e}");
+                std::thread::sleep(Duration::from_secs(1));
                 false
             }
         }
@@ -62,24 +63,45 @@ impl MyceliApi {
 
     pub fn get_available_blocks(&self) -> Result<Vec<String>> {
         self.send_msg(Message::request_available_blocks())?;
-        match self.recv_msg() {
-            Ok(Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids })) => Ok(cids),
-            other => {
-                // TODO: extract out to macro which logs and bails
-                warn!("Received wrong resp for RequestAvailableBlocks: {other:?}");
-                bail!("Received wrong resp for RequestAvailableBlocks: {other:?}")
+        for _ in 0..9 {
+            match self.recv_msg() {
+                Ok(Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids })) => {
+                    return Ok(cids);
+                }
+                Ok(other) => {
+                    warn!("Received wrong resp for RequestAvailableBlocks: {other:?}");
+                }
+                Err(e) => {
+                    bail!("Error trying to fetch available block list: {e:?}");
+                }
             }
+            std::thread::sleep(Duration::from_secs(1));
         }
+        Err(MyceliError::GiveUp.into())
     }
 
     pub fn get_block(&self, cid: &str) -> Result<TransmissionBlock> {
         self.send_msg(Message::transmit_block(cid, &self.listen_address))?;
-        match self.recv_msg() {
-            Ok(Message::DataProtocol(DataProtocol::Block(block))) => Ok(block),
-            other => {
-                warn!("Received wrong resp for RequestBlock: {other:?}");
-                bail!("Received wrong resp for RequestBlock: {other:?}")
+        for _ in 0..9 {
+            match self.recv_msg() {
+                Ok(Message::DataProtocol(DataProtocol::Block(block))) => {
+                    return Ok(block);
+                }
+                Err(e) => {
+                    bail!("Received wrong resp for RequestBlock: {e:?}");
+                }
+                other => {
+                    warn!("Received wrong resp for RequestBlock: {other:?}");
+                }
             }
+            std::thread::sleep(Duration::from_secs(1));
         }
+        Err(MyceliError::GiveUp.into())
     }
+}
+
+#[derive(Debug, Error)]
+pub enum MyceliError {
+    #[error("Got the wrong response too many times")]
+    GiveUp,
 }
