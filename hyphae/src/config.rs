@@ -28,7 +28,7 @@ impl Default for Config {
             myceli_address: "0.0.0.0:8001".to_string(),
             listen_to_myceli_address: "0.0.0.0:8100".to_string(),
             kubo_address: "0.0.0.0:5001".to_string(),
-            sync_interval: 10_000,
+            sync_interval: 20_000,
             myceli_mtu: 512,
             chunk_transmit_throttle: None,
         }
