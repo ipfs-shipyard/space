@@ -123,6 +123,7 @@ fn main() -> Result<()> {
                 miss += 1;
             }
         } else {
+            info!("Creating a Myceli API object...");
             myceli_api = MyceliApi::new(
                 &cfg.myceli_address,
                 &cfg.listen_to_myceli_address,

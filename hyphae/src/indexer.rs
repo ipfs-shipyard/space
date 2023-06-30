@@ -45,11 +45,11 @@ const DATA_LINE_START: &str = "<!-- ";
 const ARCHIVE_LINK: &str = "<p><a href='archive'>archive of old files</a></p>";
 
 impl<'a> Indexer<'a> {
-    // pub fn new(kubo: &'a KuboApi, myceli: &'a MyceliApi) -> Self {
     pub fn new(kubo: &'a KuboApi) -> Self {
         Self { kubo, key: None, html: String::new(), main: Index::default(), resolved: None, name_target: None, dir: None, index_count: 0, pending: Vec::new(), index_html_url: "/".to_string() }
     }
     pub fn step(&mut self, files: &BTreeMap<String, TransmissionBlock>) -> Result<bool> {
+        info!("step({})", files.len());
         if self.add_files(files) {
             info!("Added some new file(s).");
             Ok(true)
@@ -120,10 +120,10 @@ impl<'a> Indexer<'a> {
             let path = "/ipfs/".to_string() + target;
             debug!("About to attempt to publish...");
             self.kubo.publish(key.name.as_str(), &path)?;
-            info!("Published. See results at http://localhost:8080/ipns/{}", key.id);
+            info!("Published {} as {}. See results at http://localhost:8080/ipns/{}", key.id, target, key.id);
             self.name_target = None;
             Ok(true)
-        } else if self.index_count == files.len() {
+        } else if self.index_count >= files.len() {
             debug!("Waiting for new files to arrive.");
             Ok(false)
         } else if let Ok(indexed) = self.main.build() {
@@ -147,11 +147,11 @@ impl<'a> Indexer<'a> {
         for (cid, tblock) in files {
             if self.main.files.contains_key(cid) {
                 debug!("{} already included in main index", cid);
-            } else if self.main.is_archived(cid) {
-                debug!("{} already included in archive index", cid);
             } else if let Some(name) = &tblock.filename {
                 let file = File { name: name.clone(), cid: cid.clone(), when };
-                info!("Encountered new file: {:?} aka {:?}", & file, &tblock);
+                if self.index_count > 0 {
+                    info!("Encountered new file: {:?} aka {:?}", & file, &tblock);
+                }
                 self.main.files.insert(cid.clone(), file);
                 result = true;
             } else {
@@ -217,7 +217,7 @@ impl Index {
                 continue;
             }
             let cid = cid?;
-            info!("Link: {}={}={}", &f.name, &real, &f.cid);
+            debug!("Link: {}={}={}", &f.name, &real, &f.cid);
             links.push(dag_pb::PbLink {
                 hash: Some(cid.to_bytes()),
                 name: Some(real.clone()),
@@ -312,7 +312,7 @@ impl Index {
     }
     fn parse_html(&mut self, html: &str, files: &BTreeMap<String, TransmissionBlock>) -> bool {
         if self.parsed {
-            info!("parse_html() descending to archive index");
+            debug!("parse_html() descending to archive index");
             return self.get_or_create_archive().parse_html(html, files);
         }
         let mut result = false;
@@ -340,17 +340,17 @@ impl Index {
                     continue;
                 }
                 if files.contains_key(&f.cid) {
-                    info!("Re-found old file={:?}", &f);
+                    debug!("Re-found old file={:?}", &f);
                     self.files.insert(f.cid.clone(), f);
                 } else {
-                    info!("Missing old file={:?}", &f);
+                    debug!("Missing old file={:?}", &f);
                     self.get_or_create_archive().files.insert(f.cid.clone(), f);
                 }
             } else if line.contains(ARCHIVE_LINK) {
                 info!("Found an archive link. Will descend.");
                 result = true;
             } else if !line.contains("<tr><td><a href") {
-                info!("Ignoring line {}", &line);
+                debug!("Ignoring line {}", &line);
             }
         }
         self.parsed = true;
