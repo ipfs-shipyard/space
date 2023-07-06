@@ -1284,8 +1284,10 @@ dependencies = [
  "cid",
  "futures",
  "ipfs-unixfs",
+ "log",
  "rand",
  "rusqlite",
+ "smalog",
  "thiserror",
  "tokio",
  "tokio-util",
@@ -1484,15 +1486,16 @@ dependencies = [
  "assert_fs",
  "blake2",
  "cid",
- "clap",
  "figment",
  "file-hashing",
  "futures",
  "ipfs-unixfs",
  "local-storage",
+ "log",
  "messages",
  "rand",
  "serde",
+ "smalog",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -2141,6 +2144,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 
 [[package]]
+name = "smalog"
+version = "0.0.1"
+dependencies = [
+ "log",
+]
+
+[[package]]
 name = "socket2"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2429,11 +2439,14 @@ version = "0.6.5"
 dependencies = [
  "anyhow",
  "cid",
+ "log",
  "messages",
  "parity-scale-codec",
  "parity-scale-codec-derive",
  "rand",
  "serde",
+ "serde_derive",
+ "smalog",
  "tracing",
 ]
 

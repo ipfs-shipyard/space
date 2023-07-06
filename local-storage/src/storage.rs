@@ -11,7 +11,8 @@ use ipfs_unixfs::{
 use std::fs::File as FsFile;
 use std::io::Write;
 use std::path::Path;
-use tracing::{error, info};
+
+use log::{error, info};
 
 pub struct Storage {
     pub provider: Box<dyn StorageProvider>,
@@ -53,11 +54,11 @@ impl Storage {
                 filename: None,
             };
             // First validate each block
-            if let Err(e) = stored.validate() {
-                error!("Failed to validate {}, {e}", b.cid());
+            if let Err(_e) = stored.validate() {
+                error!("Failed to validate {}, {_e}", b.cid());
             }
-            if let Err(e) = self.provider.import_block(&stored) {
-                error!("Failed to import block {e}");
+            if let Err(_e) = self.provider.import_block(&stored) {
+                error!("Failed to import block {_e}");
             }
             if !stored.links.is_empty() {
                 root_cid = Some(stored.cid);
@@ -72,7 +73,13 @@ impl Storage {
             if let Some(filename) = path.file_name().and_then(|p| p.to_str()) {
                 self.provider.name_dag(&root_cid, filename)?;
             }
-            info!("Imported path {} to {} in {} blocks", path.display(), root_cid, blocks.len());
+
+            info!(
+                "Imported path {} to {} in {} blocks",
+                path.display(),
+                root_cid,
+                blocks.len()
+            );
             Ok(root_cid)
         } else {
             bail!("Failed to find root block for {path:?}")
@@ -82,7 +89,11 @@ impl Storage {
     pub fn export_cid(&self, cid: &str, path: &Path) -> Result<()> {
         let check_missing_blocks = self.get_missing_dag_blocks(cid)?;
         if !check_missing_blocks.is_empty() {
-            error!("Can't export {cid} to {}, because we're missing blocks: {:?}", path.display(), check_missing_blocks);
+            error!(
+                "Can't export {cid} to {}, because we're missing blocks: {:?}",
+                path.display(),
+                check_missing_blocks
+            );
             bail!(StorageError::DagIncomplete(cid.to_string()))
         }
         // Fetch all blocks tied to links under given cid
@@ -96,6 +107,7 @@ impl Storage {
             }
         }
         output_file.sync_all()?;
+
         info!("Exported {cid} to {}", path.display());
         Ok(())
     }
@@ -151,10 +163,10 @@ impl Storage {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "sqlite"))]
 pub mod tests {
     use super::*;
-    use crate::provider::SqliteStorageProvider;
+    use crate::sql_provider::SqliteStorageProvider;
     use assert_fs::{fixture::FileWriteBin, fixture::PathChild, TempDir};
     use rand::{thread_rng, RngCore};
 

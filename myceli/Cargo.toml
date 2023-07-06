@@ -9,15 +9,22 @@ rust-version.workspace = true
 [dependencies]
 anyhow.workspace = true
 cid = { workspace = true, features = ["scale-codec"] }
-clap.workspace = true
 figment.workspace = true
-local-storage.workspace = true
+local-storage = { path = "../local-storage", default-features = false }
+log.workspace = true
 messages.workspace = true
 serde.workspace = true
+smalog = { workspace = true, optional = true }
 tokio.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
+tracing = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
 transports.workspace = true
+
+[features]
+big = ["local-storage/big", "good_log"]
+small = ["local-storage/small"]
+good_log = ["dep:tracing", "dep:tracing-subscriber"]
+small_log = ["dep:smalog"]
 
 [dev-dependencies]
 assert_fs.workspace = true
@@ -26,3 +33,4 @@ file-hashing.workspace = true
 futures.workspace = true
 ipfs-unixfs.workspace = true
 rand.workspace = true
+local-storage.workspace = true
