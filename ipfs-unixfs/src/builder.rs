@@ -187,7 +187,7 @@ impl File {
         current.expect("must not be empty")
     }
 
-    pub async fn encode(self) -> Result<impl Stream<Item=Result<Block>>> {
+    pub async fn encode(self) -> Result<impl Stream<Item = Result<Block>>> {
         let reader = match self.content {
             Content::Path(path) => {
                 let f = tokio::fs::File::open(path).await?;
@@ -889,7 +889,7 @@ mod tests {
             Chunker::Fixed(chunker::Fixed::default()),
             DEFAULT_DEGREE,
         )
-            .await?;
+        .await?;
 
         let basic_entries = |dir: Directory| match dir {
             Directory::Basic(basic) => basic.entries,

@@ -1,12 +1,18 @@
+use super::kubo_api::{Key, KuboApi, KuboError};
 use anyhow::Result;
 use bytes::Bytes;
-use chrono::{DateTime, offset::Utc};
+use chrono::{offset::Utc, DateTime};
 use cid::Cid;
+use ipfs_unixfs::{
+    unixfs,
+    unixfs::{dag_pb, unixfs_pb, UnixfsNode},
+};
+use log::{debug, error, info, warn};
 use messages::TransmissionBlock;
-use std::{cmp::Ordering, collections::{BTreeMap, HashSet}};
-use super::kubo_api::{Key, KuboApi, KuboError};
-use tracing::{debug, info, warn, error};
-use ipfs_unixfs::{unixfs, unixfs::{dag_pb, unixfs_pb, UnixfsNode}};
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, HashSet},
+};
 
 const PREFERRED_KEYS_IN_ORDER: &[&str] = &["hyphae", "myceli", "space", "", "self"];
 
@@ -46,7 +52,18 @@ const ARCHIVE_LINK: &str = "<p><a href='archive'>archive of old files</a></p>";
 
 impl<'a> Indexer<'a> {
     pub fn new(kubo: &'a KuboApi) -> Self {
-        Self { kubo, key: None, html: String::new(), main: Index::default(), resolved: None, name_target: None, dir: None, index_count: 0, pending: Vec::new(), index_html_url: "/".to_string() }
+        Self {
+            kubo,
+            key: None,
+            html: String::new(),
+            main: Index::default(),
+            resolved: None,
+            name_target: None,
+            dir: None,
+            index_count: 0,
+            pending: Vec::new(),
+            index_html_url: "/".to_string(),
+        }
     }
     pub fn step(&mut self, files: &BTreeMap<String, TransmissionBlock>) -> Result<bool> {
         info!("step({})", files.len());
@@ -59,27 +76,33 @@ impl<'a> Indexer<'a> {
             for pref in PREFERRED_KEYS_IN_ORDER {
                 self.key = known.iter().find(|k| k.name == *pref).cloned();
                 if self.key.is_some() {
-                    info!("Will be publishing to IPNS name '{}'", & pref);
+                    info!("Will be publishing to IPNS name '{}'", &pref);
                     break;
                 } else {
-                    warn!("Kubo knows of no key by the name '{}', so it will not be used.", & pref);
+                    warn!(
+                        "Kubo knows of no key by the name '{}', so it will not be used.",
+                        &pref
+                    );
                 }
             }
             if self.key.is_none() {
                 self.key = known.into_iter().next();
                 if self.key.is_some() {
-                    warn!("Found no preferred keys, so using one arbitrarily: {:?}", & self.key);
+                    warn!(
+                        "Found no preferred keys, so using one arbitrarily: {:?}",
+                        &self.key
+                    );
                 }
             }
             Ok(self.key.is_some())
         } else if self.resolved.is_none() {
             match self.kubo.resolve_name(&self.key.clone().unwrap().id) {
-                Ok(ipfs_path) => { self.resolved = Some(ipfs_path) }
+                Ok(ipfs_path) => self.resolved = Some(ipfs_path),
                 Err(KuboError::NoSuchName(_)) => {
                     info!("Our IPNS name does not currently resolve to anything. Presumably we're just getting started from scratch.");
                     self.resolved = Some(String::new());
                 }
-                Err(e) => error!("Error resolving IPNS name: {:?}", & e),
+                Err(e) => error!("Error resolving IPNS name: {:?}", &e),
             }
             Ok(true)
         } else if !self.html.is_empty() {
@@ -97,21 +120,29 @@ impl<'a> Indexer<'a> {
             Ok(true)
         } else if let Some(to_upload) = self.pending.pop() {
             let cid_s = to_upload.cid().to_string();
-            self.kubo.put_block(cid_s.as_str(), &TransmissionBlock {
-                data: to_upload.data().to_vec(),
-                cid: vec![],
-                links: vec![],
-                filename: None,
-            }, false)?;
+            self.kubo.put_block(
+                cid_s.as_str(),
+                &TransmissionBlock {
+                    data: to_upload.data().to_vec(),
+                    cid: vec![],
+                    links: vec![],
+                    filename: None,
+                },
+                false,
+            )?;
             info!("Uploaded {} to Kubo for indexing reasons", cid_s);
             Ok(true)
         } else if let Some(d) = &self.dir {
-            self.kubo.put_block(d.cid().to_string().as_str(), &TransmissionBlock {
-                data: d.data().to_vec(),
-                cid: vec![],
-                links: vec![],
-                filename: None,
-            }, false)?;
+            self.kubo.put_block(
+                d.cid().to_string().as_str(),
+                &TransmissionBlock {
+                    data: d.data().to_vec(),
+                    cid: vec![],
+                    links: vec![],
+                    filename: None,
+                },
+                false,
+            )?;
             info!("Uploaded the directory node {}", &d.cid());
             self.name_target = Some(d.cid().to_string());
             self.dir = None;
@@ -120,14 +151,20 @@ impl<'a> Indexer<'a> {
             let path = "/ipfs/".to_string() + target;
             debug!("About to attempt to publish...");
             self.kubo.publish(key.name.as_str(), &path)?;
-            info!("Published {} as {}. See results at http://localhost:8080/ipns/{}", key.id, target, key.id);
+            info!(
+                "Published {} as {}. See results at http://localhost:8080/ipns/{}",
+                key.id, target, key.id
+            );
             self.name_target = None;
             Ok(true)
         } else if self.index_count >= files.len() {
             debug!("Waiting for new files to arrive.");
             Ok(false)
         } else if let Ok(indexed) = self.main.build() {
-            info!("Built an index, have {} blocks to upload to kubo now", indexed.len());
+            info!(
+                "Built an index, have {} blocks to upload to kubo now",
+                indexed.len()
+            );
             self.dir = indexed.iter().last().cloned();
             self.index_count = files.len();
             self.pending = indexed;
@@ -148,14 +185,18 @@ impl<'a> Indexer<'a> {
             if self.main.files.contains_key(cid) {
                 debug!("{} already included in main index", cid);
             } else if let Some(name) = &tblock.filename {
-                let file = File { name: name.clone(), cid: cid.clone(), when };
+                let file = File {
+                    name: name.clone(),
+                    cid: cid.clone(),
+                    when,
+                };
                 if self.index_count > 0 {
-                    info!("Encountered new file: {:?} aka {:?}", & file, &tblock);
+                    info!("Encountered new file: {:?} aka {:?}", &file, &tblock);
                 }
                 self.main.files.insert(cid.clone(), file);
                 result = true;
             } else {
-                debug!("Not indexing unnamed chunk: {}", & cid);
+                debug!("Not indexing unnamed chunk: {}", &cid);
             }
         }
         result
@@ -179,13 +220,6 @@ impl<'a> Indexer<'a> {
 }
 
 impl Index {
-    fn is_archived(&self, cid: &String) -> bool {
-        if let Some(a) = &self.arch {
-            a.files.contains_key(cid) || (*a).is_archived(cid)
-        } else {
-            false
-        }
-    }
     fn build(&mut self) -> Result<Vec<ipfs_unixfs::Block>> {
         let mut html = "<html><title>Space Files</title><body><table border=1><tr><th>Name</th><th>Import Time</th></tr>\n".to_string();
         let mut links = Vec::new();
@@ -194,7 +228,9 @@ impl Index {
         const MAX_FILES_PER_INDEX_HTML: usize = 160;
         if files.len() > MAX_FILES_PER_INDEX_HTML {
             for f in &files[MAX_FILES_PER_INDEX_HTML..] {
-                self.get_or_create_archive().files.insert(f.cid.clone(), f.clone());
+                self.get_or_create_archive()
+                    .files
+                    .insert(f.cid.clone(), f.clone());
             }
             files.truncate(MAX_FILES_PER_INDEX_HTML);
         }
@@ -221,7 +257,7 @@ impl Index {
             links.push(dag_pb::PbLink {
                 hash: Some(cid.to_bytes()),
                 name: Some(real.clone()),
-                tsize: None,//No idea how big it actually is?
+                tsize: None, //No idea how big it actually is?
             });
             let when_str = f.when.to_rfc3339();
             html.push_str(DATA_LINE_START);
@@ -319,9 +355,12 @@ impl Index {
         for line in html.split('\n') {
             if line.starts_with(DATA_LINE_START) {
                 let mut toks = line.split_whitespace();
-                toks.next();//discard open comment
+                toks.next(); //discard open comment
                 let mut f = File::default();
-                if let Some(w) = toks.next().and_then(|s| DateTime::parse_from_rfc3339(s).ok()) {
+                if let Some(w) = toks
+                    .next()
+                    .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                {
                     f.when = w.into();
                 } else {
                     warn!("Trouble parsing timestamp.");
@@ -360,7 +399,10 @@ impl Index {
 
 impl Ord for File {
     fn cmp(&self, other: &Self) -> Ordering {
-        for o in &[self.when.cmp(&other.when).reverse(), self.name.cmp(&other.name)] {
+        for o in &[
+            self.when.cmp(&other.when).reverse(),
+            self.name.cmp(&other.name),
+        ] {
             if !o.is_eq() {
                 return *o;
             }

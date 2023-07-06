@@ -1,32 +1,21 @@
 use anyhow::Result;
-use clap::Parser;
 use myceli::config::Config;
 use myceli::listener::Listener;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
-use tracing::metadata::LevelFilter;
-use tracing_subscriber::{fmt, EnvFilter};
 use transports::UdpTransport;
 
-#[derive(Parser, Debug)]
-#[clap(about = "Myceli, a spacey IPFS node")]
-struct Args {
-    /// Path to config file
-    config_path: Option<String>,
-}
+#[cfg(all(not(feature = "small"), not(feature = "big")))]
+compile_error! {"Select either big or small feature"}
 
 fn main() -> Result<()> {
-    fmt::fmt()
-        .with_env_filter(
-            EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
-                .from_env_lossy(),
-        )
-        .init();
+    #[cfg(feature = "good_log")]
+    env_logger::init();
+    #[cfg(feature = "small_log")]
+    smalog::init();
 
-    let args = Args::parse();
-
-    let cfg = Config::parse(args.config_path).expect("Failed to parse config");
+    let config_path = std::env::args().nth(1);
+    let cfg = Config::parse(config_path).expect("Failed to parse config");
 
     let mut resolved_listen_addr = cfg
         .listen_address
@@ -43,7 +32,7 @@ fn main() -> Result<()> {
     let udp_transport =
         UdpTransport::new(&cfg.listen_address, cfg.mtu, cfg.chunk_transmit_throttle)
             .expect("Failed to create udp transport");
-
+    println!("pid={}", std::process::id());
     let mut listener = Listener::new(
         &resolved_listen_addr,
         &db_path,

@@ -1,12 +1,12 @@
 use crate::udp_chunking::SimpleChunker;
 use crate::{Transport, MAX_MTU};
 use anyhow::{anyhow, bail, Result};
+use log::{debug, info};
 use messages::Message;
 use std::net::{ToSocketAddrs, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
-use tracing::debug;
 
 pub struct UdpTransport {
     pub socket: UdpSocket,
@@ -17,6 +17,7 @@ pub struct UdpTransport {
 
 impl UdpTransport {
     pub fn new(listen_addr: &str, mtu: u16, chunk_transmit_throttle: Option<u32>) -> Result<Self> {
+        info!("Will listen on {}", &listen_addr);
         let socket = UdpSocket::bind(listen_addr)?;
         Ok(UdpTransport {
             socket,

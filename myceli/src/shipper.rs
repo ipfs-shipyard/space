@@ -2,8 +2,7 @@ use crate::handlers;
 use anyhow::{anyhow, Result};
 use cid::Cid;
 use local_storage::block::StoredBlock;
-use local_storage::provider::SqliteStorageProvider;
-use local_storage::storage::Storage;
+use local_storage::{provider::default_storage_provider, storage::Storage};
 use messages::Message;
 use messages::{DataProtocol, TransmissionBlock};
 use std::collections::BTreeMap;
@@ -14,8 +13,9 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread::{sleep, spawn};
 use std::time::Duration;
-use tracing::{debug, error, info};
 use transports::Transport;
+
+use log::{debug, error, info};
 
 #[derive(Debug, Clone)]
 enum SessionMode {
@@ -69,9 +69,10 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         block_size: u32,
         radio_address: Option<String>,
     ) -> Result<Shipper<T>> {
-        let provider = SqliteStorageProvider::new(storage_path)?;
-        provider.setup()?;
-        let storage = Rc::new(Storage::new(Box::new(provider), block_size));
+        let storage = Rc::new(Storage::new(
+            default_storage_provider(storage_path)?,
+            block_size,
+        ));
         Ok(Shipper {
             storage,
             window_sessions: BTreeMap::new(),
@@ -89,8 +90,8 @@ impl<T: Transport + Send + 'static> Shipper<T> {
     pub fn receive_msg_loop(&mut self) {
         loop {
             if let Ok((message, sender_addr)) = self.receiver.recv() {
-                if let Err(e) = self.process_msg(message, &sender_addr) {
-                    error!("{e:?}");
+                if let Err(_e) = self.process_msg(message, &sender_addr) {
+                    error!("{_e:?}");
                 }
             }
         }
@@ -121,10 +122,10 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             }
             DataProtocol::RetryDagSession { cid } => {
                 if *self.connected.lock().unwrap() {
-                    if let Some(session) = self.window_sessions.get(&cid) {
+                    if let Some(_session) = self.window_sessions.get(&cid) {
                         info!(
                             "Received retry dag session for {cid}, sending get missing req to {}",
-                            &session.target_addr
+                            &_session.target_addr
                         );
                         self.dag_window_session_run(&cid)?;
                         self.retry_dag_window_session(&cid);
@@ -156,6 +157,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                     } else {
                         target_addr
                     };
+
                     info!("Got missing blocks resp {blocks:?}");
                     // If no blocks are missing, then attempt to move to next window
                     if blocks.is_empty() {
@@ -164,6 +166,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                         self.dag_window_session_run(&cid)?;
                     } else {
                         self.window_sessions.get_mut(&cid).unwrap().mode = SessionMode::Normal;
+
                         info!(
                             "Dag {cid} is missing {} blocks, sending again",
                             blocks.len()
@@ -237,6 +240,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
     fn start_dag_window_retry_timeout(&mut self, cid: &str) {
         let sender_clone = self.sender.clone();
         let cid_str = cid.to_string();
+
         debug!("Starting retry timer at {}", self.retry_timeout_duration);
         let timeout_duration = Duration::from_millis(self.retry_timeout_duration);
         spawn(move || {
@@ -361,11 +365,12 @@ impl<T: Transport + Send + 'static> Shipper<T> {
 
     // Single point of transmission over transport
     fn transmit_msg(&mut self, msg: Message, target_addr: &str) -> Result<()> {
-        let resolved_target_addr = target_addr
+        let _resolved_target_addr = target_addr
             .to_socket_addrs()?
             .next()
             .ok_or(anyhow!("Failed to parse target address"))?;
-        info!("Transmitting {msg:?} to {resolved_target_addr}");
+
+        info!("Transmitting {msg:?} to {_resolved_target_addr}");
         self.transport.send(msg, target_addr)?;
         Ok(())
     }
@@ -459,7 +464,7 @@ fn stored_block_to_transmission_block(stored: &StoredBlock) -> Result<Transmissi
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "sqlite"))]
 mod tests {
     use super::*;
 
@@ -467,7 +472,7 @@ mod tests {
     use assert_fs::{fixture::PathChild, TempDir};
     use cid::multihash::MultihashDigest;
     use cid::Cid;
-    use local_storage::provider::SqliteStorageProvider;
+    use local_storage::sql_provider::SqliteStorageProvider;
     use messages::{DataProtocol, Message, TransmissionBlock};
     use rand::{thread_rng, Rng, RngCore};
     use std::path::PathBuf;

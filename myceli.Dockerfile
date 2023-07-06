@@ -7,7 +7,7 @@ RUN cp -a protoc/* /usr/local
 
 # Copy over and build myceli
 COPY . .
-RUN cargo build --bin myceli
+RUN cargo build --bin myceli --features big
 RUN cp ./target/debug/myceli /usr/bin/myceli
 
 # Extras stage

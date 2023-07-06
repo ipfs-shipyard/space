@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="CPP_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/controller/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/hyphae/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/ipfs-unixfs/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/local-dev-environment/desktop/radio-service/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/local-storage/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/messages/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/myceli/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/myceli/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/transports/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/local-dev-environment/desktop/rfm69-service/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/testing/testing-scenarios/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/smalog/src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/gnd" />
+      <excludeFolder url="file://$MODULE_DIR$/sat" />
+      <excludeFolder url="file://$MODULE_DIR$/target" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>

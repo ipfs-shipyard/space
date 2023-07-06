@@ -77,7 +77,7 @@ pub fn get_available_dags(storage: Rc<Storage>) -> Result<Message> {
     }))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "sqlite"))]
 pub mod tests {
     use super::*;
 
@@ -85,7 +85,7 @@ pub mod tests {
     use futures::TryStreamExt;
     use ipfs_unixfs::builder::{File, FileBuilder};
     use local_storage::block::StoredBlock;
-    use local_storage::provider::SqliteStorageProvider;
+    use local_storage::sql_provider::SqliteStorageProvider;
     use rand::{thread_rng, RngCore};
 
     const BLOCK_SIZE: u32 = 1024 * 3;
@@ -122,7 +122,7 @@ pub mod tests {
 
         pub fn zero_file(&self) -> Result<String> {
             let mut data = Vec::<u8>::new();
-            data.resize(1024*600, 0);
+            data.resize(1024 * 600, 0);
             let tmp_file = self.db_dir.child("zero.file");
             tmp_file.write_binary(&data)?;
             Ok(tmp_file.path().to_str().unwrap().to_owned())
@@ -273,6 +273,7 @@ pub mod tests {
 
         assert_eq!(missing_blocks, vec![missing_block.cid]);
     }
+
     #[test]
     pub fn test_import_zero_file() {
         let harness = TestHarness::new();

@@ -1,5 +1,5 @@
 name: CI Linting
-on: [pull_request]
+on: [ pull_request ]
 jobs:
   clippy_check:
     name: Run clippy check
@@ -16,5 +16,5 @@ jobs:
           toolchain: ${{ steps.rust.outputs.toolchain }}
           components: clippy
       - name: Run clippy
-        run: cargo clippy --all
+        run: cargo clippy --all --features big
         shell: bash

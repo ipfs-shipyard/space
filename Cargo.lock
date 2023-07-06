@@ -472,11 +472,11 @@ version = "0.6.5"
 dependencies = [
  "anyhow",
  "clap",
+ "env_logger",
+ "log",
  "messages",
  "serde_json",
  "tokio",
- "tracing",
- "tracing-subscriber",
  "transports",
 ]
 
@@ -619,6 +619,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071a31f4ee85403370b58aca746f01041ede6f0da2730960ad001edc2b71b394"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85cdab6a89accf66733ad5a1693a4dcced6aeff64602b634530dd73c1f3ee9f0"
+dependencies = [
+ "humantime",
+ "is-terminal",
+ "log",
+ "regex",
+ "termcolor",
 ]
 
 [[package]]
@@ -957,6 +970,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4a1e36c821dbe04574f602848a19f742f4fb3c98d40449f11bcad18d6b17421"
 
 [[package]]
+name = "humantime"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
+
+[[package]]
 name = "hyper"
 version = "0.14.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -989,15 +1008,15 @@ dependencies = [
  "chrono",
  "cid",
  "clap",
+ "env_logger",
  "figment",
  "ipfs-unixfs",
+ "log",
  "messages",
  "reqwest",
  "serde",
  "serde_json",
  "thiserror",
- "tracing",
- "tracing-subscriber",
  "transports",
 ]
 
@@ -1282,14 +1301,16 @@ dependencies = [
  "assert_fs",
  "bytes",
  "cid",
+ "env_logger",
  "futures",
  "ipfs-unixfs",
+ "log",
  "rand",
  "rusqlite",
+ "smalog",
  "thiserror",
  "tokio",
  "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -1314,15 +1335,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d0d1830bcd151a6fc4aea1369af235b36c1528fe976b8ff678683c9995eade8"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "matchers"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8263075bb86c5a1b1427b5ae862e8889656f126e9f77c484496e8b47cf5c5558"
-dependencies = [
- "regex-automata",
 ]
 
 [[package]]
@@ -1484,18 +1496,18 @@ dependencies = [
  "assert_fs",
  "blake2",
  "cid",
- "clap",
+ "env_logger",
  "figment",
  "file-hashing",
  "futures",
  "ipfs-unixfs",
  "local-storage",
+ "log",
  "messages",
  "rand",
  "serde",
+ "smalog",
  "tokio",
- "tracing",
- "tracing-subscriber",
  "transports",
 ]
 
@@ -1893,15 +1905,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "regex-automata"
-version = "0.1.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c230d73fb8d8c1b9c0b3135c5142a8acee3a0558fb8db5cf1cb65f8d7862132"
-dependencies = [
- "regex-syntax 0.6.29",
-]
-
-[[package]]
 name = "regex-syntax"
 version = "0.6.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1953,10 +1956,10 @@ name = "rfm69-service"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "env_logger",
+ "log",
  "tokio",
  "tokio-serial",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -2117,15 +2120,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sharded-slab"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "900fba806f70c630b0a382d0d825e17a0f19fcd059a2ade1ff237bcddf446b31"
-dependencies = [
- "lazy_static",
-]
-
-[[package]]
 name = "slab"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2139,6 +2133,13 @@ name = "smallvec"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
+
+[[package]]
+name = "smalog"
+version = "0.0.1"
+dependencies = [
+ "log",
+]
 
 [[package]]
 name = "socket2"
@@ -2220,6 +2221,15 @@ dependencies = [
  "redox_syscall",
  "rustix",
  "windows-sys",
+]
+
+[[package]]
+name = "termcolor"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be55cf8942feac5c765c2c993422806843c9a9a45d4d5c407ad6dd2ea95eb9b6"
+dependencies = [
+ "winapi-util",
 ]
 
 [[package]]
@@ -2409,32 +2419,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-subscriber"
-version = "0.3.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30a651bc37f915e81f087d86e62a18eec5f79550c7faff886f7090b4ea757c77"
-dependencies = [
- "matchers",
- "once_cell",
- "regex",
- "sharded-slab",
- "thread_local",
- "tracing",
- "tracing-core",
-]
-
-[[package]]
 name = "transports"
 version = "0.6.5"
 dependencies = [
  "anyhow",
  "cid",
+ "env_logger",
+ "log",
  "messages",
  "parity-scale-codec",
  "parity-scale-codec-derive",
  "rand",
  "serde",
- "tracing",
+ "serde_derive",
+ "smalog",
 ]
 
 [[package]]

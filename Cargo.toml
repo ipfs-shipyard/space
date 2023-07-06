@@ -7,6 +7,7 @@ members = [
     "local-storage",
     "messages",
     "myceli",
+    "smalog",
     "transports"
 ]
 
@@ -25,12 +26,14 @@ async-recursion = "1.0.4"
 async-stream = "0.3.3"
 blake2 = { version = "0.10.6", default-features = false }
 bytes = "1.1"
-cid = {version = "0.9", default-features = false }
+cid = { version = "0.9", default-features = false }
 clap = { version = "4.0.15", features = ["derive"] }
+env_logger = "0.10.0"
 figment = { version = "0.10", features = ["toml"] }
 file-hashing = "0.1.1"
 futures = "0.3.24"
 libipld = { version = "0.15", default-features = false, features = ["dag-pb", "dag-cbor", "dag-json"] }
+log = "0.4.19"
 multihash = "0.18.1"
 num_enum = "0.5.7"
 parity-scale-codec = { version = "3.0.0", default-features = false, features = ["derive", "std"] }
@@ -39,7 +42,7 @@ proptest = "1.1.0"
 prost = "0.11"
 prost-build = "0.11.1"
 rand = "0.8.5"
-reqwest = { version = "0.11.10", default-features = false}
+reqwest = { version = "0.11.10", default-features = false }
 rusqlite = { version = "0.28.0", features = ["bundled"] }
 serde = "1.0.163"
 serde_derive = "1.0.163"
@@ -49,12 +52,23 @@ thiserror = "1.0.40"
 tokio = "1.28.1"
 tokio-serial = "5.4"
 tokio-util = "0.7.8"
-toml = { version = "0.7.3", default-features = false } 
-tracing = { version = "0.1.34", default-features = false }
-tracing-subscriber = { version = "0.3.14", default-features = false, features = ["fmt", "env-filter"] }
+toml = { version = "0.7.3", default-features = false }
 
 # Internal deps
 ipfs-unixfs = { path = "ipfs-unixfs" }
 local-storage = { path = "local-storage" }
 messages = { path = "messages" }
+smalog = { path = "smalog" }
 transports = { path = "transports" }
+
+[profile.small]
+inherits = "release"
+lto = "fat"
+
+[profile.small.package.myceli]
+opt-level = "s"
+debug = false
+strip = "symbols"
+debug-assertions = false
+overflow-checks = false
+incremental = false

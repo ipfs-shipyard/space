@@ -1,4 +1,5 @@
 use clap::Parser;
+use log::info;
 use std::io::{Read, Write};
 use std::net::SocketAddr;
 use std::sync::mpsc;
@@ -8,7 +9,6 @@ use std::thread;
 use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio_serial::SerialPortBuilderExt;
-use tracing::{info, Level};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -27,7 +27,7 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> tokio_serial::Result<()> {
-    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+    env_logger::init();
 
     let args = Args::parse();
 

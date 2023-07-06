@@ -1,8 +1,7 @@
 use crate::handlers;
 use crate::shipper::Shipper;
 use anyhow::Result;
-use local_storage::provider::SqliteStorageProvider;
-use local_storage::storage::Storage;
+use local_storage::{provider::default_storage_provider, storage::Storage};
 use messages::{ApplicationAPI, DataProtocol, Message};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -10,8 +9,9 @@ use std::rc::Rc;
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::spawn;
-use tracing::{debug, error, info};
 use transports::Transport;
+
+use log::{debug, error, info};
 
 pub struct Listener<T> {
     storage_path: String,
@@ -23,16 +23,18 @@ pub struct Listener<T> {
 
 impl<T: Transport + Send + 'static> Listener<T> {
     pub fn new(
-        listen_address: &SocketAddr,
+        _listen_address: &SocketAddr,
         storage_path: &str,
         transport: Arc<T>,
         block_size: u32,
         radio_address: Option<String>,
     ) -> Result<Listener<T>> {
-        let provider = SqliteStorageProvider::new(storage_path)?;
-        provider.setup()?;
-        let storage = Rc::new(Storage::new(Box::new(provider), block_size));
-        info!("Listening on {listen_address}");
+        let storage = Rc::new(Storage::new(
+            default_storage_provider(storage_path)?,
+            block_size,
+        ));
+
+        info!("Listening on {_listen_address}");
         Ok(Listener {
             storage_path: storage_path.to_string(),
             storage,
@@ -81,23 +83,24 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     };
                     match self.handle_message(message, &target_addr, shipper_sender.clone()) {
                         Ok(Some(resp)) => {
-                            if let Err(e) = self.transmit_response(resp, &target_addr) {
-                                error!("TransmitResponse error: {e}");
+                            if let Err(_e) = self.transmit_response(resp, &target_addr) {
+                                error!("TransmitResponse error: {_e}");
                             }
                         }
                         Ok(None) => {}
                         Err(e) => {
-                            if let Err(e) =
+                            if let Err(_e) =
                                 self.transmit_response(Message::Error(e.to_string()), &target_addr)
                             {
-                                error!("TransmitResponse error: {e}");
+                                error!("TransmitResponse error: {_e}");
                             }
+
                             error!("MessageHandlerError: {e}");
                         }
                     }
                 }
-                Err(e) => {
-                    debug!("Receive message failed: {e}");
+                Err(_e) => {
+                    debug!("Receive message failed: {_e}");
                 }
             }
         }
@@ -194,10 +197,12 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     .send((DataProtocol::ResumeTransmitAllDags, sender_addr.to_string()))?;
                 None
             }
+            #[allow(unused_variables)]
             Message::ApplicationAPI(ApplicationAPI::ValidateDagResponse { cid, result }) => {
                 info!("Received ValidateDagResponse from {sender_addr} for {cid}: {result}");
                 None
             }
+            #[allow(unused_variables)]
             Message::ApplicationAPI(ApplicationAPI::FileImported { path, cid }) => {
                 info!("Received FileImported from {sender_addr}: {path} -> {cid}");
                 None
@@ -205,10 +210,12 @@ impl<T: Transport + Send + 'static> Listener<T> {
             Message::ApplicationAPI(ApplicationAPI::DagTransmissionComplete { cid }) => {
                 let dag_blocks = self.storage.get_all_dag_blocks(&cid)?;
                 match local_storage::block::validate_dag(&dag_blocks) {
-                    Ok(_) => info!("Sucessfully received and validated dag {cid}"),
-                    Err(e) => {
-                        error!("Failure in receiving dag {cid}: {}", e.to_string());
-                        // TOOD: Delete dag and restart transmission at this point?
+                    Ok(_) => {
+                        info!("Sucessfully received and validated dag {cid}")
+                    }
+                    Err(_e) => {
+                        error!("Failure in receiving dag {cid}: {}", _e.to_string());
+                        // TODO: Delete dag and restart transmission at this point?
                     }
                 }
                 None
@@ -217,8 +224,8 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 Some(handlers::get_available_dags(self.storage.clone())?)
             }
             // Default case for valid messages which don't have handling code implemented yet
-            message => {
-                info!("Received message: {:?}", message);
+            _message => {
+                info!("Received message: {:?}", _message);
                 None
             }
         };

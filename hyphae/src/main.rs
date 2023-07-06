@@ -1,20 +1,19 @@
 mod config;
+mod indexer;
 mod kubo_api;
 mod myceli_api;
-mod indexer;
 
 use anyhow::Result;
 use clap::Parser;
 use config::Config;
-use kubo_api::KuboApi;
-use myceli_api::MyceliApi;
 use indexer::Indexer;
+use kubo_api::KuboApi;
+use log::{debug, error, info, warn};
+use messages::TransmissionBlock;
+use myceli_api::MyceliApi;
 use std::collections::BTreeMap;
 use std::thread::sleep;
 use std::time::Duration;
-use tracing::{error, info, metadata::LevelFilter, warn, debug};
-use tracing_subscriber::{fmt, EnvFilter};
-use messages::TransmissionBlock;
 
 pub const RAW_CODEC_PREFIX: &str = "bafkrei";
 pub const DAG_PB_CODEC_PREFIX: &str = "bafybei";
@@ -28,15 +27,17 @@ struct Args {
 
 type Synchronized = BTreeMap<String, TransmissionBlock>;
 
-fn get_missing_blocks(
-    myceli_blocks: Vec<String>,
-    kubo_blocks: &Synchronized,
-) -> Vec<String> {
-    myceli_blocks.into_iter().filter_map(|b| if kubo_blocks.contains_key(&b) {
-        None
-    } else {
-        Some(b)
-    }).collect()
+fn get_missing_blocks(myceli_blocks: Vec<String>, kubo_blocks: &Synchronized) -> Vec<String> {
+    myceli_blocks
+        .into_iter()
+        .filter_map(|b| {
+            if kubo_blocks.contains_key(&b) {
+                None
+            } else {
+                Some(b)
+            }
+        })
+        .collect()
 }
 
 fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi, kubo_blocks: &mut Synchronized) -> Result<bool> {
@@ -45,7 +46,10 @@ fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi, kubo_blocks: &mut Synchronize
     if missing_blocks.is_empty() {
         return Ok(false);
     }
-    debug!("Begin syncing {} myceli blocks to kubo", missing_blocks.len());
+    debug!(
+        "Begin syncing {} myceli blocks to kubo",
+        missing_blocks.len()
+    );
     let mut all_blocks_synced = true;
 
     for cid in missing_blocks {
@@ -81,13 +85,7 @@ fn sync_blocks(kubo: &KuboApi, myceli: &MyceliApi, kubo_blocks: &mut Synchronize
 }
 
 fn main() -> Result<()> {
-    fmt::fmt()
-        .with_env_filter(
-            EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
-                .from_env_lossy(),
-        )
-        .init();
+    env_logger::init();
 
     let args = Args::parse();
     let cfg: Config = Config::parse(args.config_path).expect("Configuration parsing failed");
@@ -129,7 +127,8 @@ fn main() -> Result<()> {
                 &cfg.listen_to_myceli_address,
                 cfg.myceli_mtu,
                 cfg.chunk_transmit_throttle,
-            ).ok();
+            )
+            .ok();
         }
         sleep(Duration::from_millis(cfg.sync_interval));
     }
