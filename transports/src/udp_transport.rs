@@ -1,12 +1,12 @@
 use crate::udp_chunking::SimpleChunker;
 use crate::{Transport, MAX_MTU};
 use anyhow::{anyhow, bail, Result};
+use log::debug;
 use messages::Message;
 use std::net::{ToSocketAddrs, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
-use tracing::debug;
 
 pub struct UdpTransport {
     pub socket: UdpSocket,

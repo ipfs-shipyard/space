@@ -3,3 +3,5 @@ target/
 .vscode/
 build/
 storage.db
+sat/
+gnd/

@@ -12,11 +12,22 @@ cid.workspace = true
 bytes.workspace = true
 futures.workspace = true
 ipfs-unixfs.workspace = true
-rusqlite.workspace = true
+log.workspace = true
+rusqlite = { workspace = true, optional = true }
+smalog = { workspace = true, optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
 tokio-util = { workspace = true, features = ["io-util"] }
-tracing.workspace = true
+tracing = { workspace = true, optional = true }
+
+[features]
+big = ["sqlite", "good_log"]
+small = ["files", "small_log"]
+
+good_log = ["dep:tracing"]
+small_log = ["dep:smalog"]
+sqlite = ["dep:rusqlite"]
+files = []
 
 [dev-dependencies]
 assert_fs.workspace = true

@@ -28,7 +28,7 @@ pub mod dag_pb {
 }
 
 #[derive(
-Debug, Clone, Copy, PartialEq, Eq, num_enum::IntoPrimitive, num_enum::TryFromPrimitive,
+    Debug, Clone, Copy, PartialEq, Eq, num_enum::IntoPrimitive, num_enum::TryFromPrimitive,
 )]
 #[repr(i32)]
 pub enum DataType {
@@ -124,8 +124,11 @@ impl Node {
 
 impl UnixfsNode {
     pub fn decode(cid: &Cid, buf: Bytes) -> Result<Self> {
-        match cid.codec() {
-            c if c == Codec::Raw as u64 => Ok(UnixfsNode::Raw(buf)),
+        Self::decode_from_codec(cid.codec().try_into()?, buf)
+    }
+    pub fn decode_from_codec(codec: Codec, buf: Bytes) -> Result<Self> {
+        match codec {
+            c if c == Codec::Raw => Ok(UnixfsNode::Raw(buf)),
             _ => {
                 let outer = dag_pb::PbNode::decode(buf)?;
                 let inner_data = outer

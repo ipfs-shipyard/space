@@ -1,11 +1,11 @@
 use anyhow::{bail, Result};
 use cid::multihash::{Code, MultihashDigest};
 use cid::Cid;
+use log::error;
 use messages::Message;
 use parity_scale_codec::{Decode, Encode};
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
 use serde::Serialize;
-use tracing::error;
 
 // This MessageContainer struct is intended to be used inside of the chunkers
 // for verification of Message integrity during the chunking/assembly process
@@ -44,7 +44,11 @@ impl MessageContainer {
         if original_cid == regenerated_cid {
             Ok(true)
         } else {
-            error!("CID mismatch: provided={} deduced={}", original_cid.to_string(), regenerated_cid.to_string());
+            error!(
+                "CID mismatch: provided={} deduced={}",
+                original_cid.to_string(),
+                regenerated_cid.to_string()
+            );
             Ok(false)
         }
     }

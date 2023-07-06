@@ -6,7 +6,7 @@ use ipfs_unixfs::Block;
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub struct StoredBlock {
     pub cid: String,
     pub filename: Option<String>,
