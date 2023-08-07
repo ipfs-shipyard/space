@@ -6,7 +6,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@v1
+        uses: arduino/setup-protoc@v2
       - uses: actions/checkout@v3
       - id: rust
         run: echo "toolchain=$(cat rust-toolchain)" >> $GITHUB_OUTPUT
