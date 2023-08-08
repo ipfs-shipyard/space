@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 clap.workspace = true
+log.workspace = true
 tokio.workspace = true
 tokio-serial.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
+env_logger.workspace = true

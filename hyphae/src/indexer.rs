@@ -7,12 +7,12 @@ use ipfs_unixfs::{
     unixfs,
     unixfs::{dag_pb, unixfs_pb, UnixfsNode},
 };
+use log::{debug, error, info, warn};
 use messages::TransmissionBlock;
 use std::{
     cmp::Ordering,
     collections::{BTreeMap, HashSet},
 };
-use tracing::{debug, error, info, warn};
 
 const PREFERRED_KEYS_IN_ORDER: &[&str] = &["hyphae", "myceli", "space", "", "self"];
 

@@ -11,14 +11,14 @@ anyhow.workspace = true
 bytes.workspace = true
 cid.workspace = true
 clap.workspace = true
+env_logger.workspace = true
 figment.workspace = true
 ipfs-unixfs.workspace = true
+log.workspace = true
 messages.workspace = true
 reqwest = { workspace = true, features = ["blocking", "json", "multipart"] }
 serde.workspace = true
 serde_json.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
 transports.workspace = true
 chrono = "0.4.26"
 thiserror.workspace = true
