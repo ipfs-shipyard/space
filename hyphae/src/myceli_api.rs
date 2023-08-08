@@ -1,8 +1,8 @@
 use anyhow::{bail, Result};
+use log::{debug, warn};
 use messages::{ApplicationAPI, DataProtocol, Message, TransmissionBlock};
 use std::{rc::Rc, time::Duration};
 use thiserror::Error;
-use tracing::{warn, debug};
 use transports::{Transport, UdpTransport};
 
 pub struct MyceliApi {
@@ -23,7 +23,10 @@ impl MyceliApi {
             mtu,
             chunk_transmit_throttle,
         )?);
-        Rc::get_mut(&mut transport).unwrap().set_read_timeout(Some(Duration::from_secs(30))).expect("Error setting read timeout");
+        Rc::get_mut(&mut transport)
+            .unwrap()
+            .set_read_timeout(Some(Duration::from_secs(30)))
+            .expect("Error setting read timeout");
         Ok(MyceliApi {
             address: myceli_address.to_string(),
             listen_address: listen_address.to_string(),
@@ -50,7 +53,10 @@ impl MyceliApi {
                 true
             }
             Ok(other_msg) => {
-                debug!("Got unexpected message, which nonetheless proves myceli is alive: {:?}", other_msg);
+                debug!(
+                    "Got unexpected message, which nonetheless proves myceli is alive: {:?}",
+                    other_msg
+                );
                 true
             }
             Err(e) => {

@@ -1,10 +1,10 @@
+use log::{debug, warn};
 use messages::TransmissionBlock;
 use reqwest::blocking::multipart;
 use reqwest::blocking::Client;
+use serde::Deserialize;
 use serde_json::Value;
 use std::time::Duration;
-use serde::Deserialize;
-use tracing::{warn, debug};
 use thiserror::Error;
 
 use crate::DAG_PB_CODEC_PREFIX;
@@ -62,7 +62,8 @@ impl KuboApi {
         }
         let form_part = multipart::Part::bytes(block.data.to_owned());
         let form = multipart::Form::new().part("data", form_part);
-        let resp = self.client
+        let resp = self
+            .client
             .post(put_block_url)
             .multipart(form)
             .send()?
@@ -71,15 +72,13 @@ impl KuboApi {
     }
     pub fn list_keys(&self) -> Result<KeyListResp> {
         let url = format!("{}/key/list", self.address);
-        let resp = self.client
-            .post(url)
-            .send()?
-            .json::<KeyListResp>()?;
+        let resp = self.client.post(url).send()?.json::<KeyListResp>()?;
         Ok(resp)
     }
     pub fn resolve_name(&self, name: &str) -> Result<String> {
         let url = format!("{}/name/resolve?arg={}", self.address, name);
-        let resp = self.client
+        let resp = self
+            .client
             .post(url)
             .send()?
             .json::<NameResolutionResponse>()?;
@@ -94,24 +93,23 @@ impl KuboApi {
         }
     }
     pub fn publish(&self, key_name: &str, target_ipfs_path: &str) -> Result<()> {
-        let url = format!("{}/name/publish?arg={}&lifetime=168h&ttl=48h&key={}", self.address, target_ipfs_path, key_name);
-        let resp = self.client
-            .post(url)
-            .send()?
-            .json::<GenericResponse>()?;
+        let url = format!(
+            "{}/name/publish?arg={}&lifetime=168h&ttl=48h&key={}",
+            self.address, target_ipfs_path, key_name
+        );
+        let resp = self.client.post(url).send()?.json::<GenericResponse>()?;
         if resp.message.is_some() {
-            Err(KuboError::ServerError(resp.code.unwrap_or(0), resp.message.unwrap()))
+            Err(KuboError::ServerError(
+                resp.code.unwrap_or(0),
+                resp.message.unwrap(),
+            ))
         } else {
             Ok(())
         }
     }
     pub fn get(&self, ipfs_path: &str) -> Result<Vec<u8>> {
         let url = format!("{}/cat?arg={}&progress=false", self.address, ipfs_path);
-        let resp = self.client
-            .post(url)
-            .send()?
-            .bytes()?
-            .to_vec();
+        let resp = self.client.post(url).send()?.bytes()?.to_vec();
         Ok(resp)
     }
 }

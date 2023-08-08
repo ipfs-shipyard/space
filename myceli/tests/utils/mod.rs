@@ -6,7 +6,7 @@ use assert_fs::{fixture::FileWriteBin, fixture::PathChild, TempDir};
 use blake2::{Blake2s256, Digest};
 use file_hashing::get_hash_file;
 use myceli::listener::Listener;
-use rand::{thread_rng, Rng, RngCore};
+use rand::{rngs::StdRng, thread_rng, Rng, RngCore, SeedableRng};
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -38,7 +38,7 @@ pub fn wait_receiving_done(receiver: &TestListener, controller: &mut TestControl
             }
             num_retries += 1;
         }
-        sleep(Duration::from_millis(10));
+        sleep(Duration::from_millis(num_retries * num_retries + 1));
     }
 }
 
@@ -50,8 +50,7 @@ pub struct TestListener {
 impl TestListener {
     pub fn new() -> TestListener {
         let test_dir = TempDir::new().unwrap();
-        let mut rng = thread_rng();
-        let port_num = rng.gen_range(6000..9000);
+        let port_num = thread_rng().gen_range(6000..9000);
         let listen_addr = format!("127.0.0.1:{port_num}");
 
         TestListener {
@@ -79,7 +78,8 @@ impl TestListener {
     pub fn generate_file(&self) -> Result<String> {
         let mut data = Vec::<u8>::new();
         data.resize(256 * 50, 1);
-        thread_rng().fill_bytes(&mut data);
+        let mut rng = StdRng::seed_from_u64(2);
+        rng.fill_bytes(&mut data);
 
         let tmp_file = self.test_dir.child("test.file");
         tmp_file.write_binary(&data)?;

@@ -28,6 +28,7 @@ blake2 = { version = "0.10.6", default-features = false }
 bytes = "1.1"
 cid = { version = "0.9", default-features = false }
 clap = { version = "4.0.15", features = ["derive"] }
+env_logger = "0.10.0"
 figment = { version = "0.10", features = ["toml"] }
 file-hashing = "0.1.1"
 futures = "0.3.24"
@@ -52,8 +53,6 @@ tokio = "1.28.1"
 tokio-serial = "5.4"
 tokio-util = "0.7.8"
 toml = { version = "0.7.3", default-features = false }
-tracing = { version = "0.1.34", default-features = false }
-tracing-subscriber = { version = "0.3.14", default-features = false, features = ["fmt", "env-filter"] }
 
 # Internal deps
 ipfs-unixfs = { path = "ipfs-unixfs" }

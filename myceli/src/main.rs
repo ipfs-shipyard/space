@@ -5,23 +5,12 @@ use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use transports::UdpTransport;
 
-#[cfg(feature = "good_log")]
-use tracing::metadata::LevelFilter;
-#[cfg(feature = "good_log")]
-use tracing_subscriber::{fmt, EnvFilter};
-
 #[cfg(all(not(feature = "small"), not(feature = "big")))]
 compile_error! {"Select either big or small feature"}
 
 fn main() -> Result<()> {
     #[cfg(feature = "good_log")]
-    fmt::fmt()
-        .with_env_filter(
-            EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
-                .from_env_lossy(),
-        )
-        .init();
+    env_logger::init();
     #[cfg(feature = "small_log")]
     smalog::init();
 
