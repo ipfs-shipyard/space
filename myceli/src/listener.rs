@@ -3,15 +3,17 @@ use crate::shipper::Shipper;
 use anyhow::Result;
 use local_storage::{provider::default_storage_provider, storage::Storage};
 use messages::{ApplicationAPI, DataProtocol, Message};
-use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::rc::Rc;
-use std::sync::mpsc::{self, Sender};
-use std::sync::{Arc, Mutex};
-use std::thread::spawn;
-use transports::Transport;
+use std::{
+    net::SocketAddr,
+    path::PathBuf,
+    rc::Rc,
+    sync::mpsc::{self, Sender},
+    sync::{Arc, Mutex},
+    thread::spawn,
+};
+use transports::{Transport, TransportError};
 
-use log::{debug, error, info};
+use log::{error, info};
 
 pub struct Listener<T> {
     storage_path: String,
@@ -94,13 +96,17 @@ impl<T: Transport + Send + 'static> Listener<T> {
                             {
                                 error!("TransmitResponse error: {_e}");
                             }
-
                             error!("MessageHandlerError: {e}");
                         }
                     }
                 }
-                Err(_e) => {
-                    debug!("Receive message failed: {_e}");
+                Err(TransportError::TimedOut) => {
+                    if let Some(reference) = Rc::get_mut(&mut self.storage) {
+                        reference.provider.incremental_gc();
+                    }
+                }
+                Err(e) => {
+                    error!("Receive message failed: {e}");
                 }
             }
         }
@@ -112,7 +118,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
         sender_addr: &str,
         shipper_sender: Sender<(DataProtocol, String)>,
     ) -> Result<Option<Message>> {
-        info!("Handling {message:?}");
+        println!("Handling {message:?}");
         let resp = match message {
             Message::ApplicationAPI(ApplicationAPI::TransmitDag {
                 cid,

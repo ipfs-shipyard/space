@@ -35,6 +35,7 @@ pub trait StorageProvider {
         window_size: Option<u32>,
     ) -> Result<Vec<String>>;
     fn get_all_dag_blocks(&self, cid: &str) -> Result<Vec<StoredBlock>>;
+    fn incremental_gc(&mut self);
 }
 
 pub fn default_storage_provider(_storage_path: &str) -> Result<Box<dyn StorageProvider>> {

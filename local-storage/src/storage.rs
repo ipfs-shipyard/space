@@ -12,7 +12,7 @@ use std::fs::File as FsFile;
 use std::io::Write;
 use std::path::Path;
 
-use log::{error, info};
+use log::{debug, error, info};
 
 pub struct Storage {
     pub provider: Box<dyn StorageProvider>,
@@ -28,6 +28,7 @@ impl Storage {
     }
 
     pub fn import_path(&self, path: &Path) -> Result<String> {
+        debug!("import_path({:?})", &path);
         let rt = tokio::runtime::Runtime::new()?;
         let blocks: Result<Vec<Block>> = rt.block_on(async {
             let file: File = FileBuilder::new()

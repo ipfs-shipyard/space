@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use crate::error::Result;
 use messages::Message;
 use parity_scale_codec::{Decode, Encode};
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
@@ -120,13 +120,9 @@ impl SimpleChunker {
 
     pub fn unchunk(&mut self, data: &[u8]) -> Result<Option<Message>> {
         let mut databuf = &data[..data.len()];
-        match SimpleChunk::decode(&mut databuf) {
-            Ok(chunk) => {
-                self.recv_chunk(chunk)?;
-                Ok(self.attempt_msg_assembly()?)
-            }
-            Err(e) => bail!("Failed to decode chunk {e:?}"),
-        }
+        let chunk = SimpleChunk::decode(&mut databuf)?;
+        self.recv_chunk(chunk)?;
+        Ok(self.attempt_msg_assembly()?)
     }
 }
 
