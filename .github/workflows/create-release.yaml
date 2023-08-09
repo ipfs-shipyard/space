@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        project: [ myceli, controller, hyphae ]
+        project: [ myceli, controller, hyphae, watcher ]
         target:
           [
             armv7-unknown-linux-gnueabihf,
@@ -60,6 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        project: [ myceli, watcher ]
         target:
           [
             armv7-unknown-linux-gnueabihf,
@@ -73,14 +74,14 @@ jobs:
       - name: clean cargo
         run: cargo clean
       - name: cargo/cross build
-        run: CROSS_CONFIG=Cross.toml cross build --bin myceli --target ${{ matrix.target }} --profile small --features small --no-default-features
+        run: CROSS_CONFIG=Cross.toml cross build --bin ${{ matrix.project }} --target ${{ matrix.target }} --profile small --features small --no-default-features
       - name: Compress binary
         run: |
-          tar -cvf myceli-small-${{ github.ref_name }}-${{ matrix.target }}.tar -C ./target/${{ matrix.target }}/small myceli
-          xz -9 --keep --extreme myceli-small-${{ github.ref_name }}-${{ matrix.target }}.tar
-          gzip --best myceli-small-${{ github.ref_name }}-${{ matrix.target }}.tar
+          tar -cvf ${{ matrix.project }}-small-${{ github.ref_name }}-${{ matrix.target }}.tar -C ./target/${{ matrix.target }}/small ${{ matrix.project }}
+          xz -9 --keep --extreme ${{ matrix.project }}-small-${{ github.ref_name }}-${{ matrix.target }}.tar
+          gzip --best ${{ matrix.project }}-small-${{ github.ref_name }}-${{ matrix.target }}.tar
       - name: upload binary
-        run: gh release upload "$GITHUB_REF" myceli-small-${{ github.ref_name }}-${{ matrix.target }}.tar.?z
+        run: gh release upload "$GITHUB_REF" *-small-${{ github.ref_name }}-${{ matrix.target }}.tar.?z
         env:
           GITHUB_TOKEN: ${{ github.token }}
         shell: bash

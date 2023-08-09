@@ -9,6 +9,7 @@ rust-version.workspace = true
 [dependencies]
 anyhow.workspace = true
 cid = { workspace = true, features = ["scale-codec"] }
+config.workspace = true
 env_logger = { workspace = true, optional = true }
 figment.workspace = true
 local-storage = { path = "../local-storage", default-features = false }
@@ -21,7 +22,7 @@ transports.workspace = true
 
 [features]
 big = ["local-storage/big", "good_log"]
-small = ["local-storage/small"]
+small = ["local-storage/small", "small_log"]
 good_log = ["dep:env_logger"]
 small_log = ["dep:smalog"]
 

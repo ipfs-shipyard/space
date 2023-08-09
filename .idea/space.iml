@@ -13,7 +13,9 @@
       <sourceFolder url="file://$MODULE_DIR$/transports/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/local-dev-environment/desktop/rfm69-service/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/testing/testing-scenarios/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/config/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/smalog/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/watcher/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/gnd" />
       <excludeFolder url="file://$MODULE_DIR$/sat" />
       <excludeFolder url="file://$MODULE_DIR$/target" />

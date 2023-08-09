@@ -1,0 +1,22 @@
+[package]
+name = "watcher"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow.workspace = true
+config.workspace = true
+env_logger = { workspace = true, optional = true }
+log.workspace = true
+messages.workspace = true
+notify = "6.0.1"
+smalog = { workspace = true, optional = true }
+transports.workspace = true
+
+[features]
+big = ["good_log"]
+small = ["small_log"]
+good_log = ["dep:env_logger"]
+small_log = ["dep:smalog"]

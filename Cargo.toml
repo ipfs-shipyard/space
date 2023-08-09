@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "config",
     "controller",
     "hyphae",
     "ipfs-unixfs",
@@ -8,7 +9,8 @@ members = [
     "messages",
     "myceli",
     "smalog",
-    "transports"
+    "transports",
+    "watcher"
 ]
 
 [workspace.package]
@@ -55,6 +57,7 @@ tokio-util = "0.7.8"
 toml = { version = "0.7.3", default-features = false }
 
 # Internal deps
+config = { path = "config" }
 ipfs-unixfs = { path = "ipfs-unixfs" }
 local-storage = { path = "local-storage" }
 messages = { path = "messages" }
