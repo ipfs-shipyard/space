@@ -1,5 +1,5 @@
 use anyhow::Result;
-use myceli::config::Config;
+use config::Config;
 use myceli::listener::Listener;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;

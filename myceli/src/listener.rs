@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::spawn;
 use transports::Transport;
 
-use log::{debug, error, info};
+use log::{error, info};
 
 pub struct Listener<T> {
     storage_path: String,
@@ -100,7 +100,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     }
                 }
                 Err(_e) => {
-                    debug!("Receive message failed: {_e}");
+                    println!("Receive message failed: {_e}");
                 }
             }
         }
@@ -112,7 +112,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
         sender_addr: &str,
         shipper_sender: Sender<(DataProtocol, String)>,
     ) -> Result<Option<Message>> {
-        info!("Handling {message:?}");
+        println!("Handling {message:?}");
         let resp = match message {
             Message::ApplicationAPI(ApplicationAPI::TransmitDag {
                 cid,
