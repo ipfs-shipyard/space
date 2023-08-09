@@ -37,7 +37,7 @@ fn main() {
         handler::Handler::new(&cfg).expect("Failed to configure second transport & event handler");
     let mut preexisting =
         fs::read_dir(&dir).expect("Can't list watched_directory - does it exist?");
-    let mut t = 2;
+    let mut t = 4;
     while dir.is_dir() {
         std::thread::sleep(Duration::from_secs(t));
         if let Some(Ok(f)) = preexisting.next() {

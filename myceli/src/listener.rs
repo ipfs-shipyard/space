@@ -3,13 +3,15 @@ use crate::shipper::Shipper;
 use anyhow::Result;
 use local_storage::{provider::default_storage_provider, storage::Storage};
 use messages::{ApplicationAPI, DataProtocol, Message};
-use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::rc::Rc;
-use std::sync::mpsc::{self, Sender};
-use std::sync::{Arc, Mutex};
-use std::thread::spawn;
-use transports::Transport;
+use std::{
+    net::SocketAddr,
+    path::PathBuf,
+    rc::Rc,
+    sync::mpsc::{self, Sender},
+    sync::{Arc, Mutex},
+    thread::spawn,
+};
+use transports::{Transport, TransportError};
 
 use log::{error, info};
 
@@ -94,13 +96,17 @@ impl<T: Transport + Send + 'static> Listener<T> {
                             {
                                 error!("TransmitResponse error: {_e}");
                             }
-
                             error!("MessageHandlerError: {e}");
                         }
                     }
                 }
-                Err(_e) => {
-                    println!("Receive message failed: {_e}");
+                Err(TransportError::TimedOut) => {
+                    if let Some(reference) = Rc::get_mut(&mut self.storage) {
+                        reference.provider.incremental_gc();
+                    }
+                }
+                Err(e) => {
+                    error!("Receive message failed: {e}");
                 }
             }
         }
