@@ -1,11 +1,12 @@
 mod chunking;
+mod error;
 mod udp_chunking;
 mod udp_transport;
 
-use anyhow::Result;
 use messages::Message;
 
 pub const MAX_MTU: u16 = 1024 * 3;
+pub use error::{Result, TransportError};
 
 pub trait Transport: Send + Sync {
     fn receive(&self) -> Result<(Message, String)>;

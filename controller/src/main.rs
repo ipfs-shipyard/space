@@ -50,6 +50,7 @@ impl Cli {
             match transport.receive() {
                 Ok((msg, _)) => {
                     info!("Received: {msg:?}");
+                    println!("Received: {msg:?}");
                     return Ok(());
                 }
                 Err(e) => bail!("{e:?}"),

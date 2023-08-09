@@ -34,15 +34,27 @@ impl StorageProvider for NullStorageProvider {
         bail!("NullStorageProvider does not implement anything")
     }
 
-    fn get_dag_blocks_by_window(&self, _cid: &str, _offset: u32, _window_size: u32) -> anyhow::Result<Vec<StoredBlock>> {
+    fn get_dag_blocks_by_window(
+        &self,
+        _cid: &str,
+        _offset: u32,
+        _window_size: u32,
+    ) -> anyhow::Result<Vec<StoredBlock>> {
         bail!("NullStorageProvider does not implement anything")
     }
 
-    fn get_all_dag_cids(&self, _cid: &str, _offset: Option<u32>, _window_size: Option<u32>) -> anyhow::Result<Vec<String>> {
+    fn get_all_dag_cids(
+        &self,
+        _cid: &str,
+        _offset: Option<u32>,
+        _window_size: Option<u32>,
+    ) -> anyhow::Result<Vec<String>> {
         bail!("NullStorageProvider does not implement anything")
     }
 
     fn get_all_dag_blocks(&self, _cid: &str) -> anyhow::Result<Vec<StoredBlock>> {
         bail!("NullStorageProvider does not implement anything")
     }
+
+    fn incremental_gc(&mut self) {}
 }

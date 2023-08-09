@@ -1,6 +1,8 @@
-use anyhow::{bail, Result};
-use cid::multihash::{Code, MultihashDigest};
-use cid::Cid;
+use crate::error::{adhoc_err, Result};
+use cid::{
+    multihash::{Code, MultihashDigest},
+    Cid,
+};
 use log::error;
 use messages::Message;
 use parity_scale_codec::{Decode, Encode};
@@ -56,7 +58,7 @@ impl MessageContainer {
     pub fn from_bytes(bytes: &mut &[u8]) -> Result<Self> {
         let container: MessageContainer = MessageContainer::decode(bytes)?;
         if !container.verify_cid()? {
-            bail!("Message container failed CID verification");
+            adhoc_err("Message container failed CID verification")?;
         }
         Ok(container)
     }

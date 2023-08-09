@@ -1,12 +1,18 @@
-use crate::udp_chunking::SimpleChunker;
-use crate::{Transport, MAX_MTU};
-use anyhow::{anyhow, bail, Result};
-use log::{debug, info};
+use crate::error::{adhoc_err, TransportError};
+use crate::{
+    error::{adhoc, Result},
+    udp_chunking::SimpleChunker,
+    Transport, MAX_MTU,
+};
+use log::{debug, error, info, trace};
 use messages::Message;
-use std::net::{ToSocketAddrs, UdpSocket};
-use std::sync::{Arc, Mutex};
-use std::thread::sleep;
-use std::time::Duration;
+use std::{
+    io,
+    net::{ToSocketAddrs, UdpSocket},
+    sync::{Arc, Mutex},
+    thread::sleep,
+    time::Duration,
+};
 
 pub struct UdpTransport {
     pub socket: UdpSocket,
@@ -42,6 +48,7 @@ impl Transport for UdpTransport {
         let mut sender_addr;
         let mut read_attempts = 0;
         let mut read_len;
+        let mut timeouts = 0;
         loop {
             loop {
                 read_attempts += 1;
@@ -53,13 +60,21 @@ impl Transport for UdpTransport {
                             break;
                         }
                     }
-                    Err(e) => {
-                        debug!("Recv failed {e}");
-                    }
+                    Err(e) => match e.kind() {
+                        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => {
+                            trace!("Receive timed out. May be normal depending on usage.");
+                            timeouts += 1;
+                        }
+                        _ => {
+                            error!("Recv failed {e}");
+                        }
+                    },
                 }
                 if let Some(max_attempts) = self.max_read_attempts {
                     if read_attempts > max_attempts {
-                        bail!("Exceeded number of read attempts");
+                        adhoc_err("Exceeded number of read attempts")?;
+                    } else if timeouts * 2 > read_attempts {
+                        return Err(TransportError::TimedOut);
                     }
                 }
                 sleep(Duration::from_millis(10));
@@ -86,7 +101,7 @@ impl Transport for UdpTransport {
                     debug!("Received: no msg ready for assembly yet");
                 }
                 Err(err) => {
-                    bail!("Error unchunking message: {err}");
+                    return Err(err.into());
                 }
             }
         }
@@ -97,7 +112,7 @@ impl Transport for UdpTransport {
         let addr = addr
             .to_socket_addrs()?
             .next()
-            .ok_or(anyhow!("Failed to parse address"))?;
+            .ok_or(adhoc("Failed to parse address"))?;
         for chunk in self
             .chunker
             .lock()

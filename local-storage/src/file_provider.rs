@@ -1,15 +1,58 @@
 use crate::{block::StoredBlock, provider::StorageProvider};
-use anyhow::Result;
-use cid::{multibase, Cid};
-use std::io::Read;
-use std::{
-    fs::{canonicalize, create_dir_all, read_dir, DirEntry, File},
-    io::Write,
-    path::PathBuf,
+use anyhow::{anyhow, bail, Result};
+use cid::multihash::MultihashDigest;
+use cid::{
+    multibase,
+    multihash::{Code, Multihash},
+    Cid,
 };
+use ipfs_unixfs::codecs::Codec;
+use ipfs_unixfs::unixfs::UnixfsNode;
+use log::{debug, error, info, trace, warn};
+use std::cmp::Ordering;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::{Debug, Formatter},
+    fs,
+    fs::{canonicalize, create_dir_all, read_dir, DirEntry, File, ReadDir},
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
+
+//TODO - should be configurable
+const MAX_DISK_USAGE: u64 = 1024 * 1024 * 64;
 
 pub(crate) struct FileStorageProvider {
     dir: PathBuf,
+    janitor: JanitorStage,
+}
+
+#[derive(Debug)]
+enum JanitorStage {
+    Startup,
+    CheckBlocks(BlockCleanup),
+    CheckCids(CidCleanup),
+}
+struct BlockCleanup {
+    listing: ReadDir,
+    total_size: u64,
+    existing: HashMap<String, OnDiskBlock>,
+}
+struct CidCleanup {
+    listing: ReadDir,
+    unref_block: HashMap<String, OnDiskBlock>,
+    refed_block: HashMap<String, OnDiskBlock>,
+    linked: HashSet<String>,
+    existing: HashSet<String>,
+    disk_usage: u64,
+}
+#[derive(PartialEq, Eq, Clone, Debug)]
+struct OnDiskBlock {
+    mh_s: String,
+    path: PathBuf,
+    size: u64,
+    modt: SystemTime,
 }
 
 impl FileStorageProvider {
@@ -17,9 +60,11 @@ impl FileStorageProvider {
     pub fn new(storage_folder: &str) -> Result<Self> {
         let mut me = Self {
             dir: storage_folder.into(),
+            janitor: JanitorStage::Startup,
         };
         create_dir_all(&me.blocks())?;
         me.dir = canonicalize(storage_folder)?;
+        debug!("FileStorageProvider({:?})", &me.dir);
         create_dir_all(&me.cids())?;
         create_dir_all(&me.names())?;
         Ok(me)
@@ -86,15 +131,55 @@ impl FileStorageProvider {
         }
         Ok((to_skip, to_fetch))
     }
-}
-fn entry_to_cid_str(r: std::io::Result<DirEntry>) -> Option<String> {
-    let e = r.ok()?;
-    if e.metadata().ok()?.is_file() {
-        Some(e.file_name().to_str()?.to_owned())
-    } else {
-        None
+
+    fn entry_to_cid_str(&self, r: std::io::Result<DirEntry>) -> Option<String> {
+        let e = r.ok()?;
+        if e.metadata().ok()?.is_file() {
+            let cid_str = e.file_name().to_str()?.to_owned();
+            let cid = Cid::try_from(cid_str.as_str()).ok()?;
+            let block_path = self.block_path(&cid);
+            if !block_path.is_file() {
+                debug!("Dangling CID: {}", &cid_str);
+                return None;
+            }
+            Some(cid_str)
+        } else {
+            None
+        }
+    }
+    fn check_block_dirent(de: &DirEntry) -> Result<OnDiskBlock> {
+        let path = de.path();
+        let md = de.metadata()?;
+        if !md.is_file() {
+            bail!("Ignore directories, symlinks, whatever: {path:?}");
+        }
+        let mh_s = path
+            .file_name()
+            .ok_or(anyhow!("Can't get file's name"))?
+            .to_str()
+            .ok_or(anyhow!("File's name not stringable"))?
+            .to_string();
+        let (_, mh_bytes) = multibase::decode(&mh_s)?;
+        let mh = Multihash::from_bytes(&mh_bytes)?;
+        let bytes = fs::read(&path)?;
+        let algo: Code = mh.code().try_into()?;
+        let as_stored = algo.digest(&bytes);
+        if mh == as_stored {
+            let size = md.len();
+            let modt = md.modified()?;
+            Ok(OnDiskBlock {
+                path,
+                size,
+                modt,
+                mh_s,
+            })
+        } else {
+            fs::remove_file(&path)?;
+            Err(anyhow!("Block file {:?} should have a multihash of {:?} but it actually hashes out to {:?}", &path, &mh, &as_stored))
+        }
     }
 }
+
 impl StorageProvider for FileStorageProvider {
     fn import_block(&self, block: &StoredBlock) -> anyhow::Result<()> {
         let cid = Cid::try_from(block.cid.as_str())?;
@@ -112,7 +197,7 @@ impl StorageProvider for FileStorageProvider {
 
     fn get_available_cids(&self) -> anyhow::Result<Vec<String>> {
         let mut result: Vec<String> = read_dir(self.cids())?
-            .filter_map(entry_to_cid_str)
+            .filter_map(|f| self.entry_to_cid_str(f))
             .collect();
         result.sort();
         Ok(result)
@@ -193,6 +278,210 @@ impl StorageProvider for FileStorageProvider {
         let mut result = Vec::new();
         self.get_blocks(&mut result, cid)?;
         Ok(result)
+    }
+
+    fn incremental_gc(&mut self) {
+        let block_dir = self.blocks();
+        let cids_dir = self.cids();
+        info!(
+            "incremental_gc({:?},{block_dir:?},{cids_dir:?})",
+            &self.janitor
+        );
+        match &mut self.janitor {
+            JanitorStage::Startup => {
+                if let Ok(rd) = read_dir(self.blocks()) {
+                    self.janitor = JanitorStage::CheckBlocks(BlockCleanup {
+                        listing: rd,
+                        total_size: 0,
+                        existing: HashMap::new(),
+                    });
+                }
+            }
+            JanitorStage::CheckBlocks(bc) => match bc.listing.next() {
+                Some(Ok(de)) => match Self::check_block_dirent(&de) {
+                    Ok(odb) => {
+                        bc.total_size += odb.size;
+                        bc.existing.insert(odb.mh_s.clone(), odb);
+                    }
+                    Err(e) => info!("Issue validating {:?}: {:?}", de, &e),
+                },
+                Some(Err(e)) => error!("Error reading blocks dir: {:?}", &e),
+                None => {
+                    if let Ok(rd) = read_dir(cids_dir) {
+                        self.janitor = JanitorStage::CheckCids(CidCleanup {
+                            listing: rd,
+                            unref_block: std::mem::take(&mut bc.existing),
+                            disk_usage: bc.total_size,
+                            refed_block: HashMap::new(),
+                            existing: HashSet::new(),
+                            linked: HashSet::new(),
+                        });
+                    }
+                }
+            },
+            JanitorStage::CheckCids(cc) => match cc.listing.next() {
+                Some(Ok(de)) => {
+                    if let Err(e) = cc.check(&de, &block_dir) {
+                        error!("CID validation problem {:?}", &e);
+                    }
+                }
+                Some(Err(e)) => error!("Error reading cids dir: {:?}", &e),
+                None => {
+                    while cc.disk_usage > MAX_DISK_USAGE {
+                        let key_opt = { cc.unref_block.keys().cloned().next() };
+                        if let Some(key) = key_opt {
+                            let odb = cc.unref_block.remove(&key).unwrap();
+                            match fs::remove_file(&odb.path) {
+                                Ok(_) => {
+                                    cc.disk_usage -= odb.size;
+                                    info!(
+                                        "Removed unreferenced block file to free up space {:?}",
+                                        &odb.path
+                                    );
+                                }
+                                Err(e) => {
+                                    error!(
+                                        "Error removing unreferenced block file {:?} {:?}",
+                                        &e, &odb.path
+                                    );
+                                }
+                            }
+                        } else {
+                            let mut blocks: Vec<_> = cc.refed_block.values().cloned().collect();
+                            blocks.sort();
+                            for b in &blocks {
+                                if fs::remove_file(&b.path).is_ok() {
+                                    warn!("Removing {:?} to free up space.", &b.path);
+                                    cc.disk_usage -= b.size;
+                                    cc.refed_block.remove(&b.mh_s);
+                                    if cc.disk_usage < MAX_DISK_USAGE {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    for l in &cc.linked {
+                        println!("Missing linked-to CID {}", &l);
+                    }
+                    self.janitor = JanitorStage::Startup;
+                    info!("Storage cleanup pass completed.");
+                }
+            },
+        }
+    }
+}
+
+impl CidCleanup {
+    fn check(&mut self, de: &DirEntry, block_dir: &Path) -> Result<()> {
+        let path = de.path();
+        let md = de.metadata()?;
+        if !md.is_file() {
+            bail!("Ignore directories, symlinks, whatever: {path:?}");
+        }
+        let cid_str = path
+            .file_name()
+            .ok_or(anyhow!("Bad CID filename"))?
+            .to_str()
+            .ok_or(anyhow!("Non-string CID filename"))?
+            .to_string();
+        let cid = Cid::try_from(cid_str.as_str())?;
+        let mh = cid.hash();
+        let mh_s = multibase::encode(multibase::Base::Base36Lower, mh.to_bytes());
+        let modt = md.modified()?;
+        let bp = block_dir.join(&mh_s);
+        if let Some(mut un) = self.unref_block.remove(&mh_s) {
+            if modt > un.modt {
+                un.modt = modt;
+            }
+            self.refed_block.insert(mh_s.clone(), un);
+        } else if let Some(rf) = self.refed_block.get_mut(&mh_s) {
+            if modt > rf.modt {
+                rf.modt = modt;
+            }
+            trace!("Block referenced multiply: {} by {}", &mh_s, &cid_str);
+        } else if bp.is_file() {
+            debug!("New block: {mh_s}");
+        } else {
+            fs::remove_file(path)?;
+            bail!(
+                "Orphaned CID {} (has no block {}). Removed. A block I do have: {:?}",
+                &cid_str,
+                &mh_s,
+                self.unref_block.iter().next(),
+            );
+        }
+        let links: Vec<_> = fs::read_to_string(&path)?
+            .lines()
+            .map(String::from)
+            .collect();
+        if Codec::DagPb == cid.codec().try_into()? {
+            let bytes = fs::read(&bp)?;
+            let node = UnixfsNode::decode(&cid, bytes.into())?;
+            let parsed_links: Vec<_> = node
+                .links()
+                .filter_map(|r| r.map(|l| l.cid.to_string()).ok())
+                .collect();
+            if !links.eq(&parsed_links) {
+                warn!("The recorded links do not match those parsed out of the node itself. Re-writing recorded CIDs. CID={} recorded={:?} parsed={:?}", &cid_str, &links, &parsed_links);
+                //The eq consumed it
+                let mut f = File::open(&path)?;
+                for l in &parsed_links {
+                    writeln!(&mut f, "{}", &l)?;
+                }
+            }
+            for l in parsed_links {
+                if !self.existing.contains(&l) {
+                    self.linked.insert(l);
+                }
+            }
+        } else if !links.is_empty() {
+            warn!(
+                "There are links recorded for a CID {} of codec {} : {:?}",
+                &cid_str,
+                cid.codec(),
+                links
+            );
+        }
+        self.linked.remove(&cid_str);
+        self.existing.insert(cid_str);
+        Ok(())
+    }
+}
+
+impl Ord for OnDiskBlock {
+    fn cmp(&self, other: &Self) -> Ordering {
+        for o in &[
+            self.modt.cmp(&other.modt),
+            other.size.cmp(&self.size),
+            self.mh_s.cmp(&other.mh_s),
+        ] {
+            if *o != Ordering::Equal {
+                return *o;
+            }
+        }
+        Ordering::Equal
+    }
+}
+impl PartialOrd for OnDiskBlock {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(&other))
+    }
+}
+impl Debug for BlockCleanup {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "listing={:?},total_size={},existing(count={})",
+            &self.listing,
+            self.total_size,
+            self.existing.len(),
+        )
+    }
+}
+impl Debug for CidCleanup {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CidCleanup{...}")
     }
 }
 
@@ -381,5 +670,22 @@ pub mod tests {
         let missing_links = harness.provider.get_missing_cid_blocks(cid_str).unwrap();
         assert_eq!(links.len(), 2);
         assert_eq!(missing_links.len(), 0);
+    }
+
+    #[test]
+    pub fn test_sha2_512_roundtrip() {
+        let harness = TestHarness::new();
+        let cid = "bafkrgqg5v422de3bpk5myqltjgxcaqjrcltputujvf7kecu653tewvottiqzfgjke5h4dkbwxi6chi765o6uktkeensdz2aofknmst5fjssj6".to_string();
+        let block = StoredBlock {
+            cid: cid.clone(),
+            filename: None,
+            data: b"abc".to_vec(),
+            links: vec![],
+        };
+        harness.provider.import_block(&block).unwrap();
+        let mut actual = Vec::new();
+        harness.provider.get_blocks(&mut actual, &cid).unwrap();
+        let expected = vec![block];
+        assert_eq!(actual, expected);
     }
 }

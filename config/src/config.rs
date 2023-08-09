@@ -5,6 +5,7 @@ use figment::{
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use transports::MAX_MTU;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -39,7 +40,7 @@ impl Default for Config {
             // Default retry timeout of 120_000 ms = 120 s = 2 minutes
             retry_timeout_duration: 120_000,
             // Default storage dir
-            storage_path: "storage".to_string(),
+            storage_path: default_storage_path(),
             // Default MTU appropriate for dev radio
             // Maxes out at 1024 * 3 bytes
             mtu: 512,
@@ -55,8 +56,17 @@ impl Default for Config {
         }
     }
 }
-
-fn default_path() -> Option<String> {
+fn default_storage_path() -> String {
+    dirs::cache_dir()
+        .and_then(|d: PathBuf| {
+            d.join("myceli")
+                .into_os_string()
+                .to_str()
+                .map(|s| s.to_owned())
+        })
+        .unwrap_or_else(|| "storage".to_owned())
+}
+fn default_config_path() -> Option<String> {
     if let Some(d) = dirs::config_dir() {
         let f = d.join("myceli").join("myceli.toml");
         if f.is_file() {
@@ -68,7 +78,7 @@ fn default_path() -> Option<String> {
 impl Config {
     pub fn parse(path: Option<String>) -> Result<Self> {
         let mut config = Figment::from(Serialized::defaults(Config::default()));
-        if let Some(path) = path.or(default_path()) {
+        if let Some(path) = path.or(default_config_path()) {
             let toml_values = Toml::file(&path);
             debug!("Config values in file {}: {:?}", &path, toml_values.data());
             config = config.merge(toml_values);

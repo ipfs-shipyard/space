@@ -1,7 +1,6 @@
 use crate::{block::StoredBlock, error::StorageError, provider::StorageProvider};
-
 use anyhow::{bail, Result};
-
+use log::trace;
 use rusqlite::{params_from_iter, Connection};
 
 pub struct SqliteStorageProvider {
@@ -312,6 +311,10 @@ impl StorageProvider for SqliteStorageProvider {
 
     fn get_all_dag_blocks(&self, cid: &str) -> Result<Vec<StoredBlock>> {
         self.get_blocks_recursive_query(cid, None, None)
+    }
+
+    fn incremental_gc(&mut self) {
+        trace!("TODO incremental_gc");
     }
 }
 

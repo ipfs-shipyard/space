@@ -1,16 +1,26 @@
-use log::{Level, Metadata, Record};
+use log::{Metadata, Record};
 
-struct Smalog;
+struct Smalog {
+    lev: log::LevelFilter,
+}
 
-static LOGGER: Smalog = Smalog {};
+static mut LOGGER: Smalog = Smalog {
+    lev: log::LevelFilter::Info,
+};
 pub fn init() {
-    log::set_logger(&LOGGER).expect("Failed to set the logger implementation!");
-    log::set_max_level(log::LevelFilter::Info);
+    set_level(log::LevelFilter::Info);
+}
+pub fn set_level(lev: log::LevelFilter) {
+    unsafe {
+        LOGGER.lev = lev;
+        log::set_logger(&LOGGER).expect("Failed to set the logger implementation!");
+    }
+    log::set_max_level(lev);
 }
 
 impl log::Log for Smalog {
     fn enabled(&self, metadata: &Metadata) -> bool {
-        metadata.level() <= Level::Info
+        metadata.level() <= self.lev
     }
 
     fn log(&self, record: &Record) {
