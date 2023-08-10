@@ -68,9 +68,10 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         connected: Arc<Mutex<bool>>,
         block_size: u32,
         radio_address: Option<String>,
+        high_disk_usage: u64,
     ) -> Result<Shipper<T>> {
         let storage = Rc::new(Storage::new(
-            default_storage_provider(storage_path)?,
+            default_storage_provider(storage_path, high_disk_usage)?,
             block_size,
         ));
         Ok(Shipper {
@@ -445,7 +446,11 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             filename: block.filename,
         };
         stored_block.validate()?;
-        self.storage.import_block(&stored_block)
+        if let Some(store) = Rc::get_mut(&mut self.storage) {
+            store.import_block(&stored_block)
+        } else {
+            Err(anyhow!("Unable to lock storage"))
+        }
     }
 }
 
@@ -521,6 +526,7 @@ mod tests {
                 Arc::new(Mutex::new(true)),
                 BLOCK_SIZE,
                 None,
+                u64::MAX,
             )
             .unwrap();
             TestShipper {
@@ -600,12 +606,9 @@ mod tests {
 
         // Generate file for test
         let test_file_path = transmitter.generate_file().unwrap();
-
+        let store = Rc::get_mut(&mut transmitter._storage).unwrap();
         // Import test file into transmitter storage
-        let test_file_cid = transmitter
-            ._storage
-            .import_path(&PathBuf::from(test_file_path))
-            .unwrap();
+        let test_file_cid = store.import_path(&PathBuf::from(test_file_path)).unwrap();
 
         transmitter
             .shipper

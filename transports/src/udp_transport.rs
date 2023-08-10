@@ -1,4 +1,4 @@
-use crate::error::{adhoc_err, TransportError};
+use crate::error::TransportError;
 use crate::{
     error::{adhoc, Result},
     udp_chunking::SimpleChunker,
@@ -19,6 +19,7 @@ pub struct UdpTransport {
     chunker: Arc<Mutex<SimpleChunker>>,
     max_read_attempts: Option<u16>,
     chunk_transmit_throttle: Option<u32>,
+    timeout: Option<Duration>,
 }
 
 impl UdpTransport {
@@ -30,11 +31,13 @@ impl UdpTransport {
             chunker: Arc::new(Mutex::new(SimpleChunker::new(mtu))),
             max_read_attempts: None,
             chunk_transmit_throttle,
+            timeout: None,
         })
     }
 
     pub fn set_read_timeout(&mut self, dur: Option<Duration>) -> Result<()> {
-        Ok(self.socket.set_read_timeout(dur)?)
+        self.timeout = dur;
+        Ok(self.socket.set_read_timeout(dur.map(|d| d / 10))?)
     }
 
     pub fn set_max_read_attempts(&mut self, attempts: Option<u16>) {
@@ -46,12 +49,11 @@ impl Transport for UdpTransport {
     fn receive(&self) -> Result<(Message, String)> {
         let mut buf = vec![0; usize::from(MAX_MTU)];
         let mut sender_addr;
-        let mut read_attempts = 0;
+        let mut read_errors = 0;
         let mut read_len;
         let mut timeouts = 0;
         loop {
             loop {
-                read_attempts += 1;
                 match self.socket.recv_from(&mut buf) {
                     Ok((len, sender)) => {
                         if len > 0 {
@@ -63,21 +65,21 @@ impl Transport for UdpTransport {
                     Err(e) => match e.kind() {
                         io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => {
                             trace!("Receive timed out. May be normal depending on usage.");
+                            if timeouts >= 10 {
+                                return Err(TransportError::TimedOut);
+                            }
                             timeouts += 1;
                         }
                         _ => {
                             error!("Recv failed {e}");
+                            if self.max_read_attempts.unwrap_or(u16::MAX) <= read_errors {
+                                return Err(e.into());
+                            }
+                            read_errors += 1;
                         }
                     },
                 }
-                if let Some(max_attempts) = self.max_read_attempts {
-                    if read_attempts > max_attempts {
-                        adhoc_err("Exceeded number of read attempts")?;
-                    } else if timeouts * 2 > read_attempts {
-                        return Err(TransportError::TimedOut);
-                    }
-                }
-                sleep(Duration::from_millis(10));
+                sleep(Duration::from_millis(1));
             }
 
             debug!("Received possible chunk of {} bytes", read_len);
@@ -101,14 +103,14 @@ impl Transport for UdpTransport {
                     debug!("Received: no msg ready for assembly yet");
                 }
                 Err(err) => {
-                    return Err(err.into());
+                    return Err(err);
                 }
             }
         }
     }
 
     fn send(&self, msg: Message, addr: &str) -> Result<()> {
-        debug!("Transmitting msg: {msg:?}");
+        debug!("UDP: Transmitting msg: {msg:?}");
         let addr = addr
             .to_socket_addrs()?
             .next()

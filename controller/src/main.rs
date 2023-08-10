@@ -9,7 +9,7 @@ use transports::{Transport, UdpTransport, MAX_MTU};
 #[clap(about = "Control a Myceli instance")]
 pub struct Cli {
     #[arg(help = "The network address that a myceli instance is listening on")]
-    instance_addr: String,
+    instance_addr: Option<String>,
     #[arg(
         short,
         long,
@@ -45,7 +45,14 @@ impl Cli {
         let cmd_str = serde_json::to_string(&command)?;
         info!("Transmitting: {}", &cmd_str);
 
-        transport.send(command, &self.instance_addr)?;
+        let instance_addr = if let Some(addr) = &self.instance_addr {
+            addr.clone()
+        } else {
+            let cfg = config::Config::parse(None)
+                .expect("Please specify instance addr, as I can't read myceli.toml");
+            cfg.listen_address
+        };
+        transport.send(command, &instance_addr)?;
         if self.listen_mode {
             match transport.receive() {
                 Ok((msg, _)) => {

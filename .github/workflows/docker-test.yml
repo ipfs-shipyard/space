@@ -1,5 +1,5 @@
-name: CI Unit Testing
-on: [pull_request]
+name: Docker Testing
+on: [ pull_request ]
 jobs:
   test_docker_build:
     name: Test Docker build

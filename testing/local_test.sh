@@ -74,6 +74,7 @@ kill_myceli() {
 start_myceli() {
   kill_myceli "${1}"
   export c="$1"
+  export RUST_LOG=info
   ( ${c}/myceli "${c}/config.toml" 2>&1 <&- | tee "${c}/log" & ) &
   if [ ${c} == sat ]
   then
@@ -99,7 +100,7 @@ else
 fi
 rm -rv sat || true
 rm -rv gnd || true
-mkdir -p sat/storage.db
+mkdir -p sat/
 mkdir gnd
 cat > sat/config.toml <<SATCFG
 listen_address = "0.0.0.0:8764"
@@ -128,9 +129,10 @@ bld() {
   bin=`cargo metadata --format-version 1 | jq -r .target_directory`/${profile}/myceli
   cp -v "${bin}" "${to}"
 }
-bld gnd --features big
+bld gnd --features big  --no-default-features
 bld sat --profile small --features small --no-default-features
 start_myceli sat
+ipfs daemon & # In case it's not already running
 start_myceli gnd
 for p in 5001 8765
 do
@@ -153,9 +155,9 @@ controller() {
   set +x
 }
 cid_present() {
-  if [ -d ${1}/storage.db ]
+  if [ -f ${1}/cids/${2} ]
   then
-    test -f ${1}/storage.db/cids/${2}
+    true
   else
     sqlite3 ${1}/storage.db "select * from blocks where cid = '${2}';" | grep '[a-z]'
   fi
@@ -243,7 +245,7 @@ echo 'Shutdown the myceli ground instance'
 kill_myceli gnd
 
 echo ', delete the storage database'
-rm -rv gnd/storage.db
+rm -v gnd/storage.db
 
 echo ', and start the myceli ground instance again.'
 start_myceli gnd

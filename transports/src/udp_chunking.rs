@@ -122,7 +122,7 @@ impl SimpleChunker {
         let mut databuf = &data[..data.len()];
         let chunk = SimpleChunk::decode(&mut databuf)?;
         self.recv_chunk(chunk)?;
-        Ok(self.attempt_msg_assembly()?)
+        self.attempt_msg_assembly()
     }
 }
 

@@ -11,7 +11,7 @@ use crate::file_provider::FileStorageProvider;
 
 pub trait StorageProvider {
     // Import a stored block
-    fn import_block(&self, block: &StoredBlock) -> Result<()>;
+    fn import_block(&mut self, block: &StoredBlock) -> Result<()>;
     // Requests a list of CIDs currently available in storage
     fn get_available_cids(&self) -> Result<Vec<String>>;
     // Requests the block associated with the given CID
@@ -38,11 +38,14 @@ pub trait StorageProvider {
     fn incremental_gc(&mut self);
 }
 
-pub fn default_storage_provider(_storage_path: &str) -> Result<Box<dyn StorageProvider>> {
+pub fn default_storage_provider(
+    _storage_path: &str,
+    _high_disk_usage: u64,
+) -> Result<Box<dyn StorageProvider>> {
     #[cfg(all(not(feature = "files"), not(feature = "sqlite")))]
     let provider = NullStorageProvider::default();
     #[cfg(all(feature = "files", not(feature = "sqlite")))]
-    let provider = FileStorageProvider::new(_storage_path)?;
+    let provider = FileStorageProvider::new(_storage_path, _high_disk_usage)?;
     #[cfg(feature = "sqlite")]
     let provider = SqliteStorageProvider::new(_storage_path)?;
     Ok(Box::new(provider))
