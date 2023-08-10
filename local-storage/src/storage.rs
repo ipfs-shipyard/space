@@ -27,7 +27,7 @@ impl Storage {
         }
     }
 
-    pub fn import_path(&self, path: &Path) -> Result<String> {
+    pub fn import_path(&mut self, path: &Path) -> Result<String> {
         debug!("import_path({:?})", &path);
         let rt = tokio::runtime::Runtime::new()?;
         let blocks: Result<Vec<Block>> = rt.block_on(async {
@@ -138,7 +138,7 @@ impl Storage {
         self.provider.get_all_dag_blocks(cid)
     }
 
-    pub fn import_block(&self, block: &StoredBlock) -> Result<()> {
+    pub fn import_block(&mut self, block: &StoredBlock) -> Result<()> {
         info!("Importing block {:?}", block);
         self.provider.import_block(block)
     }
@@ -194,7 +194,7 @@ pub mod tests {
 
     #[test]
     pub fn test_import_path_to_storage_single_block() {
-        let harness = TestHarness::new();
+        let mut harness = TestHarness::new();
 
         let temp_dir = assert_fs::TempDir::new().unwrap();
         let test_file = temp_dir.child("data.txt");
@@ -217,7 +217,7 @@ pub mod tests {
 
     #[test]
     pub fn test_import_path_to_storage_multi_block() {
-        let harness = TestHarness::new();
+        let mut harness = TestHarness::new();
 
         let temp_dir = assert_fs::TempDir::new().unwrap();
         let test_file = temp_dir.child("data.txt");
@@ -240,7 +240,7 @@ pub mod tests {
 
     #[test]
     pub fn export_path_from_storage() {
-        let harness = TestHarness::new();
+        let mut harness = TestHarness::new();
 
         let temp_dir = assert_fs::TempDir::new().unwrap();
         let test_file = temp_dir.child("data.txt");
@@ -267,7 +267,7 @@ pub mod tests {
     #[test]
     pub fn export_from_storage_various_file_sizes_binary_data() {
         for size in [100, 200, 300, 500, 1_000] {
-            let harness = TestHarness::new();
+            let mut harness = TestHarness::new();
             let temp_dir = assert_fs::TempDir::new().unwrap();
             let test_file = temp_dir.child("data.txt");
 
@@ -294,7 +294,7 @@ pub mod tests {
 
     #[test]
     pub fn test_get_dag_blocks_by_window() {
-        let harness = TestHarness::new();
+        let mut harness = TestHarness::new();
         let temp_dir = assert_fs::TempDir::new().unwrap();
         let test_file = temp_dir.child("data.txt");
 
@@ -320,7 +320,7 @@ pub mod tests {
 
     #[test]
     pub fn compare_get_blocks_to_get_cids() {
-        let harness = TestHarness::new();
+        let mut harness = TestHarness::new();
         let temp_dir = assert_fs::TempDir::new().unwrap();
         let test_file = temp_dir.child("data.txt");
 
@@ -342,7 +342,7 @@ pub mod tests {
     // #[test]
     // pub fn export_from_storage_various_file_sizes_duplicated_data() {
     //     for size in [100, 200, 300, 500, 1000] {
-    //         let harness = TestHarness::new();
+    //         let mut harness = TestHarness::new();
     //         let temp_dir = assert_fs::TempDir::new().unwrap();
     //         let test_file = temp_dir.child("data.txt");
     //         test_file

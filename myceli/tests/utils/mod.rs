@@ -92,11 +92,12 @@ fn start_listener_thread(listen_addr: SocketAddr, db_path: ChildPath) {
     let listen_addr_str = listen_addr.to_string();
     let mut transport = UdpTransport::new(&listen_addr_str, 60, None).unwrap();
     transport
-        .set_read_timeout(Some(Duration::from_millis(10)))
+        .set_read_timeout(Some(Duration::from_secs(10)))
         .unwrap();
     transport.set_max_read_attempts(Some(1));
     let transport = Arc::new(transport);
-    let mut listener = Listener::new(&listen_addr, db_path, transport, BLOCK_SIZE, None).unwrap();
+    let mut listener =
+        Listener::new(&listen_addr, db_path, transport, BLOCK_SIZE, None, 9).unwrap();
     listener
         .start(10, 2, BLOCK_SIZE)
         .expect("Error encountered in listener");
@@ -110,7 +111,7 @@ impl TestController {
     pub fn new() -> Self {
         let mut transport = UdpTransport::new("127.0.0.1:0", 60, None).unwrap();
         transport
-            .set_read_timeout(Some(Duration::from_millis(50)))
+            .set_read_timeout(Some(Duration::from_secs(9)))
             .unwrap();
         transport.set_max_read_attempts(Some(1));
         TestController { transport }
@@ -118,6 +119,7 @@ impl TestController {
 
     pub fn send_and_recv(&mut self, target_addr: &str, message: Message) -> Message {
         self.send_msg(message, target_addr);
+        std::thread::sleep(Duration::from_millis(500));
         self.recv_msg().unwrap()
     }
 

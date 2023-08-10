@@ -2,6 +2,7 @@ use crate::{block::StoredBlock, error::StorageError, provider::StorageProvider};
 use anyhow::{bail, Result};
 use log::trace;
 use rusqlite::{params_from_iter, Connection};
+use std::{path::PathBuf, str::FromStr};
 
 pub struct SqliteStorageProvider {
     conn: Box<Connection>,
@@ -9,6 +10,18 @@ pub struct SqliteStorageProvider {
 
 impl SqliteStorageProvider {
     pub fn new(db_path: &str) -> Result<Self> {
+        let mut db_path = PathBuf::from_str(db_path)?;
+        loop {
+            if db_path.is_dir() {
+                db_path = db_path.join("storage.db");
+            } else if db_path.exists()
+                || db_path.extension().unwrap_or_default().to_str() == Some("db")
+            {
+                break;
+            } else {
+                db_path = db_path.join("storage.db");
+            }
+        }
         let result = SqliteStorageProvider {
             conn: Box::new(Connection::open(db_path)?),
         };
@@ -106,7 +119,7 @@ impl SqliteStorageProvider {
 }
 
 impl StorageProvider for SqliteStorageProvider {
-    fn import_block(&self, block: &StoredBlock) -> Result<()> {
+    fn import_block(&mut self, block: &StoredBlock) -> Result<()> {
         self.conn.execute(
             "INSERT OR IGNORE INTO blocks (cid, data, filename) VALUES (?1, ?2, ?3)",
             (&block.cid, &block.data, &block.filename),
@@ -354,7 +367,7 @@ pub mod tests {
 
     #[test]
     pub fn test_import_one_block() {
-        let harness = TestHarness::new();
+        let mut harness = TestHarness::new();
 
         let cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(b"00"));
         let cid_str = cid.to_string();
@@ -376,7 +389,7 @@ pub mod tests {
         use std::collections::HashSet;
         use std::iter::FromIterator;
 
-        let harness = TestHarness::new();
+        let mut harness = TestHarness::new();
 
         let seeds = vec![b"00", b"11", b"22"];
         let cids: Vec<String> = seeds
@@ -405,7 +418,7 @@ pub mod tests {
 
     #[test]
     pub fn test_import_then_get_block() {
-        let harness = TestHarness::new();
+        let mut harness = TestHarness::new();
 
         let cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(b"00"));
 
@@ -426,7 +439,7 @@ pub mod tests {
 
     #[test]
     pub fn test_import_then_get_root_block() {
-        let harness = TestHarness::new();
+        let mut harness = TestHarness::new();
 
         let cid = Cid::new_v1(0x70, cid::multihash::Code::Sha2_256.digest(b"00"));
         let block_cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(b"11"));
@@ -448,7 +461,7 @@ pub mod tests {
 
     #[test]
     pub fn test_verify_detect_missing_blocks() {
-        let harness = TestHarness::new();
+        let mut harness = TestHarness::new();
 
         let cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(b"00"));
         let block_cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(b"11"));
@@ -479,7 +492,7 @@ pub mod tests {
 
     #[test]
     pub fn test_verify_detect_no_missing_blocks() {
-        let harness = TestHarness::new();
+        let mut harness = TestHarness::new();
 
         let cid = Cid::new_v1(0x55, cid::multihash::Code::Sha2_256.digest(b"00"));
         let cid_str = cid.to_string();

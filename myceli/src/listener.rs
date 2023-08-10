@@ -2,6 +2,7 @@ use crate::handlers;
 use crate::shipper::Shipper;
 use anyhow::Result;
 use local_storage::{provider::default_storage_provider, storage::Storage};
+use log::{error, info, trace};
 use messages::{ApplicationAPI, DataProtocol, Message};
 use std::{
     net::SocketAddr,
@@ -13,14 +14,13 @@ use std::{
 };
 use transports::{Transport, TransportError};
 
-use log::{error, info};
-
 pub struct Listener<T> {
     storage_path: String,
     storage: Rc<Storage>,
     transport: Arc<T>,
     connected: Arc<Mutex<bool>>,
     radio_address: Option<String>,
+    high_disk_usage: u64,
 }
 
 impl<T: Transport + Send + 'static> Listener<T> {
@@ -30,9 +30,10 @@ impl<T: Transport + Send + 'static> Listener<T> {
         transport: Arc<T>,
         block_size: u32,
         radio_address: Option<String>,
+        high_disk_usage: u64,
     ) -> Result<Listener<T>> {
         let storage = Rc::new(Storage::new(
-            default_storage_provider(storage_path)?,
+            default_storage_provider(storage_path, high_disk_usage)?,
             block_size,
         ));
 
@@ -43,6 +44,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
             transport,
             connected: Arc::new(Mutex::new(true)),
             radio_address,
+            high_disk_usage,
         })
     }
 
@@ -59,6 +61,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
         let shipper_transport = Arc::clone(&self.transport);
         let initial_connected = Arc::clone(&self.connected);
         let shipper_radio = self.radio_address.clone();
+        let high_disk_usage = self.high_disk_usage;
         spawn(move || {
             let mut shipper = Shipper::new(
                 &shipper_storage_path,
@@ -70,6 +73,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 initial_connected,
                 block_size,
                 shipper_radio,
+                high_disk_usage,
             )
             .expect("Shipper creation failed");
             shipper.receive_msg_loop();
@@ -118,7 +122,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
         sender_addr: &str,
         shipper_sender: Sender<(DataProtocol, String)>,
     ) -> Result<Option<Message>> {
-        println!("Handling {message:?}");
+        trace!("Handling {message:?}");
         let resp = match message {
             Message::ApplicationAPI(ApplicationAPI::TransmitDag {
                 cid,
@@ -144,7 +148,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::ImportFile { path }) => {
-                Some(handlers::import_file(&path, self.storage.clone())?)
+                Some(handlers::import_file(&path, &mut self.storage)?)
             }
             Message::ApplicationAPI(ApplicationAPI::ExportDag { cid, path }) => {
                 match self.storage.export_cid(&cid, &PathBuf::from(path.clone())) {

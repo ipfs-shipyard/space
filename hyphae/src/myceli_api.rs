@@ -35,7 +35,8 @@ impl MyceliApi {
     }
 
     fn send_msg(&self, msg: Message) -> Result<()> {
-        self.transport.send(msg, &self.address)
+        self.transport.send(msg, &self.address)?;
+        Ok(())
     }
 
     fn recv_msg(&self) -> Result<Message> {
