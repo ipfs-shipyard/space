@@ -6,7 +6,7 @@ use anyhow::bail;
 pub(crate) struct NullStorageProvider {}
 
 impl StorageProvider for NullStorageProvider {
-    fn import_block(&self, _block: &StoredBlock) -> anyhow::Result<()> {
+    fn import_block(&mut self, _block: &StoredBlock) -> anyhow::Result<()> {
         bail!("NullStorageProvider does not implement anything")
     }
 

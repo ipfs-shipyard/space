@@ -9,6 +9,7 @@ rust-version.workspace = true
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+config.workspace = true
 env_logger.workspace = true
 log.workspace = true
 messages.workspace = true

@@ -2,22 +2,19 @@ use crate::handlers;
 use crate::shipper::Shipper;
 use anyhow::Result;
 use local_storage::{provider::default_storage_provider, storage::Storage};
+use log::{error, info, trace};
 use messages::{ApplicationAPI, DataProtocol, Message};
 use std::{
     net::SocketAddr,
     path::PathBuf,
-    rc::Rc,
     sync::mpsc::{self, Sender},
     sync::{Arc, Mutex},
     thread::spawn,
 };
 use transports::{Transport, TransportError};
 
-use log::{error, info};
-
 pub struct Listener<T> {
-    storage_path: String,
-    storage: Rc<Storage>,
+    storage: Storage,
     transport: Arc<T>,
     connected: Arc<Mutex<bool>>,
     radio_address: Option<String>,
@@ -30,15 +27,15 @@ impl<T: Transport + Send + 'static> Listener<T> {
         transport: Arc<T>,
         block_size: u32,
         radio_address: Option<String>,
+        high_disk_usage: u64,
     ) -> Result<Listener<T>> {
-        let storage = Rc::new(Storage::new(
-            default_storage_provider(storage_path)?,
+        let storage = Storage::new(
+            default_storage_provider(storage_path, high_disk_usage)?,
             block_size,
-        ));
+        );
 
         info!("Listening on {_listen_address}");
         Ok(Listener {
-            storage_path: storage_path.to_string(),
             storage,
             transport,
             connected: Arc::new(Mutex::new(true)),
@@ -54,14 +51,14 @@ impl<T: Transport + Send + 'static> Listener<T> {
     ) -> Result<()> {
         // First setup the shipper and its pieces
         let (shipper_sender, shipper_receiver) = mpsc::channel();
-        let shipper_storage_path = self.storage_path.to_string();
         let shipper_sender_clone = shipper_sender.clone();
         let shipper_transport = Arc::clone(&self.transport);
         let initial_connected = Arc::clone(&self.connected);
         let shipper_radio = self.radio_address.clone();
+        let shipper_storage_provider = self.storage.get_provider();
         spawn(move || {
             let mut shipper = Shipper::new(
-                &shipper_storage_path,
+                shipper_storage_provider,
                 shipper_receiver,
                 shipper_sender_clone,
                 shipper_timeout_duration,
@@ -101,9 +98,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     }
                 }
                 Err(TransportError::TimedOut) => {
-                    if let Some(reference) = Rc::get_mut(&mut self.storage) {
-                        reference.provider.incremental_gc();
-                    }
+                    self.storage.incremental_gc();
                 }
                 Err(e) => {
                     error!("Receive message failed: {e}");
@@ -118,7 +113,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
         sender_addr: &str,
         shipper_sender: Sender<(DataProtocol, String)>,
     ) -> Result<Option<Message>> {
-        println!("Handling {message:?}");
+        trace!("Handling {message:?}");
         let resp = match message {
             Message::ApplicationAPI(ApplicationAPI::TransmitDag {
                 cid,
@@ -144,7 +139,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::ImportFile { path }) => {
-                Some(handlers::import_file(&path, self.storage.clone())?)
+                Some(handlers::import_file(&path, &mut self.storage)?)
             }
             Message::ApplicationAPI(ApplicationAPI::ExportDag { cid, path }) => {
                 match self.storage.export_cid(&cid, &PathBuf::from(path.clone())) {
@@ -160,13 +155,13 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 }
             }
             Message::ApplicationAPI(ApplicationAPI::RequestAvailableBlocks) => {
-                Some(handlers::request_available_blocks(self.storage.clone())?)
+                Some(handlers::request_available_blocks(&self.storage)?)
             }
-            Message::ApplicationAPI(ApplicationAPI::GetMissingDagBlocks { cid }) => Some(
-                handlers::get_missing_dag_blocks(&cid, self.storage.clone())?,
-            ),
+            Message::ApplicationAPI(ApplicationAPI::GetMissingDagBlocks { cid }) => {
+                Some(handlers::get_missing_dag_blocks(&cid, &self.storage)?)
+            }
             Message::ApplicationAPI(ApplicationAPI::ValidateDag { cid }) => {
-                Some(handlers::validate_dag(&cid, self.storage.clone())?)
+                Some(handlers::validate_dag(&cid, &self.storage)?)
             }
             Message::DataProtocol(data_msg) => {
                 shipper_sender.send((data_msg, sender_addr.to_string()))?;
@@ -227,7 +222,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::RequestAvailableDags) => {
-                Some(handlers::get_available_dags(self.storage.clone())?)
+                Some(handlers::get_available_dags(&self.storage)?)
             }
             // Default case for valid messages which don't have handling code implemented yet
             _message => {

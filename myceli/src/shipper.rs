@@ -2,12 +2,11 @@ use crate::handlers;
 use anyhow::{anyhow, Result};
 use cid::Cid;
 use local_storage::block::StoredBlock;
-use local_storage::{provider::default_storage_provider, storage::Storage};
+use local_storage::{provider::Handle as StorageProviderHandle, storage::Storage};
 use messages::Message;
 use messages::{DataProtocol, TransmissionBlock};
 use std::collections::BTreeMap;
 use std::net::ToSocketAddrs;
-use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -37,7 +36,7 @@ struct WindowSession {
 
 pub struct Shipper<T> {
     // Handle to storage
-    pub storage: Rc<Storage>,
+    storage: Storage,
     // Current windowed shipping sessions
     window_sessions: BTreeMap<String, WindowSession>,
     // Channel for receiving messages from Listener
@@ -59,7 +58,7 @@ pub struct Shipper<T> {
 impl<T: Transport + Send + 'static> Shipper<T> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        storage_path: &str,
+        storage_provider: StorageProviderHandle,
         receiver: Receiver<(DataProtocol, String)>,
         sender: Sender<(DataProtocol, String)>,
         retry_timeout_duration: u64,
@@ -69,10 +68,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         block_size: u32,
         radio_address: Option<String>,
     ) -> Result<Shipper<T>> {
-        let storage = Rc::new(Storage::new(
-            default_storage_provider(storage_path)?,
-            block_size,
-        ));
+        let storage = Storage::new(storage_provider, block_size);
         Ok(Shipper {
             storage,
             window_sessions: BTreeMap::new(),
@@ -137,7 +133,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                     let missing_blocks_msg = handlers::get_missing_dag_blocks_window_protocol(
                         &cid,
                         blocks,
-                        Rc::clone(&self.storage),
+                        &self.storage,
                     )?;
 
                     self.transmit_msg(missing_blocks_msg, &target_addr)?;
@@ -145,8 +141,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             }
             DataProtocol::RequestMissingDagBlocks { cid } => {
                 if *self.connected.lock().unwrap() {
-                    let missing_blocks_msg =
-                        handlers::get_missing_dag_blocks(&cid, Rc::clone(&self.storage))?;
+                    let missing_blocks_msg = handlers::get_missing_dag_blocks(&cid, &self.storage)?;
                     self.transmit_msg(missing_blocks_msg, &target_addr)?;
                 }
             }
@@ -472,7 +467,7 @@ mod tests {
     use assert_fs::{fixture::PathChild, TempDir};
     use cid::multihash::MultihashDigest;
     use cid::Cid;
-    use local_storage::sql_provider::SqliteStorageProvider;
+    use local_storage::{provider::Handle, sql_provider::SqliteStorageProvider};
     use messages::{DataProtocol, Message, TransmissionBlock};
     use rand::{thread_rng, Rng, RngCore};
     use std::path::PathBuf;
@@ -484,7 +479,7 @@ mod tests {
     struct TestShipper {
         listen_addr: String,
         listen_transport: Arc<UdpTransport>,
-        _storage: Rc<Storage>,
+        _storage: Storage,
         shipper: Shipper<UdpTransport>,
         test_dir: TempDir,
     }
@@ -508,11 +503,12 @@ mod tests {
             let db_path = test_dir.child("storage.db");
             let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
             provider.setup().unwrap();
-            let _storage = Rc::new(Storage::new(Box::new(provider), BLOCK_SIZE));
+            let provider: Handle = Arc::new(Mutex::new(provider));
+            let _storage = Storage::new(Arc::clone(&provider), BLOCK_SIZE);
             let (shipper_sender, shipper_receiver) = mpsc::channel();
 
             let shipper = Shipper::new(
-                db_path.to_str().unwrap(),
+                Arc::clone(&provider),
                 shipper_receiver,
                 shipper_sender,
                 10,
@@ -600,12 +596,9 @@ mod tests {
 
         // Generate file for test
         let test_file_path = transmitter.generate_file().unwrap();
-
+        let store = &mut transmitter._storage;
         // Import test file into transmitter storage
-        let test_file_cid = transmitter
-            ._storage
-            .import_path(&PathBuf::from(test_file_path))
-            .unwrap();
+        let test_file_cid = store.import_path(&PathBuf::from(test_file_path)).unwrap();
 
         transmitter
             .shipper

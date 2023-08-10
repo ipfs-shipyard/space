@@ -30,6 +30,12 @@ pub struct Config {
     // A path to a directory which where files that appear should be auto-imported.
     // Absence implies no such directory exists
     pub watched_directory: Option<String>,
+    //How much storage space should Local Storage use? Measured in kiB. Default is 1 GiB
+    pub disk_usage: u64,
+    //Minimum amount of time (milliseconds) to elapse between disk-storage-cleanup passes.
+    //0 = OFF (don't run GC)
+    //Default is 10000 (10 seconds)
+    pub gc_period_ms: u32,
 }
 
 impl Default for Config {
@@ -53,11 +59,13 @@ impl Default for Config {
             // Default to no set radio address
             radio_address: None,
             watched_directory: None,
+            disk_usage: 1024 * 1024,
+            gc_period_ms: 10_000,
         }
     }
 }
 fn default_storage_path() -> String {
-    dirs::cache_dir()
+    dirs::data_local_dir()
         .and_then(|d: PathBuf| {
             d.join("myceli")
                 .into_os_string()
@@ -87,7 +95,6 @@ impl Config {
         if config.mtu > MAX_MTU {
             bail!("Configured MTU is too large, cannot exceed {MAX_MTU}",);
         }
-
         Ok(config)
     }
 }

@@ -1,4 +1,5 @@
-use log::{Metadata, Record};
+use log::{Level, Metadata, Record};
+use std::env;
 
 struct Smalog {
     lev: log::LevelFilter,
@@ -8,7 +9,11 @@ static mut LOGGER: Smalog = Smalog {
     lev: log::LevelFilter::Info,
 };
 pub fn init() {
-    set_level(log::LevelFilter::Info);
+    let lev = match env::var("RUST_LOG") {
+        Ok(lev_s) => level_from_str(&lev_s),
+        Err(_) => Level::Info,
+    };
+    set_level(lev.to_level_filter());
 }
 pub fn set_level(lev: log::LevelFilter) {
     unsafe {
@@ -30,4 +35,13 @@ impl log::Log for Smalog {
     }
 
     fn flush(&self) {}
+}
+
+fn level_from_str(s: &str) -> Level {
+    use std::str::FromStr;
+    if let Ok(l) = Level::from_str(s) {
+        return l;
+    }
+    println!("ERROR! RUST_LOG set to {s} which is not recognized by smalog which only accepts a simple level name, i.e. one of: OFF; ERROR; WARN; INFO; DEBUG; TRACE. Will use INFO instead.");
+    Level::Info
 }

@@ -11,7 +11,6 @@ fn watched_dir(cfg: &config::Config) -> PathBuf {
     result.push(
         cfg.clone()
             .watched_directory
-            .clone()
             .expect("Must configure watched_directory before running watcher."),
     );
     result

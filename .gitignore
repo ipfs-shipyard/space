@@ -5,3 +5,4 @@ build/
 storage.db
 sat/
 gnd/
+log
