@@ -2,7 +2,7 @@ use crate::handlers;
 use anyhow::{anyhow, Result};
 use cid::Cid;
 use local_storage::block::StoredBlock;
-use local_storage::{provider::default_storage_provider, storage::Storage};
+use local_storage::{provider::Handle as StorageProviderHandle, storage::Storage};
 use messages::Message;
 use messages::{DataProtocol, TransmissionBlock};
 use std::collections::BTreeMap;
@@ -36,7 +36,7 @@ struct WindowSession {
 
 pub struct Shipper<T> {
     // Handle to storage
-    pub storage: Storage,
+    storage: Storage,
     // Current windowed shipping sessions
     window_sessions: BTreeMap<String, WindowSession>,
     // Channel for receiving messages from Listener
@@ -58,7 +58,7 @@ pub struct Shipper<T> {
 impl<T: Transport + Send + 'static> Shipper<T> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        storage_path: &str,
+        storage_provider: StorageProviderHandle,
         receiver: Receiver<(DataProtocol, String)>,
         sender: Sender<(DataProtocol, String)>,
         retry_timeout_duration: u64,
@@ -67,12 +67,8 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         connected: Arc<Mutex<bool>>,
         block_size: u32,
         radio_address: Option<String>,
-        high_disk_usage: u64,
     ) -> Result<Shipper<T>> {
-        let storage = Storage::new(
-            default_storage_provider(storage_path, high_disk_usage)?,
-            block_size,
-        );
+        let storage = Storage::new(storage_provider, block_size);
         Ok(Shipper {
             storage,
             window_sessions: BTreeMap::new(),
@@ -471,7 +467,7 @@ mod tests {
     use assert_fs::{fixture::PathChild, TempDir};
     use cid::multihash::MultihashDigest;
     use cid::Cid;
-    use local_storage::sql_provider::SqliteStorageProvider;
+    use local_storage::{provider::Handle, sql_provider::SqliteStorageProvider};
     use messages::{DataProtocol, Message, TransmissionBlock};
     use rand::{thread_rng, Rng, RngCore};
     use std::path::PathBuf;
@@ -507,11 +503,12 @@ mod tests {
             let db_path = test_dir.child("storage.db");
             let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
             provider.setup().unwrap();
-            let _storage = Storage::new(Box::new(provider), BLOCK_SIZE);
+            let provider: Handle = Arc::new(Mutex::new(provider));
+            let _storage = Storage::new(Arc::clone(&provider), BLOCK_SIZE);
             let (shipper_sender, shipper_receiver) = mpsc::channel();
 
             let shipper = Shipper::new(
-                db_path.to_str().unwrap(),
+                Arc::clone(&provider),
                 shipper_receiver,
                 shipper_sender,
                 10,
@@ -520,7 +517,6 @@ mod tests {
                 Arc::new(Mutex::new(true)),
                 BLOCK_SIZE,
                 None,
-                u64::MAX,
             )
             .unwrap();
             TestShipper {

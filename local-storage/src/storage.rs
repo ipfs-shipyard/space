@@ -1,26 +1,22 @@
-use crate::error::StorageError;
-use crate::provider::StorageProvider;
-
-use crate::block::StoredBlock;
+use crate::{block::StoredBlock, error::StorageError, provider::Handle as ProviderHandle};
 use anyhow::{bail, Result};
 use futures::TryStreamExt;
 use ipfs_unixfs::{
     builder::{File, FileBuilder},
     Block,
 };
-use std::fs::File as FsFile;
-use std::io::Write;
-use std::path::Path;
+use std::sync::Arc;
+use std::{fs::File as FsFile, io::Write, path::Path};
 
 use log::{debug, error, info};
 
 pub struct Storage {
-    pub provider: Box<dyn StorageProvider>,
+    provider: ProviderHandle,
     block_size: u32,
 }
 
 impl Storage {
-    pub fn new(provider: Box<dyn StorageProvider>, block_size: u32) -> Self {
+    pub fn new(provider: ProviderHandle, block_size: u32) -> Self {
         Storage {
             provider,
             block_size,
@@ -58,7 +54,7 @@ impl Storage {
             if let Err(_e) = stored.validate() {
                 error!("Failed to validate {}, {_e}", b.cid());
             }
-            if let Err(_e) = self.provider.import_block(&stored) {
+            if let Err(_e) = self.provider.lock().unwrap().import_block(&stored) {
                 error!("Failed to import block {_e}");
             }
             if !stored.links.is_empty() {
@@ -72,7 +68,8 @@ impl Storage {
         }
         if let Some(root_cid) = root_cid {
             if let Some(filename) = path.file_name().and_then(|p| p.to_str()) {
-                self.provider.name_dag(&root_cid, filename)?;
+                let lck = self.provider.lock().unwrap();
+                lck.name_dag(&root_cid, filename)?;
             }
 
             info!(
@@ -116,13 +113,13 @@ impl Storage {
     pub fn list_available_cids(&self) -> Result<Vec<String>> {
         // Query list of available CIDs
         // Include all root and child CIDs?
-        self.provider.get_available_cids()
+        self.provider.lock().unwrap().get_available_cids()
     }
 
     pub fn get_block_by_cid(&self, cid: &str) -> Result<StoredBlock> {
         // Check if CID+block exists
         // Return block if exists
-        self.provider.get_block_by_cid(cid)
+        self.provider.lock().unwrap().get_block_by_cid(cid)
     }
 
     pub fn get_all_dag_cids(
@@ -131,24 +128,27 @@ impl Storage {
         offset: Option<u32>,
         window_size: Option<u32>,
     ) -> Result<Vec<String>> {
-        self.provider.get_all_dag_cids(cid, offset, window_size)
+        self.provider
+            .lock()
+            .unwrap()
+            .get_all_dag_cids(cid, offset, window_size)
     }
 
     pub fn get_all_dag_blocks(&self, cid: &str) -> Result<Vec<StoredBlock>> {
-        self.provider.get_all_dag_blocks(cid)
+        self.provider.lock().unwrap().get_all_dag_blocks(cid)
     }
 
     pub fn import_block(&mut self, block: &StoredBlock) -> Result<()> {
         info!("Importing block {:?}", block);
-        self.provider.import_block(block)
+        self.provider.lock().unwrap().import_block(block)
     }
 
     pub fn get_missing_dag_blocks(&self, cid: &str) -> Result<Vec<String>> {
-        self.provider.get_missing_cid_blocks(cid)
+        self.provider.lock().unwrap().get_missing_cid_blocks(cid)
     }
 
     pub fn list_available_dags(&self) -> Result<Vec<(String, String)>> {
-        self.provider.list_available_dags()
+        self.provider.lock().unwrap().list_available_dags()
     }
 
     pub fn get_dag_blocks_by_window(
@@ -160,7 +160,17 @@ impl Storage {
         let offset = window_size * window_num;
 
         self.provider
+            .lock()
+            .unwrap()
             .get_dag_blocks_by_window(cid, offset, window_size)
+    }
+
+    pub fn incremental_gc(&mut self) {
+        self.provider.lock().unwrap().incremental_gc();
+    }
+
+    pub fn get_provider(&self) -> ProviderHandle {
+        Arc::clone(&self.provider)
     }
 }
 
@@ -170,6 +180,7 @@ pub mod tests {
     use crate::sql_provider::SqliteStorageProvider;
     use assert_fs::{fixture::FileWriteBin, fixture::PathChild, TempDir};
     use rand::{thread_rng, RngCore};
+    use std::sync::{Arc, Mutex};
 
     const BLOCK_SIZE: usize = 1024 * 10;
 
@@ -184,7 +195,10 @@ pub mod tests {
             let db_path = db_dir.child("storage.db");
             let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
             provider.setup().unwrap();
-            let storage = Storage::new(Box::new(provider), BLOCK_SIZE.try_into().unwrap());
+            let storage = Storage::new(
+                Arc::new(Mutex::new(provider)),
+                BLOCK_SIZE.try_into().unwrap(),
+            );
             TestHarness {
                 storage,
                 _db_dir: db_dir,
