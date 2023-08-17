@@ -86,6 +86,7 @@ pub mod tests {
     use local_storage::block::StoredBlock;
     use local_storage::sql_provider::SqliteStorageProvider;
     use rand::{thread_rng, RngCore};
+    use std::sync::{Arc, Mutex};
 
     const BLOCK_SIZE: u32 = 1024 * 3;
 
@@ -103,7 +104,7 @@ pub mod tests {
             let db_path = db_dir.child("storage.db");
             let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
             provider.setup().unwrap();
-            let storage = Storage::new(Box::new(provider), block_sz);
+            let storage = Storage::new(Arc::new(Mutex::new(provider)), block_sz);
             TestHarness { storage, db_dir }
         }
 

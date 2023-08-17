@@ -14,12 +14,10 @@ use std::{
 use transports::{Transport, TransportError};
 
 pub struct Listener<T> {
-    storage_path: String,
     storage: Storage,
     transport: Arc<T>,
     connected: Arc<Mutex<bool>>,
     radio_address: Option<String>,
-    high_disk_usage: u64,
 }
 
 impl<T: Transport + Send + 'static> Listener<T> {
@@ -38,12 +36,10 @@ impl<T: Transport + Send + 'static> Listener<T> {
 
         info!("Listening on {_listen_address}");
         Ok(Listener {
-            storage_path: storage_path.to_string(),
             storage,
             transport,
             connected: Arc::new(Mutex::new(true)),
             radio_address,
-            high_disk_usage,
         })
     }
 
@@ -55,15 +51,14 @@ impl<T: Transport + Send + 'static> Listener<T> {
     ) -> Result<()> {
         // First setup the shipper and its pieces
         let (shipper_sender, shipper_receiver) = mpsc::channel();
-        let shipper_storage_path = self.storage_path.to_string();
         let shipper_sender_clone = shipper_sender.clone();
         let shipper_transport = Arc::clone(&self.transport);
         let initial_connected = Arc::clone(&self.connected);
         let shipper_radio = self.radio_address.clone();
-        let high_disk_usage = self.high_disk_usage;
+        let shipper_storage_provider = self.storage.get_provider();
         spawn(move || {
             let mut shipper = Shipper::new(
-                &shipper_storage_path,
+                shipper_storage_provider,
                 shipper_receiver,
                 shipper_sender_clone,
                 shipper_timeout_duration,
@@ -72,7 +67,6 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 initial_connected,
                 block_size,
                 shipper_radio,
-                high_disk_usage,
             )
             .expect("Shipper creation failed");
             shipper.receive_msg_loop();
@@ -104,7 +98,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     }
                 }
                 Err(TransportError::TimedOut) => {
-                    self.storage.provider.incremental_gc();
+                    self.storage.incremental_gc();
                 }
                 Err(e) => {
                     error!("Receive message failed: {e}");
