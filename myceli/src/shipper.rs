@@ -7,7 +7,6 @@ use messages::Message;
 use messages::{DataProtocol, TransmissionBlock};
 use std::collections::BTreeMap;
 use std::net::ToSocketAddrs;
-use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -37,7 +36,7 @@ struct WindowSession {
 
 pub struct Shipper<T> {
     // Handle to storage
-    pub storage: Rc<Storage>,
+    pub storage: Storage,
     // Current windowed shipping sessions
     window_sessions: BTreeMap<String, WindowSession>,
     // Channel for receiving messages from Listener
@@ -70,10 +69,10 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         radio_address: Option<String>,
         high_disk_usage: u64,
     ) -> Result<Shipper<T>> {
-        let storage = Rc::new(Storage::new(
+        let storage = Storage::new(
             default_storage_provider(storage_path, high_disk_usage)?,
             block_size,
-        ));
+        );
         Ok(Shipper {
             storage,
             window_sessions: BTreeMap::new(),
@@ -138,7 +137,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                     let missing_blocks_msg = handlers::get_missing_dag_blocks_window_protocol(
                         &cid,
                         blocks,
-                        Rc::clone(&self.storage),
+                        &self.storage,
                     )?;
 
                     self.transmit_msg(missing_blocks_msg, &target_addr)?;
@@ -146,8 +145,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             }
             DataProtocol::RequestMissingDagBlocks { cid } => {
                 if *self.connected.lock().unwrap() {
-                    let missing_blocks_msg =
-                        handlers::get_missing_dag_blocks(&cid, Rc::clone(&self.storage))?;
+                    let missing_blocks_msg = handlers::get_missing_dag_blocks(&cid, &self.storage)?;
                     self.transmit_msg(missing_blocks_msg, &target_addr)?;
                 }
             }
@@ -446,11 +444,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             filename: block.filename,
         };
         stored_block.validate()?;
-        if let Some(store) = Rc::get_mut(&mut self.storage) {
-            store.import_block(&stored_block)
-        } else {
-            Err(anyhow!("Unable to lock storage"))
-        }
+        self.storage.import_block(&stored_block)
     }
 }
 
@@ -489,7 +483,7 @@ mod tests {
     struct TestShipper {
         listen_addr: String,
         listen_transport: Arc<UdpTransport>,
-        _storage: Rc<Storage>,
+        _storage: Storage,
         shipper: Shipper<UdpTransport>,
         test_dir: TempDir,
     }
@@ -513,7 +507,7 @@ mod tests {
             let db_path = test_dir.child("storage.db");
             let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
             provider.setup().unwrap();
-            let _storage = Rc::new(Storage::new(Box::new(provider), BLOCK_SIZE));
+            let _storage = Storage::new(Box::new(provider), BLOCK_SIZE);
             let (shipper_sender, shipper_receiver) = mpsc::channel();
 
             let shipper = Shipper::new(
@@ -606,7 +600,7 @@ mod tests {
 
         // Generate file for test
         let test_file_path = transmitter.generate_file().unwrap();
-        let store = Rc::get_mut(&mut transmitter._storage).unwrap();
+        let store = &mut transmitter._storage;
         // Import test file into transmitter storage
         let test_file_cid = store.import_path(&PathBuf::from(test_file_path)).unwrap();
 

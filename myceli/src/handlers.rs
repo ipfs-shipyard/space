@@ -1,22 +1,17 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use local_storage::storage::Storage;
 use messages::{ApplicationAPI, DagInfo, DataProtocol, Message};
 use std::path::PathBuf;
-use std::rc::Rc;
 
-pub fn import_file(path: &str, storage: &mut Rc<Storage>) -> Result<Message> {
-    if let Some(storage) = Rc::get_mut(storage) {
-        let root_cid = storage.import_path(&PathBuf::from(path.to_owned()))?;
-        Ok(Message::ApplicationAPI(ApplicationAPI::FileImported {
-            path: path.to_string(),
-            cid: root_cid,
-        }))
-    } else {
-        Err(anyhow!("Unable to lock storage in order to import_file"))
-    }
+pub fn import_file(path: &str, storage: &mut Storage) -> Result<Message> {
+    let root_cid = storage.import_path(&PathBuf::from(path.to_owned()))?;
+    Ok(Message::ApplicationAPI(ApplicationAPI::FileImported {
+        path: path.to_string(),
+        cid: root_cid,
+    }))
 }
 
-pub fn validate_dag(cid: &str, storage: Rc<Storage>) -> Result<Message> {
+pub fn validate_dag(cid: &str, storage: &Storage) -> Result<Message> {
     let dag_blocks = storage.get_all_dag_blocks(cid)?;
     let resp = match local_storage::block::validate_dag(&dag_blocks) {
         Ok(_) => "Dag is valid".to_string(),
@@ -30,7 +25,7 @@ pub fn validate_dag(cid: &str, storage: Rc<Storage>) -> Result<Message> {
     ))
 }
 
-pub fn request_available_blocks(storage: Rc<Storage>) -> Result<Message> {
+pub fn request_available_blocks(storage: &Storage) -> Result<Message> {
     let raw_cids = storage.list_available_cids()?;
     let cids = raw_cids
         .iter()
@@ -41,7 +36,7 @@ pub fn request_available_blocks(storage: Rc<Storage>) -> Result<Message> {
     }))
 }
 
-pub fn get_missing_dag_blocks(cid: &str, storage: Rc<Storage>) -> Result<Message> {
+pub fn get_missing_dag_blocks(cid: &str, storage: &Storage) -> Result<Message> {
     let blocks = storage.get_missing_dag_blocks(cid)?;
     Ok(Message::ApplicationAPI(ApplicationAPI::MissingDagBlocks {
         cid: cid.to_string(),
@@ -52,7 +47,7 @@ pub fn get_missing_dag_blocks(cid: &str, storage: Rc<Storage>) -> Result<Message
 pub fn get_missing_dag_blocks_window_protocol(
     cid: &str,
     blocks: Vec<String>,
-    storage: Rc<Storage>,
+    storage: &Storage,
 ) -> Result<Message> {
     let mut missing_blocks = vec![];
     for block in blocks {
@@ -67,7 +62,7 @@ pub fn get_missing_dag_blocks_window_protocol(
     }))
 }
 
-pub fn get_available_dags(storage: Rc<Storage>) -> Result<Message> {
+pub fn get_available_dags(storage: &Storage) -> Result<Message> {
     let local_dags: Vec<DagInfo> = storage
         .list_available_dags()?
         .iter()
@@ -95,7 +90,7 @@ pub mod tests {
     const BLOCK_SIZE: u32 = 1024 * 3;
 
     struct TestHarness {
-        storage: Rc<Storage>,
+        storage: Storage,
         db_dir: TempDir,
     }
 
@@ -108,7 +103,7 @@ pub mod tests {
             let db_path = db_dir.child("storage.db");
             let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
             provider.setup().unwrap();
-            let storage = Rc::new(Storage::new(Box::new(provider), block_sz));
+            let storage = Storage::new(Box::new(provider), block_sz);
             TestHarness { storage, db_dir }
         }
 
@@ -177,7 +172,7 @@ pub mod tests {
             other => panic!("ImportFile returned wrong response {other:?}"),
         };
 
-        let (validated_cid, result) = match validate_dag(&imported_file_cid, harness.storage) {
+        let (validated_cid, result) = match validate_dag(&imported_file_cid, &harness.storage) {
             Ok(Message::ApplicationAPI(ApplicationAPI::ValidateDagResponse { cid, result })) => {
                 (cid, result)
             }
@@ -204,7 +199,7 @@ pub mod tests {
             .get_all_dag_blocks(&imported_file_cid)
             .unwrap();
         for block in blocks {
-            let (validated_cid, result) = match validate_dag(&block.cid, harness.storage.clone()) {
+            let (validated_cid, result) = match validate_dag(&block.cid, &harness.storage) {
                 Ok(Message::ApplicationAPI(ApplicationAPI::ValidateDagResponse {
                     cid,
                     result,
@@ -221,7 +216,7 @@ pub mod tests {
     pub fn test_available_blocks() {
         let mut harness = TestHarness::new();
 
-        let available_blocks = match request_available_blocks(harness.storage.clone()) {
+        let available_blocks = match request_available_blocks(&harness.storage) {
             Ok(Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids })) => cids,
             other => panic!("RequestAvailableBlocks returned wrong response: {other:?}"),
         };
@@ -230,7 +225,7 @@ pub mod tests {
         let test_file_path = harness.generate_file().unwrap();
         import_file(&test_file_path, &mut harness.storage).unwrap();
 
-        let available_blocks = match request_available_blocks(harness.storage.clone()) {
+        let available_blocks = match request_available_blocks(&harness.storage) {
             Ok(Message::ApplicationAPI(ApplicationAPI::AvailableBlocks { cids })) => cids,
             other => panic!("RequestAvailableBlocks returned wrong response: {other:?}"),
         };
@@ -249,7 +244,7 @@ pub mod tests {
             other => panic!("ImportFile returned wrong response {other:?}"),
         };
 
-        let missing_blocks = match get_missing_dag_blocks(&imported_file_cid, harness.storage) {
+        let missing_blocks = match get_missing_dag_blocks(&imported_file_cid, &harness.storage) {
             Ok(Message::ApplicationAPI(ApplicationAPI::MissingDagBlocks { blocks, .. })) => blocks,
             other => panic!("GetMissingDagBlocks returned wrong response: {other:?}"),
         };
@@ -267,13 +262,10 @@ pub mod tests {
         let root_cid = file_blocks.last().unwrap().cid.to_owned();
 
         for block in file_blocks {
-            Rc::get_mut(&mut harness.storage)
-                .unwrap()
-                .import_block(&block)
-                .unwrap();
+            harness.storage.import_block(&block).unwrap();
         }
 
-        let missing_blocks = match get_missing_dag_blocks(&root_cid, harness.storage) {
+        let missing_blocks = match get_missing_dag_blocks(&root_cid, &harness.storage) {
             Ok(Message::ApplicationAPI(ApplicationAPI::MissingDagBlocks { blocks, .. })) => blocks,
             other => panic!("GetMissingDagBlocks returned wrong response: {other:?}"),
         };
@@ -293,7 +285,7 @@ pub mod tests {
             other => panic!("ImportFile returned wrong response {other:?}"),
         };
 
-        let (validated_cid, result) = match validate_dag(&imported_file_cid, harness.storage) {
+        let (validated_cid, result) = match validate_dag(&imported_file_cid, &harness.storage) {
             Ok(Message::ApplicationAPI(ApplicationAPI::ValidateDagResponse { cid, result })) => {
                 (cid, result)
             }

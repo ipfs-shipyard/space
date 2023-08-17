@@ -7,7 +7,6 @@ use messages::{ApplicationAPI, DataProtocol, Message};
 use std::{
     net::SocketAddr,
     path::PathBuf,
-    rc::Rc,
     sync::mpsc::{self, Sender},
     sync::{Arc, Mutex},
     thread::spawn,
@@ -16,7 +15,7 @@ use transports::{Transport, TransportError};
 
 pub struct Listener<T> {
     storage_path: String,
-    storage: Rc<Storage>,
+    storage: Storage,
     transport: Arc<T>,
     connected: Arc<Mutex<bool>>,
     radio_address: Option<String>,
@@ -32,10 +31,10 @@ impl<T: Transport + Send + 'static> Listener<T> {
         radio_address: Option<String>,
         high_disk_usage: u64,
     ) -> Result<Listener<T>> {
-        let storage = Rc::new(Storage::new(
+        let storage = Storage::new(
             default_storage_provider(storage_path, high_disk_usage)?,
             block_size,
-        ));
+        );
 
         info!("Listening on {_listen_address}");
         Ok(Listener {
@@ -105,9 +104,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     }
                 }
                 Err(TransportError::TimedOut) => {
-                    if let Some(reference) = Rc::get_mut(&mut self.storage) {
-                        reference.provider.incremental_gc();
-                    }
+                    self.storage.provider.incremental_gc();
                 }
                 Err(e) => {
                     error!("Receive message failed: {e}");
@@ -164,13 +161,13 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 }
             }
             Message::ApplicationAPI(ApplicationAPI::RequestAvailableBlocks) => {
-                Some(handlers::request_available_blocks(self.storage.clone())?)
+                Some(handlers::request_available_blocks(&self.storage)?)
             }
-            Message::ApplicationAPI(ApplicationAPI::GetMissingDagBlocks { cid }) => Some(
-                handlers::get_missing_dag_blocks(&cid, self.storage.clone())?,
-            ),
+            Message::ApplicationAPI(ApplicationAPI::GetMissingDagBlocks { cid }) => {
+                Some(handlers::get_missing_dag_blocks(&cid, &self.storage)?)
+            }
             Message::ApplicationAPI(ApplicationAPI::ValidateDag { cid }) => {
-                Some(handlers::validate_dag(&cid, self.storage.clone())?)
+                Some(handlers::validate_dag(&cid, &self.storage)?)
             }
             Message::DataProtocol(data_msg) => {
                 shipper_sender.send((data_msg, sender_addr.to_string()))?;
@@ -231,7 +228,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::RequestAvailableDags) => {
-                Some(handlers::get_available_dags(self.storage.clone())?)
+                Some(handlers::get_available_dags(&self.storage)?)
             }
             // Default case for valid messages which don't have handling code implemented yet
             _message => {
