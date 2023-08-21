@@ -2,8 +2,8 @@ use crate::{handlers, shipper::Shipper, sync::Syncer};
 use anyhow::Result;
 use cid::Cid;
 use local_storage::{provider::default_storage_provider, storage::Storage};
-use log::{error, info, trace};
-use messages::{ApplicationAPI, DataProtocol, Message};
+use log::{debug, error, info, trace};
+use messages::{ApplicationAPI, DataProtocol, Message, SyncMessage};
 use std::collections::BTreeSet;
 use std::{
     net::SocketAddr,
@@ -21,6 +21,7 @@ pub struct Listener<T> {
     radio_address: Option<String>,
     sync: Syncer,
     addrs: BTreeSet<String>,
+    sync_counts: [u64; 2],
 }
 
 impl<T: Transport + Send + 'static> Listener<T> {
@@ -36,10 +37,11 @@ impl<T: Transport + Send + 'static> Listener<T> {
         let provider = default_storage_provider(storage_path, high_disk_usage)?;
         let missing_blocks = provider.lock().unwrap().get_dangling_cids()?;
         let storage = Storage::new(provider, block_size);
-        let present_blocks = storage.list_available_cids()?;
-        let present_blocks = present_blocks
-            .iter()
-            .flat_map(|s| Cid::try_from(s.as_str()));
+        let present_blocks = storage.list_available_dags()?;
+        let present_blocks = present_blocks.iter().flat_map(|(c, n)| {
+            let c = Cid::try_from(c.as_str())?;
+            Ok::<_, cid::Error>((c, n.clone()))
+        });
         let sync = Syncer::new(mtu.into(), present_blocks, missing_blocks)?;
         info!("Listening on {_listen_address}");
         let addrs = if let Some(a) = &radio_address {
@@ -54,6 +56,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
             radio_address,
             sync,
             addrs,
+            sync_counts: [0; 2],
         })
     }
 
@@ -87,7 +90,6 @@ impl<T: Transport + Send + 'static> Listener<T> {
             .expect("Shipper creation failed");
             shipper.receive_msg_loop();
         });
-
         loop {
             match self.transport.receive() {
                 Ok((message, sender_addr)) => {
@@ -157,7 +159,18 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::ImportFile { path }) => {
-                Some(handlers::import_file(&path, &mut self.storage)?)
+                let result = handlers::import_file(&path, &mut self.storage)?;
+                match &result {
+                    Message::ApplicationAPI(ApplicationAPI::FileImported { path, cid }) => {
+                        self.sync
+                            .push_dag(path.clone(), cid.as_str().try_into()?, Vec::default())
+                            .ok();
+                    }
+                    _ => error!(
+                        "Unexpected and weird response to an import-file API request: {result:?}"
+                    ),
+                }
+                Some(result)
             }
             Message::ApplicationAPI(ApplicationAPI::ExportDag { cid, path }) => {
                 match self.storage.export_cid(&cid, &PathBuf::from(path.clone())) {
@@ -239,6 +252,10 @@ impl<T: Transport + Send + 'static> Listener<T> {
             Message::ApplicationAPI(ApplicationAPI::RequestAvailableDags) => {
                 Some(handlers::get_available_dags(&self.storage)?)
             }
+            Message::Sync(SyncMessage::Push(pm)) => {
+                self.sync_counts[1] += 1;
+                self.sync.handle(SyncMessage::Push(pm), &mut self.storage)?
+            }
             Message::Sync(sm) => self.sync.handle(sm, &mut self.storage)?,
             // Default case for valid messages which don't have handling code implemented yet
             message => {
@@ -255,15 +272,26 @@ impl<T: Transport + Send + 'static> Listener<T> {
     }
 
     fn bg_tasks(&mut self) -> Result<()> {
+        trace!("Addrs to sync with: {:?}", &self.addrs);
         if !self.addrs.is_empty() {
             if let Some(msg) = self.sync.pop_pending_msg() {
+                trace!("Popped sync {msg:?}");
+                //Sending a delayed Sync message, so bump that count
+                self.sync_counts[0] += 1;
                 for addr in &self.addrs {
                     self.transport.send(msg.clone(), addr)?;
                 }
                 return Ok(());
             }
         }
-        if !self.storage.incremental_gc() {
+        if self.storage.incremental_gc() {
+            debug!("GC run.");
+        } else if self.sync_counts[0] > self.sync_counts[1] {
+            //Been talking more than listening.
+            // Don't build more messages right now because we want to give them a chance to send Sync
+            // But also don't wait forever
+            self.sync_counts[0] -= 1;
+        } else {
             self.sync.build_msg()?;
         }
         Ok(())

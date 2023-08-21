@@ -1,5 +1,5 @@
 use crate::error::Result;
-use log::{error, warn};
+use log::{debug, error, info, trace, warn};
 use messages::Message;
 use parity_scale_codec::{Decode, Encode};
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
@@ -8,16 +8,38 @@ use std::collections::BTreeMap;
 use crate::chunking::MessageContainer;
 
 #[derive(Clone, Debug, ParityDecode, ParityEncode)]
-pub struct SimpleChunk {
+struct SimpleChunk {
     // Sender-specific 16-bit ID used to identify the message this chunk belongs to
     pub message_id: u16,
     // Sequence number indicates the order of reassembly
     #[codec(compact)]
     pub sequence_number: u64,
-    // Final chunk flag indicates the last chunk in sequence
-    pub final_chunk: bool,
     // Data payload
     pub data: Vec<u8>,
+}
+
+#[derive(Clone, Debug, ParityDecode, ParityEncode)]
+enum Chunk {
+    Leading(SimpleChunk),
+    Final(SimpleChunk),
+    Single(Vec<u8>),
+}
+impl Chunk {
+    fn get_message_id(&self) -> u16 {
+        self.as_simple_chunk().map(|c| c.message_id).unwrap_or(0)
+    }
+    fn get_sequence_number(&self) -> u16 {
+        self.as_simple_chunk()
+            .map(|c| c.sequence_number)
+            .unwrap_or(0)
+    }
+    fn as_simple_chunk(&self) -> Option<&SimpleChunk> {
+        match &self {
+            Chunk::Single(_) => None,
+            Chunk::Final(c) => Some(c),
+            Chunk::Leading(c) => Some(c),
+        }
+    }
 }
 
 // This const is derived from the size of the above struct when encoded with SCALE
@@ -30,7 +52,7 @@ pub struct SimpleChunker {
     mtu: u16,
     // Map of message IDs to maps of sequence numbers and message chunks
     // { message_id: { sequence_id: data }}
-    recv_buffer: BTreeMap<u16, BTreeMap<u64, SimpleChunk>>,
+    recv_buffer: BTreeMap<u16, BTreeMap<u16, Chunk>>,
     // Last received message_id to optimize reassembly searching
     last_recv_msg_id: u16,
     pending: Vec<u16>,
@@ -41,20 +63,20 @@ impl SimpleChunker {
     pub fn new(mtu: u16) -> Self {
         Self {
             mtu,
-            recv_buffer: BTreeMap::<u16, BTreeMap<u64, SimpleChunk>>::new(),
+            recv_buffer: BTreeMap::<u16, BTreeMap<u16, Chunk>>::new(),
             last_recv_msg_id: 0,
             pending: Vec::new(),
             next_outgoing_msg_id: 0,
         }
     }
 
-    fn recv_chunk(&mut self, chunk: SimpleChunk) -> Result<()> {
-        self.last_recv_msg_id = chunk.message_id;
-        if let Some(msg_map) = self.recv_buffer.get_mut(&chunk.message_id) {
-            msg_map.insert(chunk.sequence_number, chunk);
+    fn recv_chunk(&mut self, chunk: Chunk) -> Result<()> {
+        self.last_recv_msg_id = chunk.get_message_id();
+        if let Some(msg_map) = self.recv_buffer.get_mut(&self.last_recv_msg_id) {
+            msg_map.insert(chunk.get_sequence_number(), chunk);
         } else {
-            let mut msg_map: BTreeMap<u64, SimpleChunk> = BTreeMap::new();
-            msg_map.insert(chunk.sequence_number, chunk);
+            let mut msg_map: BTreeMap<u16, Chunk> = BTreeMap::new();
+            msg_map.insert(chunk.get_sequence_number(), chunk);
             self.recv_buffer.insert(self.last_recv_msg_id, msg_map);
         }
 
@@ -83,22 +105,28 @@ impl SimpleChunker {
     }
     fn attempt_assemble(&mut self, msg_id: u16) -> Result<Option<Message>> {
         let mut result = None;
-        if let Some(msg_map) = self.recv_buffer.get(&msg_id) {
+        if let Some(msg_map) = self.recv_buffer.get(&self.last_recv_msg_id) {
             // The BTreeMap docs tell us that into_values will be an iter sorted by key
             // In this case the key is the sequence_number, so in a complete set of chunks
             // that means the last item in the iter (or now vec) should be the "final chunk"
-            let chunks = msg_map.values().collect::<Vec<&SimpleChunk>>();
+            let last_chunk = msg_map.iter().last();
             // So to verify we have all message chunks...First grab the last chunk in the list
-            if let Some(last_chunk) = chunks.last() {
+            match last_chunk {
                 // Second, check if the last chunk has final_chunk set
-                if last_chunk.final_chunk
+                Some((last_seq, Chunk::Final(_))) => {
                     // Lastly, check if the final chunk's sequence number matches the number of chunks
-                    && (usize::try_from(last_chunk.sequence_number).unwrap() == (chunks.len() - 1))
-                {
-                    // If all those checks pass, then we *should* have all the chunks in order
-                    // Now we attempt to assemble the message
-                    result = Some(SimpleChunker::msg_unchunk(&chunks)?);
+                    if usize::from(*last_seq) == (msg_map.len() - 1) {
+                        let chunks = msg_map.values().flat_map(Chunk::as_simple_chunk);
+                        // If all those checks pass, then we *should* have all the chunks in order
+                        // Now we attempt to assemble the message
+                        result = Some(SimpleChunker::msg_unchunk(chunks)?);
+                    }
                 }
+                Some((_, Chunk::Single(v))) => {
+                    let data = v.clone();
+                    result = Some(Message::decode(&mut data.as_slice())?);
+                }
+                _ => {}
             }
         }
         if result.is_some() {
@@ -110,9 +138,9 @@ impl SimpleChunker {
         self.recv_buffer.remove(&msg_id);
         self.pending.retain(|i| *i != msg_id);
     }
-    pub fn msg_unchunk(data: &[&SimpleChunk]) -> Result<Message> {
+    fn msg_unchunk<'a, I: Iterator<Item = &'a SimpleChunk>>(data: I) -> Result<Message> {
         let mut all_data = vec![];
-        data.iter().for_each(|c| all_data.extend(&c.data));
+        data.for_each(|c| all_data.extend(&c.data));
         let mut databuf = &all_data[..all_data.len()];
         let container = MessageContainer::from_bytes(&mut databuf)?;
         Ok(container.message)
@@ -125,28 +153,36 @@ impl SimpleChunker {
         } else {
             self.next_outgoing_msg_id = 0;
         }
+        trace!("Message ID# {msg_id}={message:?}");
         let mut seq_num = 0;
-        // Create container around message
-        let container = MessageContainer::new(message);
-        // Convert container into raw bytes
-        let message_bytes = container.to_bytes();
+        let message_bytes = if message.needs_envelope() {
+            // Create container around message
+            let container = MessageContainer::new(message);
+            // Convert container into raw bytes
+            container.to_bytes()
+        } else {
+            message.to_bytes()
+        };
+        if message_bytes.encoded_size() < self.mtu.into() {
+            info!("Message {msg_id} fits in a single packet.");
+            return Ok(vec![Chunk::Single(message_bytes).encode()]);
+        }
         // Break bytes up into mtu-sized simple chunks
         let mut chunks = message_bytes
             .chunks(usize::from(self.mtu - CHUNK_OVERHEAD))
             .map(|data| {
-                let chunk = SimpleChunk {
+                seq_num += 1;
+                Chunk::Leading(SimpleChunk {
                     message_id: msg_id,
                     sequence_number: seq_num,
                     data: data.to_vec(),
-                    final_chunk: false,
-                };
-                seq_num += 1;
-                chunk
+                })
             })
-            .collect::<Vec<SimpleChunk>>();
+            .collect::<Vec<Chunk>>();
+        debug!("Message {msg_id} fits into {} packets.", chunks.len());
         // Set final to true in last chunk
-        if let Some(mut last_chunk) = chunks.last_mut() {
-            last_chunk.final_chunk = true;
+        if let Some(last_chunk) = chunks.last_mut() {
+            *last_chunk = Chunk::Final(last_chunk.as_simple_chunk().unwrap().clone());
         }
         // Encode all the chunks
         Ok(chunks.iter().map(|c| c.encode()).collect::<Vec<Vec<u8>>>())
@@ -154,7 +190,7 @@ impl SimpleChunker {
 
     pub fn unchunk(&mut self, data: &[u8]) -> Result<Option<Message>> {
         let mut databuf = &data[..data.len()];
-        let chunk = SimpleChunk::decode(&mut databuf)?;
+        let chunk = Chunk::decode(&mut databuf)?;
         self.recv_chunk(chunk)?;
         self.attempt_msg_assembly()
     }
@@ -174,8 +210,7 @@ mod tests {
         for size in data_sizes {
             let chunk = SimpleChunk {
                 message_id: size,
-                sequence_number: size.into(),
-                final_chunk: true,
+                sequence_number: size,
                 data: vec![80; usize::from(size)],
             };
             let chunk_encoded_size = chunk.encoded_size();

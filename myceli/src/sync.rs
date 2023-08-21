@@ -21,7 +21,7 @@ pub(crate) struct Syncer {
     push: ByMeta,
     mtu: usize,
     ready: VecDeque<Message>,
-    pushes_built: u8,
+    named_pushes: Vec<(Cid, String)>,
 }
 
 #[derive(Clone, Copy)]
@@ -31,8 +31,7 @@ enum Side {
 }
 
 impl Syncer {
-    #[allow(dead_code)]
-    pub fn new<I: IntoIterator<Item = Cid>, J: IntoIterator<Item = Cid>>(
+    pub fn new<I: IntoIterator<Item = (Cid, String)>, J: IntoIterator<Item = Cid>>(
         mtu: usize,
         known_knowns: I,
         known_unknowns: J,
@@ -42,23 +41,23 @@ impl Syncer {
             push: ByMeta::default(),
             mtu,
             ready: VecDeque::default(),
-            pushes_built: 0,
+            named_pushes: Vec::default(),
         };
-        for cid in known_knowns {
+        for (cid, name) in known_knowns {
             result.will_push(&cid)?;
+            result.named_pushes.push((cid, name));
         }
         for cid in known_unknowns {
             result.will_pull(&cid)?;
         }
         Ok(result)
     }
-    #[allow(dead_code)]
     pub fn push_dag(
         &mut self,
         filename: String,
         root: Cid,
         mut other_blocks: Vec<Cid>,
-    ) -> Result<()> {
+    ) -> Result<Message> {
         self.will_push(&root)?;
         for cid in &other_blocks {
             self.will_push(cid)?;
@@ -67,12 +66,13 @@ impl Syncer {
         other_blocks.push(root);
         let size = self.mtu - messages::PUSH_OVERHEAD - filename.encoded_size();
         other_blocks.retain(|cid| !list.include(cid, size));
-        self.ready.push_front(Message::push(list, filename));
+        let result = Message::push(list, filename);
+        self.ready.push_front(result.clone());
         let other_msgs = self.push_now(other_blocks)?;
         for msg in other_msgs {
             self.ready.push_back(msg);
         }
-        Ok(())
+        Ok(result)
     }
     pub fn push_now(&mut self, cids: Vec<Cid>) -> anyhow::Result<Vec<Message>> {
         for cid in &cids {
@@ -86,7 +86,6 @@ impl Syncer {
             .collect();
         Ok(result)
     }
-    #[allow(dead_code)]
     pub fn pull_now(&mut self, cids: Vec<Cid>) -> anyhow::Result<Vec<Message>> {
         for cid in &cids {
             self.will_pull(cid)?;
@@ -101,32 +100,23 @@ impl Syncer {
     pub fn will_push(&mut self, cid: &Cid) -> anyhow::Result<()> {
         Self::add(&mut self.push, cid)
     }
-    #[allow(dead_code)]
     pub fn stop_pulling(&mut self, cid: &Cid) {
         Self::stop(&mut self.pull, cid);
     }
-    #[allow(dead_code)]
     pub fn stop_pushing(&mut self, cid: &Cid) {
         Self::stop(&mut self.push, cid);
     }
-    #[allow(dead_code)]
     pub fn pop_pending_msg(&mut self) -> Option<Message> {
         self.ready.pop_front()
     }
-    #[allow(dead_code)]
     pub fn build_msg(&mut self) -> Result<()> {
-        let msgs = if has_hi(&self.pull) {
-            self.pull_now(Vec::default())?
-        } else if has_hi(&self.push) {
-            self.push_now(Vec::default())?
-        } else if self.pushes_built < 9 {
-            self.pushes_built += 1;
-            self.push_now(Vec::default())?
-        } else {
-            self.pushes_built = 0;
-            self.pull_now(Vec::default())?
-        };
-        self.ready.extend(msgs);
+        if let Some((cid, name)) = self.named_pushes.pop() {
+            self.push_dag(name, cid, Vec::new())?;
+        }
+        let pulls = self.pull_now(Vec::default())?;
+        let pushs = self.pull_now(Vec::default())?;
+        self.ready.extend(pulls.into_iter());
+        self.ready.extend(pushs.into_iter());
         Ok(())
     }
 
@@ -306,10 +296,6 @@ impl Syncer {
         }
         false
     }
-}
-
-fn has_hi(side: &ByMeta) -> bool {
-    side.iter().any(|(_, s)| !s.hi.is_empty())
 }
 
 #[derive(Default)]

@@ -110,4 +110,8 @@ impl Message {
     pub fn block(block_bytes: Vec<u8>) -> Self {
         Self::Sync(SyncMessage::Block(block_bytes))
     }
+
+    pub fn needs_envelope(&self) -> bool {
+        !matches!(self, Self::Sync(_))
+    }
 }

@@ -4,9 +4,10 @@ use cid::multihash::Hasher;
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
 use serde::Serialize;
 
-pub const PUSH_OVERHEAD: usize = 16;
+const HASH_SIZE: usize = 16;
+pub const PUSH_OVERHEAD: usize = HASH_SIZE + 1;
 
-pub type HashCheck = [u8; PUSH_OVERHEAD];
+pub type HashCheck = [u8; HASH_SIZE];
 
 #[derive(Clone, Debug, ParityEncode, ParityDecode, Serialize, Eq, PartialEq)]
 pub enum SyncMessage {
@@ -42,6 +43,7 @@ impl PushMessage {
         for d in cids {
             hasher.update(&d.to_bytes());
         }
-        hasher.finalize().try_into().unwrap()
+        let digest_slice = hasher.finalize();
+        digest_slice.try_into().unwrap()
     }
 }

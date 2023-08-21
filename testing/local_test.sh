@@ -334,7 +334,7 @@ for d in gnd sat
 do
   check_log "Discovered.*${d}.prexisting.txt"    ${d} watcher
   check_log "Imported.path.*${d}.prexisting.txt" ${d} myceli
-  check_log "[Ss]end.*Sync.*Push"                ${d} myceli
+  check_log "ransmit.*Sync.*Push"                ${d} myceli
 done
 
 echo -e '\n\n\t###\t###\t PASSED \t###\t###\n'
