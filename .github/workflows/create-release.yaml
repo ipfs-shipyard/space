@@ -47,7 +47,9 @@ jobs:
         run: tar -czvf ${{ matrix.project }}-${{ matrix.target }}.tar.gz -C ./target/${{ matrix.target }}/release ${{ matrix.project }}
       - name: upload binary
         run: |
+          echo "GITHUB_REF=${GITHUB_REF}"
           mv "$SOURCE_PATH" "$TARGET_PATH"
+          set -x
           gh release upload "$GITHUB_REF" "$TARGET_PATH"
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -81,7 +83,10 @@ jobs:
           xz -9 --keep --extreme ${{ matrix.project }}-small-${{ github.ref_name }}-${{ matrix.target }}.tar
           gzip --best ${{ matrix.project }}-small-${{ github.ref_name }}-${{ matrix.target }}.tar
       - name: upload binary
-        run: gh release upload "$GITHUB_REF" *-small-${{ github.ref_name }}-${{ matrix.target }}.tar.?z
+        run: |
+          echo "GITHUB_REF=${GITHUB_REF}"
+          set -x
+          gh release upload "${GITHUB_REF}" *-small-${{ github.ref_name }}-${{ matrix.target }}.tar.?z
         env:
           GITHUB_TOKEN: ${{ github.token }}
         shell: bash
