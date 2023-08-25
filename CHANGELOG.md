@@ -1,6 +1,13 @@
 # Changelog
 
-## [0.6.6] - Unreleased
+## [0.6.7] - Unreleased
+
+- Added `list-files` command to controller
+- Always send response to sender
+- Compact message sequence number and increase its maximum
+- output_format option for controller (support JSON for scripting with jq)
+
+## [0.6.6] - 2023-08-21
 
 ### Added
 
@@ -10,11 +17,13 @@
 
 ### Changed
 
-- MTU now maxes out at 3072. This max value is now used as the size of the receive buffer, fixing any MTU mismatch errors.
-- Logging level for `myceli`, `hyphae`, and `controller` can now be controlled using the `RUST_LOG` environment variable.
+- MTU now maxes out at 3072. This max value is now used as the size of the receive buffer, fixing any MTU mismatch
+  errors.
+- Logging level for `myceli`, `hyphae`, and `controller` can now be controlled using the `RUST_LOG` environment
+  variable.
 - Added additional debug logging around chunk sending and receiving.
 
-## [0.6.5] - 05-22-23
+## [0.6.5] - 2023-05-22
 
 ### Added
 
@@ -42,7 +51,8 @@
 - Renamed `app-api-cli` to `controller`.
 - Updated default block size to 256 bytes and generally improved handling of larger files in storage layer.
 - Archived unused `car-utility` and `cpp-transmit-example` projects.
-- Converted all crate dependencies to workspace dependencies, tightened version specificity, narrowed features when possible.
+- Converted all crate dependencies to workspace dependencies, tightened version specificity, narrowed features when
+  possible.
 - Increase default MTU to 512 bytes to accommodate more realistic systems
 - Move functions for fetching all DAG cids & blocks into storage layer
 - Increase default file block size to 100kb for better performance when importing larger files
@@ -89,10 +99,13 @@
 - Added integration tests for `myceli` which get pretty close to end-to-end testing.
 - Added helper functions to `Message` enum for generating specific messages.
 - Implemented `TransmitBlock` API for transmitting a single block.
-- Added retries to the `TransmitDag` API and timeout-based mechanism for retrying dag transmission, this included adding retry duration as a CLI arg to `myceli`.
-- Added protocol messages for requesting missing dag blocks, requesting transmission of dags & blocks, and retrying dag transmission.
+- Added retries to the `TransmitDag` API and timeout-based mechanism for retrying dag transmission, this included adding
+  retry duration as a CLI arg to `myceli`.
+- Added protocol messages for requesting missing dag blocks, requesting transmission of dags & blocks, and retrying dag
+  transmission.
 - Added a basic Dockerfile for building and running `myceli`.
-- Added `shipper` struct to `myceli` which consolidates all data exchange code and adds state necessary to support timeout-based retries during DAG transmission.
+- Added `shipper` struct to `myceli` which consolidates all data exchange code and adds state necessary to support
+  timeout-based retries during DAG transmission.
 - Extracted `myceli` config values into config file with reasonable defaults.
 - CI based docker builds and binary releases.
 - Basic general testing plan in [testing/testing-plan.md](testing/testing-plan.md).
@@ -101,62 +114,77 @@
 ### Changed
 
 - Reworked `myceli` crate a bit to expose internal library in binary crate.
-- Reworked `myceli` to operate in the traditional multi-threaded fashion instead of using async. This included reworking `myceli::Listener` to spawn `shipper` in a separate thread and pass along messages via channel.
+- Reworked `myceli` to operate in the traditional multi-threaded fashion instead of using async. This included
+  reworking `myceli::Listener` to spawn `shipper` in a separate thread and pass along messages via channel.
 - Updated logging in the desktop `radio-service` to use `tracing`.
 - Moved `transmit_dag` and `transmit_block` functionality from handlers to `shipper`.
 - Updated docs/readme to reflect new `myceli` configuration file.
 
 ### Removed
 
-- Removed the `TransmitFile` API, all files to be transmitted should be imported and then transmitted to support retransmission of blocks.
+- Removed the `TransmitFile` API, all files to be transmitted should be imported and then transmitted to support
+  retransmission of blocks.
 
 ## [0.5] - 2023-03-06
 
 ### Added
 
 - Added `validate` for `StoredBlock` to leverage the validation functionality built into `beetle::iroh_unixfs::Block`.
-- Added `local_storage::block::validate_dag` which determines if a list of `StoredBlock`s constitute a complete and valid DAG.
-- Implemented `ValidateDag` API and added `ValidateDagResponse`. The unimplemented `ValidateBlock` was removed, as `ValidateDag` can also validate individual blocks.
+- Added `local_storage::block::validate_dag` which determines if a list of `StoredBlock`s constitute a complete and
+  valid DAG.
+- Implemented `ValidateDag` API and added `ValidateDagResponse`. The unimplemented `ValidateBlock` was removed,
+  as `ValidateDag` can also validate individual blocks.
 - Added CI workflows for running clippy and tests.
 
 ### Changed
 
 - Renamed `block-streamer` to `myceli` and `server` to `listener`.
-- Moved `StoredBlock` and associated implementation/tests out of the `storage` mod into a `block` mod within `local-storage`.
+- Moved `StoredBlock` and associated implementation/tests out of the `storage` mod into a `block` mod
+  within `local-storage`.
 - Reorganized the functionality in `block_streamer::server` to make functional testing much easier/possible.
 - Small refactor of `transmit_blocks`.
 
 ### Removed
 
-- The `RequestDag` and `RequestBlock` APIs were removed, as they were essentially equivalent to `TransmitDag` and `TransmitBlock`.
-- Removed the `receive` mode from `block-streamer/myceli`, as it was already covered by the `listener/server` functionality.
+- The `RequestDag` and `RequestBlock` APIs were removed, as they were essentially equivalent to `TransmitDag`
+  and `TransmitBlock`.
+- Removed the `receive` mode from `block-streamer/myceli`, as it was already covered by the `listener/server`
+  functionality.
 
 ## [0.4] - 2023-02-24
 
 ### Added
 
-- Created a general chunking struct, `SimpleChunker`, which handles chunking and assembly of any message of type `Message`. This includes a new `MessageContainer` struct which is used in the chunking of `Message`s. The `MessageContainer` essentially becomes an IPLD block containing a `Message`, which allows for verification using the `Cid` on assembly.
+- Created a general chunking struct, `SimpleChunker`, which handles chunking and assembly of any message of
+  type `Message`. This includes a new `MessageContainer` struct which is used in the chunking of `Message`s.
+  The `MessageContainer` essentially becomes an IPLD block containing a `Message`, which allows for verification using
+  the `Cid` on assembly.
 - The `GetMissingDagBlocks` API is now implemented based on what is currently in storage.
 - Added a `local-storage` crate which exposes a `Storage` struct used to store & retrieve blocks from sqlite.
 - Implemented `TransmitDag` API for transmitting blocks from storage.
-- Modified receive functionality to use `local-storage` instead of streaming blocks to a file or storing incomplete blocks in-memory.
+- Modified receive functionality to use `local-storage` instead of streaming blocks to a file or storing incomplete
+  blocks in-memory.
 - Implemented `ImportFile` and `ExportDag` APIs for controllable importing/exporting files to & from storage.
 - Added a `listen` flag to the `app-api-cli` for receiving responses to transmitted API messages.
 
 ### Changed
 
 - Started tagging and versioning on roadmap milestones.
-- Transmit and receive functionality has been modified to use the `SimpleChunker` for the transfer of Blocks. All other API communication has been modified to use the `SimpleChunker` for API messages.
-- The `control` functionality in the `block-streamer` server has been renamed to `server` to better reflect it's general purpose "server-like" functionality. The code was also split up a bit to improve readability and error handling.
+- Transmit and receive functionality has been modified to use the `SimpleChunker` for the transfer of Blocks. All other
+  API communication has been modified to use the `SimpleChunker` for API messages.
+- The `control` functionality in the `block-streamer` server has been renamed to `server` to better reflect it's general
+  purpose "server-like" functionality. The code was also split up a bit to improve readability and error handling.
 
 ### Removed
 
-- Any transmit or receive functionality dealing directly with chunks of blocks has been removed, along with associated tests.
+- Any transmit or receive functionality dealing directly with chunks of blocks has been removed, along with associated
+  tests.
 - The `block-ship` functionality & crate was no longer needed after general message chunking was introduced.
 
 ### Fixed
 
 - The sqlite storage provider now correctly handles importing duplicate blocks without crashing.
-- The `get_missing_cid_blocks` functionality now correctly returns an error if the requested `cid` has no associated blocks (in that case we assume we haven't encountered that block yet).
+- The `get_missing_cid_blocks` functionality now correctly returns an error if the requested `cid` has no associated
+  blocks (in that case we assume we haven't encountered that block yet).
 - Fixed several cases where unwraps would crash the `block-streamer` on errors.
 - Fixed a compile issue with the `app-api-cli`
