@@ -118,8 +118,10 @@ pub enum ApplicationAPI {
     Version {
         version: String,
     },
-    /// Request available DAGs
+    /// Request ALL available DAGs
     RequestAvailableDags,
+    /// Request a list of named DAGs
+    ListFiles,
     /// Lists available DAGs and corresponding filenames
     #[command(skip)]
     AvailableDags {
