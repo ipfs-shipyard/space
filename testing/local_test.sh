@@ -24,7 +24,7 @@ fi
 ( "${0}" die 2>/dev/null >/dev/null <&- & ) &
 cd `dirname "${0}"`/..
 o=`mktemp -d`
-
+rm log
 check_log() {
   l=${2-.}
   for i in {0..9}
@@ -151,7 +151,7 @@ controller() {
   port=${1}
   shift
   set -x
-  timeout 9 cargo run --bin controller -- -l 127.0.0.1:${port} "${@}" | tee log
+  timeout 9 cargo run --bin controller -- -l 127.0.0.1:${port} "${@}" 2>&1 | tee -a log
   set +x
 }
 cid_present() {
@@ -165,7 +165,7 @@ cid_present() {
 transmit() {
   cid_present ${3} ${cid}
   ! cid_present ${4} ${cid}
-  timeout 9 cargo run --bin controller -- 127.0.0.1:${1} transmit-dag "${cid}" 127.0.0.1:${2} 9 | tee log
+  timeout 9 cargo run --bin controller -- 127.0.0.1:${1} transmit-dag "${cid}" 127.0.0.1:${2} 9 | tee -a log
   for i in {0..9}
   do
     grep -n "${cid}" log */log || true
@@ -192,11 +192,11 @@ echo -e '\n# Test Case - Verify Myceli Instances Alive'
 
 echo '1. Using controller software, send the `RequestAvailableBlocks` command to the `myceli` ground instance.'
 controller 8765 request-available-blocks
-echo '- This step passes if an `AvailableBlocks` response is received. Any other response / no response is a failure.'
+echo '- This step passes if an `AvailableBlocks` response is received by ground. Any other response / no response is a failure.'
 check_log 'Received.*AvailableBlocks'
-echo '1. Using controller software, send the `RequestAvailableBlocks` command to the `myceli` space instance.'
+echo '2. Using controller software, send the `RequestAvailableBlocks` command to the `myceli` space instance.'
 controller 8764 request-available-blocks
-echo '- This step passes if an `AvailableBlocks` response is received. Any other response / no response is a failure.'
+echo '- This step passes if an `AvailableBlocks` response is received by space. Any other response / no response is a failure.'
 check_log 'Received.*AvailableBlocks'
 
 echo -e '\n# Test Case - Transmit an IPFS File (Ground to Space)'

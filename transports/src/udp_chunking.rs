@@ -174,7 +174,7 @@ mod tests {
         for size in data_sizes {
             let chunk = SimpleChunk {
                 message_id: size,
-                sequence_number: size,
+                sequence_number: size.into(),
                 final_chunk: true,
                 data: vec![80; usize::from(size)],
             };
