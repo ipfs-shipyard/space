@@ -82,7 +82,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     };
                     match self.handle_message(message, &target_addr, shipper_sender.clone()) {
                         Ok(Some(resp)) => {
-                            if let Err(_e) = self.transmit_response(resp, &target_addr) {
+                            if let Err(_e) = self.transmit_response(resp, &sender_addr) {
                                 error!("TransmitResponse error: {_e}");
                             }
                         }
@@ -223,6 +223,9 @@ impl<T: Transport + Send + 'static> Listener<T> {
             }
             Message::ApplicationAPI(ApplicationAPI::RequestAvailableDags) => {
                 Some(handlers::get_available_dags(&self.storage)?)
+            }
+            Message::ApplicationAPI(ApplicationAPI::ListFiles) => {
+                Some(handlers::get_named_dags(&self.storage)?)
             }
             // Default case for valid messages which don't have handling code implemented yet
             _message => {

@@ -75,6 +75,25 @@ pub fn get_available_dags(storage: &Storage) -> Result<Message> {
         dags: local_dags,
     }))
 }
+pub fn get_named_dags(storage: &Storage) -> Result<Message> {
+    let local_dags: Vec<DagInfo> = storage
+        .list_available_dags()?
+        .iter()
+        .filter_map(|(cid, filename)| {
+            if filename.is_empty() {
+                None
+            } else {
+                Some(DagInfo {
+                    cid: cid.to_string(),
+                    filename: filename.to_string(),
+                })
+            }
+        })
+        .collect();
+    Ok(Message::ApplicationAPI(ApplicationAPI::AvailableDags {
+        dags: local_dags,
+    }))
+}
 
 #[cfg(all(test, feature = "sqlite"))]
 pub mod tests {

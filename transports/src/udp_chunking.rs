@@ -12,7 +12,8 @@ pub struct SimpleChunk {
     // Sender-specific 16-bit ID used to identify the message this chunk belongs to
     pub message_id: u16,
     // Sequence number indicates the order of reassembly
-    pub sequence_number: u16,
+    #[codec(compact)]
+    pub sequence_number: u64,
     // Final chunk flag indicates the last chunk in sequence
     pub final_chunk: bool,
     // Data payload
@@ -29,7 +30,7 @@ pub struct SimpleChunker {
     mtu: u16,
     // Map of message IDs to maps of sequence numbers and message chunks
     // { message_id: { sequence_id: data }}
-    recv_buffer: BTreeMap<u16, BTreeMap<u16, SimpleChunk>>,
+    recv_buffer: BTreeMap<u16, BTreeMap<u64, SimpleChunk>>,
     // Last received message_id to optimize reassembly searching
     last_recv_msg_id: u16,
     pending: Vec<u16>,
@@ -40,7 +41,7 @@ impl SimpleChunker {
     pub fn new(mtu: u16) -> Self {
         Self {
             mtu,
-            recv_buffer: BTreeMap::<u16, BTreeMap<u16, SimpleChunk>>::new(),
+            recv_buffer: BTreeMap::<u16, BTreeMap<u64, SimpleChunk>>::new(),
             last_recv_msg_id: 0,
             pending: Vec::new(),
             next_outgoing_msg_id: 0,
@@ -52,7 +53,7 @@ impl SimpleChunker {
         if let Some(msg_map) = self.recv_buffer.get_mut(&chunk.message_id) {
             msg_map.insert(chunk.sequence_number, chunk);
         } else {
-            let mut msg_map: BTreeMap<u16, SimpleChunk> = BTreeMap::new();
+            let mut msg_map: BTreeMap<u64, SimpleChunk> = BTreeMap::new();
             msg_map.insert(chunk.sequence_number, chunk);
             self.recv_buffer.insert(self.last_recv_msg_id, msg_map);
         }
@@ -82,7 +83,7 @@ impl SimpleChunker {
     }
     fn attempt_assemble(&mut self, msg_id: u16) -> Result<Option<Message>> {
         let mut result = None;
-        if let Some(msg_map) = self.recv_buffer.get(&self.last_recv_msg_id) {
+        if let Some(msg_map) = self.recv_buffer.get(&msg_id) {
             // The BTreeMap docs tell us that into_values will be an iter sorted by key
             // In this case the key is the sequence_number, so in a complete set of chunks
             // that means the last item in the iter (or now vec) should be the "final chunk"
@@ -92,7 +93,7 @@ impl SimpleChunker {
                 // Second, check if the last chunk has final_chunk set
                 if last_chunk.final_chunk
                     // Lastly, check if the final chunk's sequence number matches the number of chunks
-                    && (usize::from(last_chunk.sequence_number) == (chunks.len() - 1))
+                    && (usize::try_from(last_chunk.sequence_number).unwrap() == (chunks.len() - 1))
                 {
                     // If all those checks pass, then we *should* have all the chunks in order
                     // Now we attempt to assemble the message

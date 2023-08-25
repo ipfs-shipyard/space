@@ -121,9 +121,9 @@ impl Transport for UdpTransport {
             .expect("Lock failed, this is really bad")
             .chunk(msg)?
         {
-            debug!("Transmitting chunk of {} bytes", chunk.len());
+            debug!("Transmitting chunk of {} bytes to {addr}", chunk.len());
             let hex_str = chunk.iter().map(|b| format!("{b:02X}")).collect::<String>();
-            debug!("Transmitting chunk of hex {hex_str}");
+            trace!("Transmitting chunk of hex {hex_str}");
             self.socket.send_to(&chunk, addr)?;
             if let Some(throttle) = self.chunk_transmit_throttle {
                 sleep(Duration::from_millis(throttle.into()));

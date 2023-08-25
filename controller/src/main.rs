@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use clap::{arg, Parser};
+use clap::{arg, Parser, ValueEnum};
 use log::info;
 use messages::{ApplicationAPI, Message};
 use transports::{Transport, UdpTransport, MAX_MTU};
@@ -23,6 +23,13 @@ pub struct Cli {
         help = "An optional delay (in milliseconds) between sending chunks."
     )]
     chunk_transmit_throttle: Option<u32>,
+    #[arg(
+        short,
+        long,
+        help = "Format to display the response message in.",
+        default_value = "debug"
+    )]
+    output_format: Format,
     #[arg(short, long, help = "Listens for a response from the myceli instance")]
     listen_mode: bool,
     #[arg(
@@ -56,8 +63,13 @@ impl Cli {
         if self.listen_mode {
             match transport.receive() {
                 Ok((msg, _)) => {
-                    info!("Received: {msg:?}");
-                    println!("Received: {msg:?}");
+                    let json = serde_json::to_string(&msg).unwrap();
+                    info!("Received: {msg:?} \nJSON: {json}");
+                    match self.output_format {
+                        Format::Json => println!("{json}"),
+                        Format::Debug => println!("{msg:?}"),
+                    }
+
                     return Ok(());
                 }
                 Err(e) => bail!("{e:?}"),
@@ -79,4 +91,10 @@ async fn main() -> Result<()> {
     }
 
     cli.run().await
+}
+
+#[derive(Clone, Parser, Debug, ValueEnum)]
+enum Format {
+    Json,
+    Debug,
 }
