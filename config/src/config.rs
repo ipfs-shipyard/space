@@ -28,7 +28,8 @@ pub struct Config {
     // myceli will respond to the sending address (or address set in relevant request).
     pub radio_address: Option<String>,
     // A path to a directory which where files that appear should be auto-imported.
-    // Absence implies no such directory exists
+    // Absence implies no such directory exists.
+    // This value only relevant if using the `watcher` command.
     pub watched_directory: Option<String>,
     //How much storage space should Local Storage use? Measured in kiB. Default is 1 GiB
     pub disk_usage: u64,

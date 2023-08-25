@@ -1,7 +1,8 @@
-use crate::api::ApplicationAPI;
-use crate::protocol::DataProtocol;
-use crate::TransmissionBlock;
+use crate::{
+    api::ApplicationAPI, cid_list, protocol::DataProtocol, sync::SyncMessage, TransmissionBlock,
+};
 
+use crate::sync::PushMessage;
 use parity_scale_codec::Encode;
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
 use serde::Serialize;
@@ -11,6 +12,7 @@ pub enum Message {
     DataProtocol(DataProtocol),
     ApplicationAPI(ApplicationAPI),
     Error(String),
+    Sync(SyncMessage),
 }
 
 impl Message {
@@ -97,5 +99,15 @@ impl Message {
 
     pub fn request_version() -> Self {
         Message::ApplicationAPI(ApplicationAPI::RequestVersion)
+    }
+
+    pub fn push(cids: cid_list::CompactList, name: String) -> Self {
+        Self::Sync(SyncMessage::Push(PushMessage::new(cids, name)))
+    }
+    pub fn pull(cids: cid_list::CompactList) -> Self {
+        Self::Sync(SyncMessage::Pull(cids))
+    }
+    pub fn block(block_bytes: Vec<u8>) -> Self {
+        Self::Sync(SyncMessage::Block(block_bytes))
     }
 }

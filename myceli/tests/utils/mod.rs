@@ -97,7 +97,7 @@ fn start_listener_thread(listen_addr: SocketAddr, db_path: ChildPath) {
     transport.set_max_read_attempts(Some(1));
     let transport = Arc::new(transport);
     let mut listener =
-        Listener::new(&listen_addr, db_path, transport, BLOCK_SIZE, None, 9).unwrap();
+        Listener::new(&listen_addr, db_path, transport, BLOCK_SIZE, None, 9, 512).unwrap();
     listener
         .start(10, 2, BLOCK_SIZE, 0)
         .expect("Error encountered in listener");

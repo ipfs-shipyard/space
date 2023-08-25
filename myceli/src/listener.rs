@@ -1,9 +1,10 @@
-use crate::handlers;
-use crate::shipper::Shipper;
+use crate::{handlers, shipper::Shipper, sync::Syncer};
 use anyhow::Result;
+use cid::Cid;
 use local_storage::{provider::default_storage_provider, storage::Storage};
 use log::{error, info, trace};
 use messages::{ApplicationAPI, DataProtocol, Message};
+use std::collections::BTreeSet;
 use std::{
     net::SocketAddr,
     path::PathBuf,
@@ -18,6 +19,8 @@ pub struct Listener<T> {
     transport: Arc<T>,
     connected: Arc<Mutex<bool>>,
     radio_address: Option<String>,
+    sync: Syncer,
+    addrs: BTreeSet<String>,
 }
 
 impl<T: Transport + Send + 'static> Listener<T> {
@@ -28,18 +31,29 @@ impl<T: Transport + Send + 'static> Listener<T> {
         block_size: u32,
         radio_address: Option<String>,
         high_disk_usage: u64,
+        mtu: u16,
     ) -> Result<Listener<T>> {
-        let storage = Storage::new(
-            default_storage_provider(storage_path, high_disk_usage)?,
-            block_size,
-        );
-
+        let provider = default_storage_provider(storage_path, high_disk_usage)?;
+        let missing_blocks = provider.lock().unwrap().get_dangling_cids()?;
+        let storage = Storage::new(provider, block_size);
+        let present_blocks = storage.list_available_cids()?;
+        let present_blocks = present_blocks
+            .iter()
+            .flat_map(|s| Cid::try_from(s.as_str()));
+        let sync = Syncer::new(mtu.into(), present_blocks, missing_blocks)?;
         info!("Listening on {_listen_address}");
+        let addrs = if let Some(a) = &radio_address {
+            BTreeSet::from([a.clone()])
+        } else {
+            BTreeSet::default()
+        };
         Ok(Listener {
             storage,
             transport,
             connected: Arc::new(Mutex::new(true)),
             radio_address,
+            sync,
+            addrs,
         })
     }
 
@@ -77,6 +91,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
         loop {
             match self.transport.receive() {
                 Ok((message, sender_addr)) => {
+                    self.addrs.insert(sender_addr.clone());
                     let target_addr = if let Some(radio_address) = &self.radio_address {
                         radio_address.to_owned()
                     } else {
@@ -100,7 +115,9 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     }
                 }
                 Err(TransportError::TimedOut) => {
-                    self.storage.incremental_gc();
+                    if let Err(e) = self.bg_tasks() {
+                        error!("Error with background task: {e:?}");
+                    }
                 }
                 Err(e) => {
                     error!("Receive message failed: {e}");
@@ -112,11 +129,11 @@ impl<T: Transport + Send + 'static> Listener<T> {
     fn handle_message(
         &mut self,
         message: Message,
-        sender_addr: &str,
+        target: &str,
         shipper_sender: Sender<(DataProtocol, String)>,
     ) -> Result<Option<Message>> {
         trace!("Handling {message:?}");
-        let resp = match message {
+        let resp: Option<Message> = match message {
             Message::ApplicationAPI(ApplicationAPI::TransmitDag {
                 cid,
                 target_addr,
@@ -128,15 +145,14 @@ impl<T: Transport + Send + 'static> Listener<T> {
                         target_addr,
                         retries,
                     },
-                    sender_addr.to_string(),
+                    target.to_string(),
                 ))?;
-
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::TransmitBlock { cid, target_addr }) => {
                 shipper_sender.send((
                     DataProtocol::RequestTransmitBlock { cid, target_addr },
-                    sender_addr.to_string(),
+                    target.to_string(),
                 ))?;
                 None
             }
@@ -166,7 +182,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 Some(handlers::validate_dag(&cid, &self.storage)?)
             }
             Message::DataProtocol(data_msg) => {
-                shipper_sender.send((data_msg, sender_addr.to_string()))?;
+                shipper_sender.send((data_msg, target.to_string()))?;
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::RequestVersion) => {
@@ -179,7 +195,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 *self.connected.lock().unwrap() = connected;
                 if !prev_connected && connected {
                     shipper_sender
-                        .send((DataProtocol::ResumeTransmitAllDags, sender_addr.to_string()))?;
+                        .send((DataProtocol::ResumeTransmitAllDags, target.to_string()))?;
                 }
                 None
             }
@@ -189,25 +205,22 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 }))
             }
             Message::ApplicationAPI(ApplicationAPI::ResumeTransmitDag { cid }) => {
-                shipper_sender.send((
-                    DataProtocol::ResumeTransmitDag { cid },
-                    sender_addr.to_string(),
-                ))?;
+                shipper_sender
+                    .send((DataProtocol::ResumeTransmitDag { cid }, target.to_string()))?;
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::ResumeTransmitAllDags) => {
-                shipper_sender
-                    .send((DataProtocol::ResumeTransmitAllDags, sender_addr.to_string()))?;
+                shipper_sender.send((DataProtocol::ResumeTransmitAllDags, target.to_string()))?;
                 None
             }
             #[allow(unused_variables)]
             Message::ApplicationAPI(ApplicationAPI::ValidateDagResponse { cid, result }) => {
-                info!("Received ValidateDagResponse from {sender_addr} for {cid}: {result}");
+                info!("Received ValidateDagResponse from {target} for {cid}: {result}");
                 None
             }
             #[allow(unused_variables)]
             Message::ApplicationAPI(ApplicationAPI::FileImported { path, cid }) => {
-                info!("Received FileImported from {sender_addr}: {path} -> {cid}");
+                info!("Received FileImported from {target}: {path} -> {cid}");
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::DagTransmissionComplete { cid }) => {
@@ -226,12 +239,10 @@ impl<T: Transport + Send + 'static> Listener<T> {
             Message::ApplicationAPI(ApplicationAPI::RequestAvailableDags) => {
                 Some(handlers::get_available_dags(&self.storage)?)
             }
-            Message::ApplicationAPI(ApplicationAPI::ListFiles) => {
-                Some(handlers::get_named_dags(&self.storage)?)
-            }
+            Message::Sync(sm) => self.sync.handle(sm, &mut self.storage)?,
             // Default case for valid messages which don't have handling code implemented yet
-            _message => {
-                info!("Received message: {:?}", _message);
+            message => {
+                info!("Received message: {:?}", message);
                 None
             }
         };
@@ -240,6 +251,21 @@ impl<T: Transport + Send + 'static> Listener<T> {
 
     fn transmit_response(&self, message: Message, target_addr: &str) -> Result<()> {
         self.transport.send(message, target_addr)?;
+        Ok(())
+    }
+
+    fn bg_tasks(&mut self) -> Result<()> {
+        if !self.addrs.is_empty() {
+            if let Some(msg) = self.sync.pop_pending_msg() {
+                for addr in &self.addrs {
+                    self.transport.send(msg.clone(), addr)?;
+                }
+                return Ok(());
+            }
+        }
+        if !self.storage.incremental_gc() {
+            self.sync.build_msg()?;
+        }
         Ok(())
     }
 }

@@ -1,3 +1,4 @@
+use log::debug;
 use notify::Watcher;
 use std::{fs, path::PathBuf, time::Duration};
 
@@ -41,6 +42,7 @@ fn main() {
         std::thread::sleep(Duration::from_secs(t));
         if let Some(Ok(f)) = preexisting.next() {
             if f.metadata().map(|d| d.is_file()).unwrap_or(false) {
+                debug!("Discovered path in {dir:?} - {f:?} - notifying Myceli.");
                 hndr.send(&f.path());
             }
         } else if let Ok(rd) = fs::read_dir(&dir) {

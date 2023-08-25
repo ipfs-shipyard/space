@@ -1,5 +1,6 @@
 use crate::{block::StoredBlock, error::StorageError, provider::Handle as ProviderHandle};
 use anyhow::{bail, Result};
+use cid::Cid;
 use futures::TryStreamExt;
 use ipfs_unixfs::{
     builder::{File, FileBuilder},
@@ -165,8 +166,23 @@ impl Storage {
             .get_dag_blocks_by_window(cid, offset, window_size)
     }
 
-    pub fn incremental_gc(&mut self) {
-        self.provider.lock().unwrap().incremental_gc();
+    pub fn incremental_gc(&mut self) -> bool {
+        if let Ok(mut prov) = self.provider.lock() {
+            prov.incremental_gc()
+        } else {
+            false
+        }
+    }
+    pub fn has_cid(&self, cid: &Cid) -> bool {
+        self.provider
+            .lock()
+            .map(|p| p.has_cid(cid))
+            .unwrap_or(false)
+    }
+    pub fn ack_cid(&self, cid: &Cid) {
+        if let Ok(prov) = self.provider.lock() {
+            prov.ack_cid(cid)
+        }
     }
 
     pub fn get_provider(&self) -> ProviderHandle {

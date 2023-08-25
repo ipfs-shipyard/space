@@ -11,6 +11,8 @@ rust-version.workspace = true
 [dependencies]
 cid.workspace = true
 clap.workspace = true
+derive-error.workspace = true
+log.workspace = true
 parity-scale-codec.workspace = true
 parity-scale-codec-derive.workspace = true
 serde.workspace = true

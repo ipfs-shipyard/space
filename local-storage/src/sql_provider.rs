@@ -1,5 +1,6 @@
 use crate::{block::StoredBlock, error::StorageError, provider::StorageProvider};
 use anyhow::{bail, Result};
+use cid::Cid;
 use log::trace;
 use rusqlite::{params_from_iter, Connection};
 use std::{path::PathBuf, str::FromStr};
@@ -51,6 +52,10 @@ impl SqliteStorageProvider {
                 FOREIGN KEY (block_id) REFERENCES blocks (id)
             )",
             (),
+        )?;
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS orphans(cid TEXT PRIMARY KEY)",
+            [],
         )?;
 
         // Create indices
@@ -158,6 +163,8 @@ impl StorageProvider for SqliteStorageProvider {
                 (&block.cid, &block.cid),
             )?;
         }
+        self.conn
+            .execute("DELETE FROM orphans WHERE cid = ?1", [&block.cid])?;
         Ok(())
     }
 
@@ -326,8 +333,37 @@ impl StorageProvider for SqliteStorageProvider {
         self.get_blocks_recursive_query(cid, None, None)
     }
 
-    fn incremental_gc(&mut self) {
+    fn incremental_gc(&mut self) -> bool {
         trace!("TODO incremental_gc");
+        false
+    }
+
+    fn has_cid(&self, cid: &Cid) -> bool {
+        self.conn
+            .query_row(
+                "SELECT 1 FROM blocks WHERE cid = ?1",
+                [cid.to_string()],
+                |_| Ok(()),
+            )
+            .is_ok()
+    }
+
+    fn ack_cid(&self, cid: &Cid) {
+        self.conn
+            .execute("DELETE FROM orphans WHERE cid = ?1", [&cid.to_string()])
+            .ok();
+    }
+
+    fn get_dangling_cids(&self) -> Result<Vec<Cid>> {
+        let mut stmt = self.conn.prepare("SELECT DISTINCT cid FROM orphans")?;
+        let rs = stmt.query_map([], |r| r.get::<usize, String>(0))?;
+        let mut result = Vec::default();
+        for s in rs.flat_map(|rs| rs.ok()) {
+            if let Ok(cid) = Cid::try_from(s.as_str()) {
+                result.push(cid);
+            }
+        }
+        Ok(result)
     }
 }
 

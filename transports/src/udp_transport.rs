@@ -54,8 +54,10 @@ impl Transport for UdpTransport {
         let mut timeouts = 0;
         loop {
             loop {
+                trace!("Receiving...");
                 match self.socket.recv_from(&mut buf) {
                     Ok((len, sender)) => {
+                        debug!("Received {len} bytes from {sender}");
                         if len > 0 {
                             read_len = len;
                             sender_addr = sender;

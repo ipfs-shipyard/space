@@ -1495,6 +1495,8 @@ version = "0.6.7"
 dependencies = [
  "cid",
  "clap",
+ "derive-error",
+ "log",
  "parity-scale-codec",
  "parity-scale-codec-derive",
  "serde",
@@ -1633,10 +1635,12 @@ dependencies = [
  "local-storage",
  "log",
  "messages",
+ "parity-scale-codec",
  "rand",
  "serde",
  "smalog",
  "tokio",
+ "toml 0.7.6",
  "transports",
 ]
 

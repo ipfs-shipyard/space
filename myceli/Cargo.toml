@@ -12,12 +12,15 @@ cid = { workspace = true, features = ["scale-codec"] }
 config.workspace = true
 env_logger = { workspace = true, optional = true }
 figment.workspace = true
+ipfs-unixfs.workspace = true
 local-storage = { path = "../local-storage", default-features = false }
 log.workspace = true
 messages.workspace = true
+parity-scale-codec.workspace = true
 serde.workspace = true
 smalog = { workspace = true, optional = true }
 tokio.workspace = true
+toml.workspace = true
 transports.workspace = true
 
 [features]

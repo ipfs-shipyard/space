@@ -1,6 +1,7 @@
 use crate::block::StoredBlock;
 use crate::provider::StorageProvider;
 use anyhow::bail;
+use cid::Cid;
 
 #[derive(Default)]
 pub(crate) struct NullStorageProvider {}
@@ -9,7 +10,9 @@ impl StorageProvider for NullStorageProvider {
     fn import_block(&mut self, _block: &StoredBlock) -> anyhow::Result<()> {
         bail!("NullStorageProvider does not implement anything")
     }
-
+    fn get_dangling_cids(&self) -> anyhow::Result<Vec<Cid>> {
+        Ok(vec![])
+    }
     fn get_available_cids(&self) -> anyhow::Result<Vec<String>> {
         bail!("NullStorageProvider does not implement anything")
     }
@@ -56,5 +59,13 @@ impl StorageProvider for NullStorageProvider {
         bail!("NullStorageProvider does not implement anything")
     }
 
-    fn incremental_gc(&mut self) {}
+    fn incremental_gc(&mut self) -> bool {
+        false
+    }
+
+    fn has_cid(&self, _cid: &Cid) -> bool {
+        false
+    }
+
+    fn ack_cid(&self, _cid: &Cid) {}
 }

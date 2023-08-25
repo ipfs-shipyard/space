@@ -2,7 +2,7 @@ use anyhow::Result;
 use config::Config;
 use log::info;
 use myceli::listener::Listener;
-use std::{net::ToSocketAddrs, sync::Arc, time::Duration};
+use std::{net::ToSocketAddrs, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use transports::UdpTransport;
 
 #[cfg(all(not(feature = "sqlite"), not(feature = "files")))]
@@ -14,8 +14,14 @@ fn main() -> Result<()> {
     #[cfg(feature = "small_log")]
     smalog::init();
 
-    let config_path = std::env::args().nth(1);
+    let config_path = std::env::args()
+        .filter(|a| PathBuf::from_str(a).map(|p| p.is_file()).unwrap_or(false))
+        .nth(1);
     let cfg = Config::parse(config_path).expect("Failed to parse config");
+    if std::env::args().any(|a| a == "--show-config") {
+        println!("{}", toml::to_string(&cfg).unwrap());
+        return Ok(());
+    }
 
     let mut resolved_listen_addr = cfg
         .listen_address
@@ -41,6 +47,7 @@ fn main() -> Result<()> {
         .set_read_timeout(timeout)
         .expect("Failed to set timeout");
     info!("Listening on {}", &resolved_listen_addr);
+    println!("pid={}", std::process::id());
     let mut listener = Listener::new(
         &resolved_listen_addr,
         &db_path,
@@ -48,9 +55,9 @@ fn main() -> Result<()> {
         cfg.block_size,
         cfg.radio_address,
         disk_bytes,
+        cfg.mtu,
     )
     .expect("Listener creation failed");
-    println!("pid={}", std::process::id());
     listener
         .start(cfg.retry_timeout_duration, cfg.window_size, cfg.block_size,cfg.shipper_throttle_packet_delay_ms)
         .expect("Error encountered in listener operation");
