@@ -14,8 +14,7 @@ fn main() -> Result<()> {
     smalog::init();
     let config_path = std::env::args()
         .skip(1)
-        .filter(|a| PathBuf::from_str(a).map(|p| p.is_file()).unwrap_or(false))
-        .next();
+        .find(|a| PathBuf::from_str(a).map(|p| p.is_file()).unwrap_or(false));
     let cfg = Config::parse(config_path).expect("Failed to parse config");
     if std::env::args().any(|a| a == "--show-config") {
         println!("{}", toml::to_string(&cfg).unwrap());

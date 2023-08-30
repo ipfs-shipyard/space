@@ -66,8 +66,7 @@ impl Block {
         }
         // check that the links are complete
         let expected_links = parse_links(&self.cid, &self.data)?;
-        let mut actual_links = self.links.clone();
-        actual_links.sort();
+        let actual_links = self.links.clone();
         anyhow::ensure!(expected_links == actual_links, "links do not match");
         Ok(())
     }

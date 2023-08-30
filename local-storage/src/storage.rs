@@ -9,7 +9,7 @@ use ipfs_unixfs::{
 use std::sync::Arc;
 use std::{fs::File as FsFile, io::Write, path::Path};
 
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 
 pub struct Storage {
     provider: ProviderHandle,
@@ -156,6 +156,11 @@ impl Storage {
 
     pub fn import_block(&mut self, block: &StoredBlock) -> Result<()> {
         info!("Importing block {:?}", block);
+        trace!(
+            "Block to be imported ({}) links to {:?}",
+            block.cid,
+            block.links
+        );
         self.provider.lock().unwrap().import_block(block)
     }
 

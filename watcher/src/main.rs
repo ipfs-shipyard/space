@@ -15,6 +15,8 @@ fn watched_dir(cfg: &config::Config) -> PathBuf {
             .expect("Must configure watched_directory before running watcher."),
     );
     result
+        .canonicalize()
+        .expect("Watched directory does not exist?")
 }
 
 fn main() {

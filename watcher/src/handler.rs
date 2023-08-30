@@ -26,7 +26,7 @@ impl Handler {
             Ok(ev) => match ev.kind {
                 EventKind::Modify(ModifyKind::Data(_)) => {
                     //Some of these events can occur while the file is still being modified
-                    std::thread::sleep(Duration::from_millis(100));
+                    std::thread::sleep(Duration::from_millis(2100));
                     info!("File modified, import: {:?}", &ev);
                     for p in ev.paths {
                         self.send(&p);

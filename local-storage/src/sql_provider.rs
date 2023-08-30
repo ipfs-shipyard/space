@@ -45,10 +45,11 @@ impl SqliteStorageProvider {
         // Create links table
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS links(
-                id INTEGER PRIMARY KEY,
+                sequence INTEGER,
                 root_cid TEXT,
                 block_cid TEXT NOT NULL,
                 block_id INTEGER,
+                PRIMARY KEY (sequence, root_cid),
                 FOREIGN KEY (block_id) REFERENCES blocks (id)
             )",
             (),
@@ -81,8 +82,9 @@ impl SqliteStorageProvider {
         WITH RECURSIVE cids(x,y,z) AS (
             SELECT cid,data,filename FROM blocks WHERE cid = (?1)
             UNION
-            SELECT cid,data,filename FROM blocks b 
-                INNER JOIN links l ON b.cid==l.block_cid 
+            SELECT cid,data,filename 
+                FROM blocks b 
+                INNER JOIN (SELECT * FROM links ORDER BY sequence) ON b.cid == block_cid 
                 INNER JOIN cids ON (root_cid=x)
         )
         SELECT x,y,z FROM cids
@@ -137,7 +139,7 @@ impl StorageProvider for SqliteStorageProvider {
         if !block.links.is_empty() {
             self.conn
                 .execute("DELETE FROM links WHERE root_cid = ?1", [&block.cid])?;
-            for link_cid in &block.links {
+            for (link_sequence, link_cid) in block.links.iter().enumerate() {
                 let mut maybe_block_id = None;
                 if let Ok(block_id) = self.conn.query_row(
                     "SELECT id FROM blocks b
@@ -152,8 +154,8 @@ impl StorageProvider for SqliteStorageProvider {
                 }
 
                 self.conn.execute(
-                    "INSERT OR IGNORE INTO links (root_cid, block_cid, block_id) VALUES(?1, ?2, ?3)",
-                    (&block.cid, link_cid, maybe_block_id),
+                    "INSERT OR IGNORE INTO links (sequence, root_cid, block_cid, block_id) VALUES(?1, ?2, ?3, ?4)",
+                    (link_sequence, &block.cid, link_cid, maybe_block_id),
                 )?;
             }
         } else {
@@ -182,7 +184,7 @@ impl StorageProvider for SqliteStorageProvider {
     fn get_links_by_cid(&self, cid: &str) -> Result<Vec<String>> {
         let links: Vec<String> = self
             .conn
-            .prepare("SELECT block_cid FROM links WHERE root_cid == (?1)")?
+            .prepare("SELECT block_cid FROM links WHERE root_cid == (?1) ORDER BY sequence")?
             .query_map([cid], |row| {
                 let cid_str: String = row.get(0)?;
                 Ok(cid_str)
@@ -250,7 +252,7 @@ impl StorageProvider for SqliteStorageProvider {
                 WITH RECURSIVE cids(x,y) AS (
                     SELECT cid, id FROM blocks WHERE cid = (?1)
                     UNION
-                    SELECT block_cid, block_id FROM links JOIN cids ON root_cid=x
+                    SELECT block_cid, block_id FROM links l JOIN cids ON root_cid=x  
                 )
                 SELECT x,y FROM cids;
             ",
@@ -299,10 +301,10 @@ impl StorageProvider for SqliteStorageProvider {
         window_size: Option<u32>,
     ) -> Result<Vec<String>> {
         let mut base_query = "
-                WITH RECURSIVE cids(x) AS (
-                    VALUES(?1)
+                WITH RECURSIVE cids(x,ignore) AS (
+                    VALUES( ?1 , 0)
                     UNION
-                    SELECT block_cid FROM links JOIN cids ON root_cid=x
+                    SELECT block_cid , l.sequence FROM links l JOIN cids ON root_cid=x ORDER BY l.sequence
                 )
                 SELECT x FROM cids
             "

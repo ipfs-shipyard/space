@@ -3,49 +3,62 @@
 if ! ( uname | grep Linux )
 then
   echo "This script only works on linux."
-  exit 4
+  exit 6
 fi
 
 stop() {
-  echo stop "${@}"
-  find ${2-*}/ -name "*${1}*" -type f -exec fuser '{}' \; | while read p
+  tty >/dev/null && echo stop "${@}"
+  find ${2-*}/ -name "*${1}*" -type f -exec fuser '{}' \; 2>/dev/null | while read p
   do
     kill ${p}
   done
   if [ $# -eq 1 ]
   then
-    killall ${1} || true
+    killall ${1} 2>/dev/null || true
   fi
 }
 kill_all() {
+  set +x
   for p in myceli controller hyphae watcher
   do
     stop ${p}
-    killall ${p} 2>/dev/null || echo "${p} is stopped"
+    killall ${p} 2>/dev/null || true # echo "${p} is stopped"
   done
   for f in {gnd,sat,ctl}/*
   do
-    fuser "${f}" | xargs kill 2>/dev/null || true
+    fuser "${f}" 2>/dev/null | xargs kill 2>/dev/null || true
   done
 }
-o=`mktemp -d`
+if [ "${o}" = '' ]
+then
+  export o=`mktemp -d`
+fi
 kill_all
 if [ "${1}" = 'die' ]
 then
-  echo "$$" > "${o}/tl.killer.pid"
-  sleep 999
+  echo -n "$$" > "${o}/tl.killer.pid"
+  sleep 1000
   if [ -f "${o}/tl.killer.pid" ]
   then
-    echo -e '\n\n\n\t###\t###\tTop-level timeout!\t###\t###\n\n'
+    if [ -f "${o}/tl.tokill.pid" ] && [ -d `cat "${o}/tl.tokill.pid"` ]
+    then
+      echo -e '\n\n\n\t###\t###\tTop-level timeout!\t###\t###\n\n'
+    fi
     kill_all
-    fuser "${0}" | xargs kill
+    for f in ${o}/*.pid
+    do
+      kill `cat ${f}` 2>/dev/null
+    done
+    fuser "${0}" 2>/dev/null | xargs kill 2>/dev/null
   else
     echo "Left-over timeout abandoned."
   fi
   exit
 fi
+find "${TMPDIR-/tmp}/" -type f -name "tl.killer.pid" -exec cat '{}' \; 2>/dev/null | xargs kill || true
 find "${TMPDIR-/tmp}/" -type f -name "tl.killer.pid" -exec rm '{}' \; 2>/dev/null || true
-( "${0}" die 2>/dev/null >/dev/null <&- & ) &
+echo -n "$$" > "${o}/tl.tokill.pid"
+( "${0}" die <&- & ) &
 #cd `dirname "${0}"`/..
 
 check_log() {
@@ -85,7 +98,7 @@ kill_pid() {
     fi
   done
   echo "Failed to kill ${1}"
-  exit 2
+  exit 7
 }
 kill_myceli() {
   export c="$1"
@@ -123,7 +136,7 @@ start() {
 start_myceli() {
   kill_myceli "${1}"
   export c="$1"
-  export RUST_LOG=debug
+  export RUST_LOG=trace
   sleep 1
   start myceli ${c} config.toml
   check_log 'pid=' ${c}
@@ -148,7 +161,6 @@ SATCFG
 cat > gnd/config.toml <<GNDCFG
 listen_address = "0.0.0.0:8765"
 storage_path = "."
-mtu = 1024
 watched_directory = "watched"
 GNDCFG
 cat > gnd/hyphae.toml <<HYPHCFG
@@ -182,11 +194,11 @@ do
 done
 
 controller() {
+  echo "controller(${@})"
   port=${1}
   shift
-  set -x
+  sleep 1
   timeout 99 ./ctl/controller --listen-mode 127.0.0.1:${port} "${@}" 2>ctl/controller.log | tee ctl/output.log
-  set +x
 }
 cid_present() {
   ls -lrth */storage.db || echo obviously the CID is not present
@@ -195,7 +207,15 @@ cid_present() {
     true
   elif [ -f ${1}/storage.db ]
   then
-    sqlite3 ${1}/storage.db "select * from blocks where cid = '${2}';" | grep '[a-z]'
+    for i in {0..9}
+    do
+      if sqlite3 ${1}/storage.db "select * from blocks where cid = '${2}';" | grep '[a-z]'
+      then
+        return 0
+      fi
+      sleep $i
+    done
+    false
   else
     false
   fi
@@ -229,7 +249,7 @@ transmit() {
     fi
   done
   echo "${cid} never showed up on ${b}"
-  exit 3
+  exit 8
 }
 port_for() {
   if [ $1 = gnd ]
@@ -274,7 +294,6 @@ echo 'This step passes if an FileImported response with CID is received. Any oth
 check_log FileImported ctl
 
 echo ' ...with the CID obtained from the FileImported response... '
-set -x
 export cid=`grep 'Received:.*FileImported' ctl/controller.log | tail -n 1 | cut -d '"' -f 4`
 echo ' ...and with the network address of the ground-to-space radio link... '
 echo 'send the TransmitDag command to the myceli ground instance'
@@ -358,29 +377,71 @@ start watcher gnd config.toml
 start watcher sat config.toml
 sleep 5
 wait_for_sync() {
-  for d in gnd sat
+  d=${2}
+  check_log "${3}.*${d}${1}"          ${d} watcher
+  check_log "Imported.path.*${d}${1}" ${d} myceli
+  check_log "ransmit.*Sync.*Push"     ${d} myceli
+  b=`other_side ${d}`
+  check_log "Sync::handle(Push(PushMsg(${d}${1}" ${b} myceli
+  check_log "Sync::handle.*Block" ${b} myceli
+  p=`port_for ${b}`
+  touch ${o}/notfound
+  for i in 1{0..9}
   do
-    check_log "Discovered.*${d}${1}"    ${d} watcher
-    check_log "Imported.path.*${d}${1}" ${d} myceli
-    check_log "ransmit.*Sync.*Push"                ${d} myceli
-    b=`other_side ${d}`
-    check_log "Sync::handle.*PushMsg" ${b} myceli
-    check_log "Sync::handle(Push(PushMsg(${d}${1}" ${b} myceli
-    check_log "Sync::handle.*Block" ${b} myceli
-    p=`port_for ${b}`
-    for i in {0..9}
-    do
+    sleep $i
+    controller ${p} --output-format json list-files
+    if ! grep --color=always "${d}${1}" ctl/output.log
+    then
       sleep $i
-      controller ${p} --output-format json list-files  | grep --color=always "${d}${1}" && break
-    done
-    jq '.ApplicationAPI.AvailableDags.dags[].filename' < ctl/output.log
-    jq '.ApplicationAPI.AvailableDags.dags[].filename' < ctl/output.log | grep --color=always "${d}${1}"
-    cid=`jq -r ".ApplicationAPI.AvailableDags.dags[] | select( .filename == \"gnd.prexisting.txt\" ).cid"  ctl/output.log`
-    controller ${p} export-dag ${cid} `pwd`/${b}/synced.${d}${1}
-    diff ${b}/synced.${d}${1} ${d}/watched/${d}${1}
+      continue
+    fi
+    export cid=`jq -r ".ApplicationAPI.AvailableDags.dags[] | select( .filename == \"${d}${1}\" ).cid"  ctl/output.log`
+    controller ${p} --output-format json validate-dag ${cid}
+    if grep -F --color=always 'Dag is valid' ctl/output.log
+    then
+      rm ${o}/notfound
+      break
+    fi
   done
+  if [ -f ${o}/notfound ]
+  then
+    echo "DAG for ${d}${1} never finished syncing."
+    exit 5
+  fi
+  e=`pwd`/${b}/synced.${d}${1}
+  controller ${p} export-dag ${cid} ${e}
+  for i in {0..9}
+  do
+    sleep $i
+    if [ ! -f ${e} ]
+    then
+      sleep $i
+      continue
+    fi
+    ls -lh ${e}
+    stat --format=%Y ${e}
+    date -d '1 second ago' +%s
+    if [ `stat --format=%Y ${e}` -lt `date -d '1 second ago' +%s` ]
+    then
+      break
+    fi
+  done
+  diff ${b}/synced.${d}${1} ${d}/watched/${d}${1}
 }
-wait_for_sync .prexisting.txt
+wait_for_sync .prexisting.txt gnd 'Discovered path in'
+wait_for_sync .prexisting.txt sat 'Discovered path in'
+for s in gnd sat
+do
+  echo 'begin' > ${o}/${s}.big.txt
+  yes $s `date` | head -c 2048 >> ${o}/${s}.big.txt
+  echo -e '\nend' >> ${o}/${s}.big.txt
+  mv -v ${o}/${s}.big.txt ${s}/watched/
+  sleep 1
+done
+wait_for_sync .big.txt sat 'File modified, import:'
+wait_for_sync .big.txt gnd 'File modified, import:'
+
+
 echo -e '\n\n\t###\t###\t PASSED \t###\t###\n'
 kill_all
 echo -e '\n\t###\t###\t DONE \t###\t###\n\n'

@@ -308,6 +308,7 @@ impl Syncer {
                 result = self.handle_push("", links.iter().cloned(), store);
             }
             let links = links.iter().map(|c| c.to_string()).collect();
+            debug!("Hit CID ({cid}) I was waiting on, importing it with links {links:?}");
             store.import_block(&StoredBlock {
                 cid: cid.to_string(),
                 filename: None,
