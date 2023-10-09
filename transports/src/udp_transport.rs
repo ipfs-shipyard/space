@@ -89,7 +89,7 @@ impl Transport for UdpTransport {
                 .iter()
                 .map(|b| format!("{b:02X}"))
                 .collect::<String>();
-            debug!("Received possible chunk of hex {hex_str}");
+            trace!("Received possible chunk of hex {hex_str}");
 
             match self
                 .chunker

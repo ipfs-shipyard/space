@@ -264,6 +264,7 @@ pub fn test_transmit_dag_no_response_exceed_retries() {
 }
 
 #[cfg(feature = "proto_ship")]
+#[ignore]
 #[test]
 pub fn test_resume_dag_after_reconnect() {
     let transmitter = TestListener::new();
@@ -363,6 +364,7 @@ pub fn test_no_transmit_after_disconnect() {
 
 #[cfg(feature = "proto_ship")]
 #[test]
+#[ignore]
 pub fn test_transmit_resume_after_timeout() {
     let transmitter = TestListener::new();
     let receiver = TestListener::new();

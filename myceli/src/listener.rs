@@ -30,8 +30,9 @@ pub struct Listener<T> {
     radio_address: Option<String>,
     ship_target_addrs: BTreeSet<String>,
     sync_target_addrs: BTreeSet<String>,
-    sync_counts: [u64; 3],
     _block_size: u32,
+    #[cfg(feature = "proto_sync")]
+    sync_counts: [u64; 3],
     #[cfg(feature = "proto_sync")]
     sync: Syncer,
 }
@@ -58,8 +59,9 @@ impl<T: Transport + Send + 'static> Listener<T> {
             radio_address,
             sync_target_addrs: BTreeSet::default(),
             ship_target_addrs: BTreeSet::default(),
-            sync_counts: [0; 3],
             _block_size: block_size,
+            #[cfg(feature = "proto_sync")]
+            sync_counts: [0; 3],
             #[cfg(feature = "proto_sync")]
             sync,
         })
@@ -271,16 +273,18 @@ impl<T: Transport + Send + 'static> Listener<T> {
                             error!("Versions are TOO different, can't expect backward compatibility that far. mine={my_version} theirs({sender})={their_version}");
                         }
                     }
-                    let remote = remote_label.unwrap_or(sender.to_owned());
+                    let _remote = remote_label.unwrap_or(sender.to_owned());
+                    #[cfg(feature = "proto_sync")]
                     if features.iter().any(|f| f == "PROTO_SYNC")
-                        && self.sync_target_addrs.insert(remote.clone())
+                        && self.sync_target_addrs.insert(_remote.clone())
                     {
-                        info!("Remote {remote} reported that it supports sync protocol, so adding it to addresses to target with that.");
+                        info!("Remote {_remote} reported that it supports sync protocol, so adding it to addresses to target with that.");
                     }
+                    #[cfg(feature = "proto_ship")]
                     if features.iter().any(|f| f == "PROTO_SHIP")
-                        && self.ship_target_addrs.insert(remote.clone())
+                        && self.ship_target_addrs.insert(_remote.clone())
                     {
-                        info!("Remote {remote} reported that it supports ship protocol, so adding it to addresses to target with that.");
+                        info!("Remote {_remote} reported that it supports ship protocol, so adding it to addresses to target with that.");
                     }
                 }
                 None
@@ -405,10 +409,10 @@ impl<T: Transport + Send + 'static> Listener<T> {
         if let Some(radio) = &self.radio_address {
             if self.sync_target_addrs.contains(radio) {
                 trace!("Configured radio {radio} is a sync target");
-            } else if self.sync_target_addrs.contains(radio) {
-                trace!("Configured radio {radio} is a sync target");
+            } else if self.ship_target_addrs.contains(radio) {
+                trace!("Configured radio {radio} is a ship target");
             } else {
-                debug!("Requesting version info & supported protocols from {radio} since it doesn't appear in ship {:?} OR sync {:?}", &self.ship_target_addrs, &self.sync_target_addrs);
+                debug!("Requesting version info & supported protocols from '{radio}' since it doesn't appear in ship {:?} OR sync {:?}", &self.ship_target_addrs, &self.sync_target_addrs);
                 self.transport.send(
                     Message::ApplicationAPI(crate::version_info::get(None)),
                     radio,
@@ -424,7 +428,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
         #[cfg(feature = "proto_sync")]
         if !self.sync_target_addrs.is_empty() {
             trace!("Addrs to sync with: {:?}", &self.sync_target_addrs);
-            if let Some(msg) = self.sync.pop_pending_msg() {
+            if let Some(msg) = self.sync.pop_pending_msg(&self.storage) {
                 if matches!(&msg, Message::Sync(SyncMessage::Push(_))) {
                     self.sync_counts[0] += 1;
                 }
@@ -443,7 +447,10 @@ impl<T: Transport + Send + 'static> Listener<T> {
         }
         if self.storage.incremental_gc() {
             debug!("GC run.");
-        } else if self.sync_counts[0] > self.sync_counts[1] + self.sync_counts[2] {
+            return Ok(());
+        }
+        #[cfg(feature = "proto_sync")]
+        if self.sync_counts[0] > self.sync_counts[1] + self.sync_counts[2] {
             debug!(
                 "Give the remote side a chance to talk. {:?}",
                 &self.sync_counts
@@ -452,8 +459,8 @@ impl<T: Transport + Send + 'static> Listener<T> {
         } else {
             trace!("Will try to build a new Sync message");
             self.sync_counts[2] = 0;
-            #[cfg(feature = "proto_sync")]
-            if let Err(e) = self.sync.build_msg() {
+
+            if let Err(e) = self.sync.build_msg(&mut self.storage) {
                 error!("Error while building a new Sync message to send: {e:?}");
             }
         }

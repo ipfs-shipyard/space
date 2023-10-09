@@ -49,7 +49,7 @@ impl Cli {
         let mut transport =
             UdpTransport::new(&self.bind_address, self.mtu, self.chunk_transmit_throttle)?;
         transport
-            .set_read_timeout(Some(Duration::from_secs(120)))
+            .set_read_timeout(Some(Duration::from_secs(180)))
             .expect("Failed to set timeout");
         let command = Message::ApplicationAPI(self.command.clone());
         let cmd_str = serde_json::to_string(&command)?;

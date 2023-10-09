@@ -9,6 +9,7 @@ members = [
     "messages",
     "myceli",
     "smalog",
+    "testing/udp_forward",
     "transports",
     "watcher"
 ]

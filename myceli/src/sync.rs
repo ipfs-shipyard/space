@@ -11,6 +11,7 @@ use messages::{cid_list, Message, SyncMessage, PUSH_OVERHEAD};
 use parity_scale_codec::Encode;
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
+    iter,
     iter::IntoIterator,
 };
 
@@ -86,7 +87,7 @@ impl Syncer {
         }
         let other_msgs = self.push_now(linked_cids)?;
         for msg in other_msgs {
-            self.ready.push_back(msg);
+            self.ready.push_front(msg);
         }
         Ok(root_push)
     }
@@ -122,10 +123,23 @@ impl Syncer {
     pub fn stop_pushing(&mut self, cid: &Cid) {
         Self::stop(&mut self.push, cid);
     }
-    pub fn pop_pending_msg(&mut self) -> Option<Message> {
-        self.ready.pop_front()
+    pub fn pop_pending_msg(&mut self, store: &Storage) -> Option<Message> {
+        match self.ready.pop_front() {
+            Some(Message::Sync(SyncMessage::Pull(l))) => {
+                let mut m = CompactList::default();
+                for c in &l {
+                    if store.has_cid(&c) {
+                        debug!("Refusing to pull {c:?} which we already have.");
+                    } else {
+                        m.include(&c, usize::MAX);
+                    }
+                }
+                Some(Message::Sync(SyncMessage::Pull(m)))
+            }
+            o => o,
+        }
     }
-    pub fn build_msg(&mut self) -> Result<()> {
+    pub fn build_msg(&mut self, store: &mut Storage) -> Result<()> {
         if let Some((cid, name)) = self.pending_names.pop() {
             let mut list = cid_list::CompactList::try_from(&cid)?;
             self.fill(
@@ -145,9 +159,11 @@ impl Syncer {
             .flat_map(|(_, s)| s.hi.pop_front())
             .next()
         {
-            let v = self.pull_now(vec![c])?;
-            info!("Build: Will pull {v:?}");
-            self.ready.extend(v.into_iter());
+            if !store.has_cid(&c) {
+                let v = self.pull_now(vec![c])?;
+                info!("Build: Will pull {v:?}");
+                self.ready.extend(v.into_iter());
+            }
         }
         if let Some(c) = self
             .push
@@ -220,7 +236,7 @@ impl Syncer {
                         if result.is_none() {
                             result = Some(m);
                         } else {
-                            self.ready.push_back(m);
+                            self.ready.push_front(m);
                         }
                     }
                 }
@@ -241,6 +257,7 @@ impl Syncer {
         for cid in cids.clone() {
             self.stop_pushing(&cid);
             if store.has_cid(&cid) {
+                self.stop_pulling(&cid);
                 ack_resp.include(&cid, self.mtu);
             } else {
                 pull_resp.include(&cid, self.mtu);
@@ -313,7 +330,7 @@ impl Syncer {
         if let Some(cid) = hit_cid {
             let links = parse_links(&cid, &bytes)?;
             if !links.is_empty() {
-                result = self.handle_push("", links.iter().cloned(), store);
+                result = self.handle_push("", links.iter().chain(iter::once(&cid)).cloned(), store);
             }
             let links = links.iter().map(|c| c.to_string()).collect();
             let filename = self.names.get(&cid).cloned();
