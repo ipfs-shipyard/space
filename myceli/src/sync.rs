@@ -5,14 +5,15 @@ use ipfs_unixfs::{codecs::Codec, parse_links};
 use libipld::{prelude::Codec as _, Ipld, IpldCodec};
 use local_storage::block::StoredBlock;
 use local_storage::storage::Storage;
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use messages::cid_list::CompactList;
 use messages::{cid_list, Message, SyncMessage, PUSH_OVERHEAD};
 use parity_scale_codec::Encode;
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     iter,
     iter::IntoIterator,
+    str::FromStr,
 };
 
 type ByMeta = BTreeMap<cid_list::Meta, ToSend>;
@@ -48,7 +49,7 @@ impl Syncer {
             names: HashMap::default(),
         };
         for (cid, name) in known_knowns {
-            result.will_push(&cid)?;
+            result.will_push(&cid, None)?;
             if !name.is_empty() {
                 result.names.insert(cid, name.clone());
                 result.pending_names.push((cid, name));
@@ -59,16 +60,15 @@ impl Syncer {
         }
         Ok(result)
     }
-    pub fn push_dag(&mut self, root: &StoredBlock, later: bool) -> Result<Option<Message>> {
+    pub fn push_dag(
+        &mut self,
+        root: &StoredBlock,
+        store: &Storage,
+        later: bool,
+    ) -> Result<Option<Message>> {
         debug!("push_dag({root:?},later={later}");
         let root_cid = Cid::try_from(root.cid.as_str())?;
-        self.will_push(&root_cid)?;
         let mut linked_cids = Vec::default();
-        for link in &root.links {
-            let link_cid = Cid::try_from(link.as_str())?;
-            self.will_push(&link_cid)?;
-            linked_cids.push(link_cid)
-        }
         let mut root_push = None;
         if let Some(name) = &root.filename {
             self.pending_names.push((root_cid, name.clone()));
@@ -76,24 +76,47 @@ impl Syncer {
             let mut list = CompactList::try_from(&root_cid)?;
             let size = self.mtu - messages::PUSH_OVERHEAD - root.filename.encoded_size();
             linked_cids.retain(|cid| !list.include(cid, size));
+            self.fill(
+                &mut list,
+                self.mtu - PUSH_OVERHEAD - name.encoded_size(),
+                Side::Push,
+            )?;
             let root_msg = Message::push(list, name.clone())?;
             if later {
-                self.ready.push_front(root_msg);
+                self.ready.push_back(root_msg);
             } else {
                 root_push = Some(root_msg)
             }
         } else {
             linked_cids.push(root_cid);
         }
-        let other_msgs = self.push_now(linked_cids)?;
-        for msg in other_msgs {
-            self.ready.push_front(msg);
-        }
+        self.will_push(&root_cid, Some(store))?;
         Ok(root_push)
+    }
+    pub fn push_dag_blocks(
+        &mut self,
+        root: &str,
+        store: &Storage,
+        pushed: &mut HashSet<String>,
+    ) -> anyhow::Result<Option<Message>> {
+        let block = store.get_block_by_cid(root)?;
+        let m = if pushed.insert(root.to_string()) {
+            Some(Message::block(block.data))
+        } else {
+            None
+        };
+        for link in block.links {
+            match self.push_dag_blocks(&link, store, pushed) {
+                Ok(Some(cm)) => self.ready.push_back(cm),
+                Ok(None) => trace!("Duplicate child in DAG {link}"),
+                Err(e) => warn!("Sending DAG which is incomplete: {root} -> {link}: {e:?}"),
+            }
+        }
+        Ok(m)
     }
     pub fn push_now(&mut self, cids: Vec<Cid>) -> anyhow::Result<Vec<Message>> {
         for cid in &cids {
-            self.will_push(cid)?;
+            self.will_push(cid, None)?;
         }
         let size = self.mtu - messages::PUSH_OVERHEAD;
         let lists = self.sending_now(cids, size, Side::Push)?;
@@ -114,8 +137,20 @@ impl Syncer {
     pub fn will_pull(&mut self, cid: &Cid) -> anyhow::Result<()> {
         Self::add(&mut self.pull, cid)
     }
-    pub fn will_push(&mut self, cid: &Cid) -> anyhow::Result<()> {
-        Self::add(&mut self.push, cid)
+    pub fn will_push(&mut self, cid: &Cid, store: Option<&Storage>) -> anyhow::Result<()> {
+        trace!("will_push({cid:?}, {}", store.is_some());
+        Self::add(&mut self.push, cid)?;
+        if let Some(p) = store.map(|s| s.get_provider()) {
+            let links = if let Ok(p) = p.try_lock() {
+                p.get_links_by_cid(&cid.to_string())?
+            } else {
+                vec![]
+            };
+            for link in links {
+                self.will_push(&Cid::from_str(&link)?, store)?;
+            }
+        }
+        Ok(())
     }
     pub fn stop_pulling(&mut self, cid: &Cid) {
         Self::stop(&mut self.pull, cid);
@@ -127,19 +162,35 @@ impl Syncer {
         match self.ready.pop_front() {
             Some(Message::Sync(SyncMessage::Pull(l))) => {
                 let mut m = CompactList::default();
+                let sz = l.built_size();
                 for c in &l {
                     if store.has_cid(&c) {
                         debug!("Refusing to pull {c:?} which we already have.");
                     } else {
-                        m.include(&c, usize::MAX);
+                        m.include(&c, sz);
                     }
                 }
+                self.fill(&mut m, sz, Side::Push).ok();
                 Some(Message::Sync(SyncMessage::Pull(m)))
             }
             o => o,
         }
     }
     pub fn build_msg(&mut self, store: &mut Storage) -> Result<()> {
+        if let Some(c) = self
+            .pull
+            .iter_mut()
+            .flat_map(|(_, s)| s.hi.pop_front())
+            .next()
+        {
+            if !store.has_cid(&c) {
+                let v = self.pull_now(vec![c])?;
+                info!("Build: Will pull {v:?}");
+                for m in v {
+                    self.ready.push_back(m);
+                }
+            }
+        }
         if let Some((cid, name)) = self.pending_names.pop() {
             let mut list = cid_list::CompactList::try_from(&cid)?;
             self.fill(
@@ -152,18 +203,6 @@ impl Syncer {
                 self.ready.push_back(m);
             }
             return Ok(());
-        }
-        if let Some(c) = self
-            .pull
-            .iter_mut()
-            .flat_map(|(_, s)| s.hi.pop_front())
-            .next()
-        {
-            if !store.has_cid(&c) {
-                let v = self.pull_now(vec![c])?;
-                info!("Build: Will pull {v:?}");
-                self.ready.extend(v.into_iter());
-            }
         }
         if let Some(c) = self
             .push
@@ -259,12 +298,16 @@ impl Syncer {
             if store.has_cid(&cid) {
                 self.stop_pulling(&cid);
                 ack_resp.include(&cid, self.mtu);
-            } else {
-                pull_resp.include(&cid, self.mtu);
-                store.ack_cid(&cid);
-                // self.algos.insert(cid.hash().code());
-                if let Err(e) = self.will_pull(&cid) {
-                    error!("Unable to start pulling {cid}: {e}");
+            }
+            if let Ok(missing) = store.get_missing_dag_blocks(&cid.to_string()) {
+                for miss in &missing {
+                    if let Ok(miss_cid) = Cid::from_str(miss) {
+                        pull_resp.include(&miss_cid, self.mtu);
+                        store.ack_cid(&miss_cid);
+                        if let Err(e) = self.will_pull(&miss_cid) {
+                            error!("Unable to start pulling {cid}: {e}");
+                        }
+                    }
                 }
             }
         }

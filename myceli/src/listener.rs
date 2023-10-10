@@ -8,8 +8,12 @@ use local_storage::{provider::default_storage_provider, storage::Storage};
 use log::{debug, error, info, trace, warn};
 #[cfg(feature = "proto_ship")]
 use messages::DataProtocol;
-use messages::{ApplicationAPI, Message, SyncMessage};
+#[cfg(feature = "proto_sync")]
+use messages::SyncMessage;
+use messages::{ApplicationAPI, Message};
 use std::collections::BTreeSet;
+#[cfg(feature = "proto_sync")]
+use std::collections::HashSet;
 #[cfg(feature = "proto_ship")]
 use std::{
     iter,
@@ -109,10 +113,10 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     {
                         info!("Will sync to {sender_addr}");
                     }
-                    if let Some(target_addr) = message.target_addr() {
-                        if self.ship_target_addrs.insert(target_addr.clone()) {
-                            info!("Will send to {target_addr} with shipper.");
-                        }
+                    if matches!(&message, Message::DataProtocol(_))
+                        && self.ship_target_addrs.insert(sender_addr.clone())
+                    {
+                        info!("Will send to {sender_addr} with shipper.");
                     }
                     match {
                         #[cfg(feature = "proto_ship")]
@@ -180,26 +184,39 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 target_addr,
                 retries: _retries,
             }) => {
-                self.transmit_dag(&cid, &target_addr)?;
                 #[cfg(feature = "proto_ship")]
-                ship(
-                    self,
-                    DataProtocol::RequestTransmitDag {
-                        cid: cid.clone(),
-                        target_addr,
-                        retries: _retries,
-                    },
-                );
-                None
+                if self.sync_target_addrs.contains(&target_addr)
+                    || !self.ship_target_addrs.contains(&target_addr)
+                {
+                    self.transmit_dag(&cid, &target_addr, true).ok();
+                }
+                #[cfg(not(feature = "proto_ship"))]
+                self.transmit_dag(&cid, &target_addr, true)?;
+                #[cfg(feature = "proto_ship")]
+                {
+                    if self.ship_target_addrs.contains(&target_addr)
+                        || !self.sync_target_addrs.contains(&target_addr)
+                    {
+                        ship(
+                            self,
+                            DataProtocol::RequestTransmitDag {
+                                cid: cid.clone(),
+                                target_addr,
+                                retries: _retries,
+                            },
+                        );
+                    }
+                }
+                Message::ack("TransmitDag")
             }
             Message::ApplicationAPI(ApplicationAPI::TransmitBlock { cid, target_addr }) => {
-                self.transmit_dag(&cid, &target_addr)?;
+                self.transmit_dag(&cid, &target_addr, false)?;
                 #[cfg(feature = "proto_ship")]
                 ship(
                     self,
                     DataProtocol::RequestTransmitBlock { cid, target_addr },
                 );
-                None
+                Message::ack("TransmitBlock")
             }
             Message::ApplicationAPI(ApplicationAPI::ImportFile { path }) => {
                 let result = handlers::import_file(&path, &mut self.storage)?;
@@ -296,7 +313,9 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     #[cfg(feature = "proto_ship")]
                     ship(self, DataProtocol::ResumeTransmitAllDags);
                 }
-                None
+                Some(Message::ApplicationAPI(ApplicationAPI::ConnectedState {
+                    connected: *self.connected.lock().unwrap(),
+                }))
             }
             Message::ApplicationAPI(ApplicationAPI::GetConnected) => {
                 Some(Message::ApplicationAPI(ApplicationAPI::ConnectedState {
@@ -304,15 +323,15 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 }))
             }
             Message::ApplicationAPI(ApplicationAPI::ResumeTransmitDag { cid }) => {
-                self.transmit_dag(&cid, sender)?;
+                self.transmit_dag(&cid, sender, false)?;
                 #[cfg(feature = "proto_ship")]
                 ship(self, DataProtocol::ResumeTransmitDag { cid });
-                None
+                Message::ack("ResumeTransmitDag")
             }
             Message::ApplicationAPI(ApplicationAPI::ResumeTransmitAllDags) => {
                 #[cfg(feature = "proto_ship")]
                 ship(self, DataProtocol::ResumeTransmitAllDags);
-                None
+                Message::ack("ResumeTransmitAllDags")
             }
             Message::ApplicationAPI(ApplicationAPI::ValidateDagResponse { cid, result }) => {
                 info!("Received ValidateDagResponse from {sender} for {cid}: {result}");
@@ -330,7 +349,6 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     }
                     Err(_e) => {
                         error!("Failure in receiving dag {cid}: {}", _e.to_string());
-                        // TODO: Delete dag and restart transmission at this point?
                     }
                 }
                 None
@@ -341,24 +359,10 @@ impl<T: Transport + Send + 'static> Listener<T> {
             Message::ApplicationAPI(ApplicationAPI::ListFiles) => {
                 Some(handlers::get_named_dags(&self.storage)?)
             }
-            Message::Sync(SyncMessage::Push(pm)) => {
-                #[cfg(feature = "proto_sync")]
-                {
-                    self.sync_counts[1] += 1;
-                    info!(
-                        "Received a sync push, balance is now {:?}: {pm:?}",
-                        self.sync_counts
-                    );
-                    self.sync.handle(SyncMessage::Push(pm), &mut self.storage)?
-                }
-                #[cfg(not(feature = "proto_sync"))]
-                Some(Message::Error(format!(
-                    "Sync protocol not implemented here. Received: {pm:?}"
-                )))
-            }
             Message::Sync(sm) => {
                 #[cfg(feature = "proto_sync")]
                 {
+                    self.sync_counts[1] += 1;
                     self.sync.handle(sm, &mut self.storage)?
                 }
                 #[cfg(not(feature = "proto_sync"))]
@@ -375,7 +379,9 @@ impl<T: Transport + Send + 'static> Listener<T> {
             Message::ApplicationAPI(api_msg) => {
                 //Catch-all for API messages that have no handling code - typically responses
                 warn!("Received unsupported API message: {api_msg:?}");
-                None
+                Some(Message::Error(format!(
+                    "Received unsupported API message: {api_msg:?}"
+                )))
             }
         };
         Ok(resp)
@@ -390,16 +396,32 @@ impl<T: Transport + Send + 'static> Listener<T> {
         #[cfg(feature = "proto_sync")]
         {
             let root = self.storage.get_block_by_cid(_root_cid_str)?;
-            self.sync.push_dag(&root, false)?;
+            self.sync.push_dag(&root, &self.storage, false)?;
         }
         Ok(())
     }
-    fn transmit_dag(&mut self, _root_cid_str: &str, _target: &str) -> Result<()> {
+    fn transmit_dag(
+        &mut self,
+        _root_cid_str: &str,
+        _target: &str,
+        _with_blocks: bool,
+    ) -> Result<()> {
         #[cfg(feature = "proto_sync")]
         {
             let root = self.storage.get_block_by_cid(_root_cid_str)?;
-            if let Some(immediate_msg) = self.sync.push_dag(&root, true)? {
+            if let Some(immediate_msg) = self.sync.push_dag(&root, &self.storage, false)? {
                 self.transmit_response(immediate_msg, _target)?;
+            }
+            if _with_blocks {
+                let mut track = HashSet::new();
+                let immediate_msg =
+                    self.sync
+                        .push_dag_blocks(_root_cid_str, &self.storage, &mut track)?;
+                if let Some(msg) = immediate_msg {
+                    self.transmit_response(msg, _target)?;
+                } else {
+                    error!("Logical error: an empty set already contained the root CID {_root_cid_str}");
+                }
             }
         }
         Ok(())
@@ -413,10 +435,10 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 trace!("Configured radio {radio} is a ship target");
             } else {
                 debug!("Requesting version info & supported protocols from '{radio}' since it doesn't appear in ship {:?} OR sync {:?}", &self.ship_target_addrs, &self.sync_target_addrs);
-                self.transport.send(
-                    Message::ApplicationAPI(crate::version_info::get(None)),
-                    radio,
-                )?;
+                // self.transport.send(
+                //     Message::ApplicationAPI(crate::version_info::get(None)),
+                //     radio,
+                // )?;
                 self.transport
                     .send(Message::request_version(radio.clone()), radio)?;
                 return Ok(());

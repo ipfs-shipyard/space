@@ -4,9 +4,11 @@ use figment::{
     Figment, Provider,
 };
 use log::{debug, info, trace};
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 use std::path::PathBuf;
-use transports::MAX_MTU;
+
+//Duplicated in transport
+const MAX_MTU: u16 = 3 * 1024;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
@@ -89,7 +91,7 @@ fn default_config_path() -> Option<String> {
     None
 }
 impl Config {
-    pub fn parse(path: Option<String>) -> Result<Self> {
+    pub fn parse(path: Option<String>, mtu2block_size: &dyn Fn(u16) -> u16) -> Result<Self> {
         trace!("Config::parse({path:?})");
         let mut config = Figment::from(Serialized::defaults(Config::default()));
         if let Some(path) = path.or(default_config_path()) {
@@ -102,7 +104,7 @@ impl Config {
             bail!("Configured MTU is too large, cannot exceed {MAX_MTU}",);
         }
         if config.block_size.is_none() {
-            let sz = messages::Message::fit_size(config.mtu).into();
+            let sz = mtu2block_size(config.mtu).into();
             info!("Used a mtu {} to deduce block_size {}", config.mtu, sz);
             config.block_size = Some(sz);
         }

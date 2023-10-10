@@ -130,6 +130,7 @@ impl Message {
         Self::Sync(SyncMessage::Pull(cids))
     }
 
+    #[cfg(feature = "proto_sync")]
     pub fn block(block_bytes: Vec<u8>) -> Self {
         Self::Sync(SyncMessage::Block(block_bytes))
     }
@@ -138,18 +139,25 @@ impl Message {
         !matches!(self, Self::Sync(_))
     }
 
-    pub fn fit_size(within: u16) -> u16 {
-        let mut v = vec![0u8; within as usize - crate::PUSH_OVERHEAD];
-        loop {
-            if Self::block(v.clone()).encoded_size() < within.into() {
-                if let Ok(result) = v.len().try_into() {
-                    return result;
+    pub fn fit_size(_within: u16) -> u16 {
+        #[cfg(feature = "proto_sync")]
+        {
+            let mut v = vec![0u8; _within as usize - crate::PUSH_OVERHEAD];
+            loop {
+                if Self::block(v.clone()).encoded_size() < _within.into() {
+                    if let Ok(result) = v.len().try_into() {
+                        return result;
+                    } else {
+                        v.pop();
+                    }
                 } else {
                     v.pop();
                 }
-            } else {
-                v.pop();
             }
+        }
+        #[cfg(not(feature = "proto_sync"))]
+        {
+            3 * 1024
         }
     }
     pub fn name(&self) -> &'static str {
@@ -178,5 +186,37 @@ impl Message {
             }
             _ => None,
         }
+    }
+
+    pub fn ack(desc: &str) -> Option<Message> {
+        Some(Message::ApplicationAPI(ApplicationAPI::Acknowledged {
+            req: desc.to_string(),
+        }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cid::Cid;
+    use std::str::FromStr;
+
+    #[cfg(all(feature = "proto_sync", feature = "proto_ship"))]
+    #[test]
+    fn onepackettypemessagebiggerthanmtuwhenotherfitsjust() {
+        let block_size = Message::fit_size(512);
+        assert_eq!(block_size, 495);
+        let block = TransmissionBlock {
+            cid: Cid::from_str("bafkreieifgj3kxgayut7bjqftnu3h6xu546mxhhm2pmii7fa4snbirg6xy")
+                .unwrap()
+                .to_bytes(),
+            data: vec![0u8; 495],
+            links: vec![],
+            filename: None,
+        };
+        let m = Message::data_block(block);
+        let sz = m.encoded_size();
+        assert!(sz > 512, "{sz} should be > 512");
+        assert_eq!(sz, 538);
     }
 }

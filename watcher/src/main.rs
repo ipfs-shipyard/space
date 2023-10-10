@@ -1,4 +1,5 @@
 use log::debug;
+use messages::Message;
 use notify::Watcher;
 use std::{fs, path::PathBuf, time::Duration};
 
@@ -27,7 +28,8 @@ fn main() {
     smalog::init();
 
     let config_path = std::env::args().nth(1);
-    let cfg = config::Config::parse(config_path).expect("Failed to parse config");
+    let cfg =
+        config::Config::parse(config_path, &Message::fit_size).expect("Failed to parse config");
     let hndr = handler::Handler::new(&cfg).expect("Failed to configure transport & event handler");
     let dir = watched_dir(&cfg);
     let mut watcher = notify::recommended_watcher(move |e| hndr.handle_event(e))

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use config::Config;
-use log::warn;
+use log::{info, warn};
+use messages::Message;
 use myceli::listener::Listener;
 use std::{net::ToSocketAddrs, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use transports::UdpTransport;
@@ -16,10 +17,15 @@ fn main() -> Result<()> {
     env_logger::init();
     #[cfg(feature = "small_log")]
     smalog::init();
+
+    #[cfg(feature = "proto_sync")]
+    info!("Sync Protocol enabled");
+    #[cfg(feature = "proto_ship")]
+    info!("Ship(per) Protocol enabled");
     let config_path = std::env::args()
         .skip(1)
         .find(|a| PathBuf::from_str(a).map(|p| p.is_file()).unwrap_or(false));
-    let cfg = Config::parse(config_path).expect("Failed to parse config");
+    let cfg = Config::parse(config_path, &Message::fit_size).expect("Failed to parse config");
     if std::env::args().any(|a| a == "--show-config") {
         println!("{}", toml::to_string(&cfg).unwrap());
         return Ok(());

@@ -87,6 +87,9 @@ impl CompactList {
     fn contains_digest(&self, digest: &[u8]) -> bool {
         self.digests.iter().any(|d| d.as_slice() == digest)
     }
+    pub fn built_size(&self) -> usize {
+        self.size
+    }
 }
 impl TryFrom<&Cid> for CompactList {
     type Error = Error;

@@ -162,9 +162,8 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                         info!("No blocks missing, moving to next window");
                         self.next_dag_window_session(&cid);
                         self.dag_window_session_run(&cid)?;
-                    } else {
-                        self.window_sessions.get_mut(&cid).unwrap().mode = SessionMode::Normal;
-
+                    } else if let Some(session) = self.window_sessions.get_mut(&cid) {
+                        session.mode = SessionMode::Normal;
                         info!(
                             "Dag {cid} is missing {} blocks, sending again",
                             blocks.len()
@@ -179,6 +178,8 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                             }),
                             &target_addr,
                         )?;
+                    } else {
+                        error!("Unable to find session for {cid:?}");
                     }
                 }
             }

@@ -1,5 +1,5 @@
 #!/bin/bash -e
-source `dirname "${0}"`/funcs.env
+source `dirname "${0}"`/setup.env
 configure 9876543
 
 start_myceli sat.all

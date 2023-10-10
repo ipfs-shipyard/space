@@ -31,6 +31,7 @@ conflict() {
         exit 0
       else
         rm -v timeout.killer.pid
+        rm -v "${o}"/running.* || true
       fi
     else
       rm -v timeout.killer.pid

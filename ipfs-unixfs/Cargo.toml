@@ -20,7 +20,7 @@ log.workspace = true
 multihash.workspace = true
 num_enum.workspace = true
 prost.workspace = true
-tokio = { workspace = true, features = ["fs"] }
+tokio = { workspace = true, features = ["fs", "io-util", "rt"] }
 #tokio-util = { workspace = true, features = ["io-util"] }
 
 [dev-dependencies]

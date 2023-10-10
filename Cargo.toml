@@ -2,7 +2,7 @@
 members = [
     "config",
     "controller",
-    "hyphae",
+    #    "hyphae",
     "ipfs-unixfs",
     "local-dev-environment/desktop/rfm69-service",
     "local-storage",

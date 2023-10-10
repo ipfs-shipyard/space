@@ -27,11 +27,15 @@ pub struct Cli {
     #[arg(
         short,
         long,
-        help = "Format to display the response message in.",
-        default_value = "debug"
+        help = "Format to display the response message in. A value other than none implies --listen_mode",
+        default_value = "none"
     )]
     output_format: Format,
-    #[arg(short, long, help = "Listens for a response from the myceli instance")]
+    #[arg(
+        short,
+        long,
+        help = "Listens for a response from the myceli instance. If --output-format is not specified, debug is assumed for backward compatibility."
+    )]
     listen_mode: bool,
     #[arg(
         short,
@@ -49,7 +53,7 @@ impl Cli {
         let mut transport =
             UdpTransport::new(&self.bind_address, self.mtu, self.chunk_transmit_throttle)?;
         transport
-            .set_read_timeout(Some(Duration::from_secs(180)))
+            .set_read_timeout(Some(Duration::from_secs(60 * 60)))
             .expect("Failed to set timeout");
         let command = Message::ApplicationAPI(self.command.clone());
         let cmd_str = serde_json::to_string(&command)?;
@@ -58,7 +62,7 @@ impl Cli {
         let instance_addr = if let Some(addr) = &self.instance_addr {
             addr.clone()
         } else {
-            let cfg = config::Config::parse(None)
+            let cfg = config::Config::parse(None, &Message::fit_size)
                 .expect("Please specify instance addr, as I can't read myceli.toml");
             info!(
                 "Address not specified, using the one found in config: {}",
@@ -73,10 +77,11 @@ impl Cli {
                 match transport.receive() {
                     Ok((Message::ApplicationAPI(msg), _)) => {
                         let json = serde_json::to_string(&msg).unwrap();
-                        info!("Received response: {msg:?} \nJSON: {json}");
+                        info!("Received response: {msg:?} from {instance_addr} \nJSON: {json}");
                         match self.output_format {
                             Format::Json => println!("{json}"),
                             Format::Debug => println!("{msg:?}"),
+                            Format::None => panic!("Response received {msg:?} which implies listen_mode==true but output_format==None {self:?}"),
                         }
 
                         return Ok(());
@@ -85,7 +90,7 @@ impl Cli {
                         error!("Received error message: {msg}");
                         bail!("Server: {msg}");
                     }
-                    Err(e) => bail!("{e:?}"),
+                    Err(e) => bail!("Error: {e:?}"),
                     Ok((Message::DataProtocol(msg), _)) => {
                         debug!("Ignoring shipper data protocol message {msg:?}");
                     }
@@ -109,6 +114,11 @@ async fn main() -> Result<()> {
     if cli.mtu > MAX_MTU {
         bail!("Configured MTU is too large, cannot exceed {MAX_MTU}",);
     }
+    if cli.output_format != Format::None {
+        cli.listen_mode = true;
+    } else if cli.listen_mode {
+        cli.output_format = Format::Debug;
+    }
     if matches!(cli.command, ApplicationAPI::RequestVersion { label: None }) {
         cli.command = ApplicationAPI::RequestVersion {
             label: Some("Requested by controller".to_owned()),
@@ -117,8 +127,9 @@ async fn main() -> Result<()> {
     cli.run().await
 }
 
-#[derive(Clone, Parser, Debug, ValueEnum)]
+#[derive(Clone, Parser, Debug, ValueEnum, Eq, PartialEq)]
 enum Format {
+    None,
     Json,
     Debug,
 }

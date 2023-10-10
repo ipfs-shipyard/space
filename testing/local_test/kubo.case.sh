@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-source `dirname "${0}"`/funcs.env
+source `dirname "${0}"`/setup.env
 
 for i in {0..99}
 do
