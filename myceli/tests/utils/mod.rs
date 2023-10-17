@@ -99,7 +99,7 @@ fn start_listener_thread(listen_addr: SocketAddr, db_path: ChildPath) {
     let mut listener =
         Listener::new(&listen_addr, db_path, transport, BLOCK_SIZE, None, 9).unwrap();
     listener
-        .start(10, 2, BLOCK_SIZE)
+        .start(10, 2, BLOCK_SIZE, 0)
         .expect("Error encountered in listener");
 }
 

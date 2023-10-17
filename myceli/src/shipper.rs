@@ -53,6 +53,7 @@ pub struct Shipper<T> {
     connected: Arc<Mutex<bool>>,
     // Radio address
     radio_address: Option<String>,
+    packet_delay_ms: u32,
 }
 
 impl<T: Transport + Send + 'static> Shipper<T> {
@@ -67,6 +68,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
         connected: Arc<Mutex<bool>>,
         block_size: u32,
         radio_address: Option<String>,
+        packet_delay_ms: u32,
     ) -> Result<Shipper<T>> {
         let storage = Storage::new(storage_provider, block_size);
         Ok(Shipper {
@@ -79,6 +81,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
             transport,
             connected,
             radio_address,
+            packet_delay_ms,
         })
     }
 
@@ -367,6 +370,9 @@ impl<T: Transport + Send + 'static> Shipper<T> {
 
         info!("Transmitting {msg:?} to {_resolved_target_addr}");
         self.transport.send(msg, target_addr)?;
+        if self.packet_delay_ms > 0 {
+            std::thread::sleep(Duration::from_millis(self.packet_delay_ms.into()));
+        }
         Ok(())
     }
 
@@ -382,6 +388,7 @@ impl<T: Transport + Send + 'static> Shipper<T> {
                 block.cid.to_string()
             );
             self.transmit_msg(Message::data_block(transmission), target_addr)?;
+
         }
 
         Ok(())
@@ -517,6 +524,7 @@ mod tests {
                 Arc::new(Mutex::new(true)),
                 BLOCK_SIZE,
                 None,
+                0
             )
             .unwrap();
             TestShipper {
