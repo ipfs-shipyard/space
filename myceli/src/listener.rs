@@ -48,6 +48,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
         shipper_timeout_duration: u64,
         shipper_window_size: u32,
         block_size: u32,
+        shipper_packet_delay_ms: u32,
     ) -> Result<()> {
         // First setup the shipper and its pieces
         let (shipper_sender, shipper_receiver) = mpsc::channel();
@@ -67,6 +68,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 initial_connected,
                 block_size,
                 shipper_radio,
+                shipper_packet_delay_ms
             )
             .expect("Shipper creation failed");
             shipper.receive_msg_loop();

@@ -36,6 +36,7 @@ pub struct Config {
     //0 = OFF (don't run GC)
     //Default is 10000 (10 seconds)
     pub gc_period_ms: u32,
+    pub shipper_throttle_packet_delay_ms: u32,
 }
 
 impl Default for Config {
@@ -61,6 +62,7 @@ impl Default for Config {
             watched_directory: None,
             disk_usage: 1024 * 1024,
             gc_period_ms: 10_000,
+            shipper_throttle_packet_delay_ms: 0,
         }
     }
 }
