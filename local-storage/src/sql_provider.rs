@@ -349,9 +349,14 @@ impl StorageProvider for SqliteStorageProvider {
     }
 
     fn ack_cid(&self, cid: &Cid) {
-        self.conn
-            .execute("DELETE FROM orphans WHERE cid = ?1", [&cid.to_string()])
-            .ok();
+        if !self.has_cid(cid) {
+            self.conn
+                .execute(
+                    "INSERT OR IGNORE INTO orphans ( cid ) VALUES ( ?1 )",
+                    [&cid.to_string()],
+                )
+                .ok();
+        }
     }
 
     fn get_dangling_cids(&self) -> Result<Vec<Cid>> {
@@ -363,6 +368,15 @@ impl StorageProvider for SqliteStorageProvider {
                 result.push(cid);
             }
         }
+        Ok(result)
+    }
+
+    fn get_name(&self, cid: &str) -> Result<String> {
+        let result = self.conn.query_row(
+            "SELECT MAX(filename) FROM blocks WHERE cid = ?1",
+            [cid],
+            |r| r.get(0),
+        )?;
         Ok(result)
     }
 }

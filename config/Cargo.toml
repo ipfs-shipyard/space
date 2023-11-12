@@ -8,5 +8,6 @@ anyhow.workspace = true
 dirs = "5.0.1"
 figment.workspace = true
 log.workspace = true
+messages.workspace = true
 serde.workspace = true
 transports.workspace = true

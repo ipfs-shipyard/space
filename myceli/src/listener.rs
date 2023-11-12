@@ -5,6 +5,7 @@ use local_storage::{provider::default_storage_provider, storage::Storage};
 use log::{debug, error, info, trace};
 use messages::{ApplicationAPI, DataProtocol, Message, SyncMessage};
 use std::collections::BTreeSet;
+use std::path::Path;
 use std::{
     net::SocketAddr,
     path::PathBuf,
@@ -21,12 +22,12 @@ pub struct Listener<T> {
     radio_address: Option<String>,
     sync: Syncer,
     addrs: BTreeSet<String>,
-    sync_counts: [u64; 2],
+    sync_counts: [u64; 3],
 }
 
 impl<T: Transport + Send + 'static> Listener<T> {
     pub fn new(
-        _listen_address: &SocketAddr,
+        listen_address: &SocketAddr,
         storage_path: &str,
         transport: Arc<T>,
         block_size: u32,
@@ -43,7 +44,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
             Ok::<_, cid::Error>((c, n.clone()))
         });
         let sync = Syncer::new(mtu.into(), present_blocks, missing_blocks)?;
-        info!("Listening on {_listen_address}");
+        info!("Listening on {listen_address}");
         let addrs = if let Some(a) = &radio_address {
             BTreeSet::from([a.clone()])
         } else {
@@ -56,7 +57,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
             radio_address,
             sync,
             addrs,
-            sync_counts: [0; 2],
+            sync_counts: [0; 3],
         })
     }
 
@@ -93,7 +94,9 @@ impl<T: Transport + Send + 'static> Listener<T> {
         loop {
             match self.transport.receive() {
                 Ok((message, sender_addr)) => {
-                    self.addrs.insert(sender_addr.clone());
+                    if self.addrs.insert(sender_addr.clone()) {
+                        info!("Will sync to {sender_addr}");
+                    }
                     let target_addr = if let Some(radio_address) = &self.radio_address {
                         radio_address.to_owned()
                     } else {
@@ -107,12 +110,12 @@ impl<T: Transport + Send + 'static> Listener<T> {
                         }
                         Ok(None) => {}
                         Err(e) => {
-                            if let Err(_e) =
-                                self.transmit_response(Message::Error(e.to_string()), &target_addr)
+                            error!("Error handling message (will send error response): {e}");
+                            if let Err(e) =
+                                self.transmit_response(Message::Error(e.to_string()), &sender_addr)
                             {
-                                error!("TransmitResponse error: {_e}");
+                                error!("TransmitResponse error: {e}");
                             }
-                            error!("MessageHandlerError: {e}");
                         }
                     }
                 }
@@ -143,12 +146,17 @@ impl<T: Transport + Send + 'static> Listener<T> {
             }) => {
                 shipper_sender.send((
                     DataProtocol::RequestTransmitDag {
-                        cid,
+                        cid: cid.clone(),
                         target_addr,
                         retries,
                     },
                     target.to_string(),
                 ))?;
+                if let Ok(prov) = self.storage.get_provider().lock() {
+                    let name = prov.get_name(&cid)?;
+                    self.sync
+                        .push_dag(name, Cid::try_from(cid.as_str())?, Vec::new(), false)?;
+                }
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::TransmitBlock { cid, target_addr }) => {
@@ -162,8 +170,20 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 let result = handlers::import_file(&path, &mut self.storage)?;
                 match &result {
                     Message::ApplicationAPI(ApplicationAPI::FileImported { path, cid }) => {
+                        let links = self.storage.get_all_dag_cids(cid, None, None)?;
+                        let links = links
+                            .iter()
+                            .flat_map(|s| Cid::try_from(s.as_str()).ok())
+                            .collect();
+                        let filename = Path::new(&path)
+                            .file_name()
+                            .iter()
+                            .flat_map(|o| o.to_str())
+                            .map(|s| s.to_owned())
+                            .next()
+                            .unwrap_or_default();
                         self.sync
-                            .push_dag(path.clone(), cid.as_str().try_into()?, Vec::default())
+                            .push_dag(filename, cid.as_str().try_into()?, links, true)
                             .ok();
                     }
                     _ => error!(
@@ -252,8 +272,15 @@ impl<T: Transport + Send + 'static> Listener<T> {
             Message::ApplicationAPI(ApplicationAPI::RequestAvailableDags) => {
                 Some(handlers::get_available_dags(&self.storage)?)
             }
+            Message::ApplicationAPI(ApplicationAPI::ListFiles) => {
+                Some(handlers::get_named_dags(&self.storage)?)
+            }
             Message::Sync(SyncMessage::Push(pm)) => {
                 self.sync_counts[1] += 1;
+                info!(
+                    "Received a sync push, balance is now {:?}: {pm:?}",
+                    self.sync_counts
+                );
                 self.sync.handle(SyncMessage::Push(pm), &mut self.storage)?
             }
             Message::Sync(sm) => self.sync.handle(sm, &mut self.storage)?,
@@ -275,9 +302,14 @@ impl<T: Transport + Send + 'static> Listener<T> {
         trace!("Addrs to sync with: {:?}", &self.addrs);
         if !self.addrs.is_empty() {
             if let Some(msg) = self.sync.pop_pending_msg() {
-                trace!("Popped sync {msg:?}");
+                if matches!(&msg, Message::Sync(SyncMessage::Push(_))) {
+                    self.sync_counts[0] += 1;
+                }
+                info!(
+                    "Sending {msg:?} to {:?}, balance is now {:?}",
+                    &self.addrs, self.sync_counts
+                );
                 //Sending a delayed Sync message, so bump that count
-                self.sync_counts[0] += 1;
                 for addr in &self.addrs {
                     self.transport.send(msg.clone(), addr)?;
                 }
@@ -286,12 +318,14 @@ impl<T: Transport + Send + 'static> Listener<T> {
         }
         if self.storage.incremental_gc() {
             debug!("GC run.");
-        } else if self.sync_counts[0] > self.sync_counts[1] {
-            //Been talking more than listening.
-            // Don't build more messages right now because we want to give them a chance to send Sync
-            // But also don't wait forever
-            self.sync_counts[0] -= 1;
+        } else if self.sync_counts[0] > self.sync_counts[1] + self.sync_counts[2] {
+            debug!(
+                "Give the remote side a chance to talk. {:?}",
+                &self.sync_counts
+            );
+            self.sync_counts[2] += 1;
         } else {
+            self.sync_counts[2] = 0;
             self.sync.build_msg()?;
         }
         Ok(())

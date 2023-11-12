@@ -26,6 +26,7 @@ pub trait StorageProvider {
     fn list_available_dags(&self) -> Result<Vec<(String, String)>>;
     // Attaches filename to dag
     fn name_dag(&self, cid: &str, file_name: &str) -> Result<()>;
+    fn get_name(&self, cid: &str) -> Result<String>;
     fn get_missing_cid_blocks(&self, cid: &str) -> Result<Vec<String>>;
     fn get_dag_blocks_by_window(
         &self,

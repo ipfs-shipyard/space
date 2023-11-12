@@ -1,12 +1,23 @@
-use crate::err::{Err, Result};
+use crate::err::{Error, Result};
 use cid::{multihash::Multihash, Cid};
+use ipfs_unixfs::codecs::Codec;
 use parity_scale_codec::{Compact, CompactLen, Encode};
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
 use serde::Serialize;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 
 #[derive(
-    Clone, Debug, Eq, PartialEq, ParityEncode, ParityDecode, Serialize, Default, Ord, PartialOrd,
+    Copy,
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    ParityEncode,
+    ParityDecode,
+    Serialize,
+    Default,
+    Ord,
+    PartialOrd,
 )]
 pub struct Meta {
     #[codec(compact)]
@@ -16,7 +27,7 @@ pub struct Meta {
     // digest_len: u8,
 }
 
-#[derive(Clone, Debug, ParityEncode, ParityDecode, Serialize, Eq, PartialEq, Default)]
+#[derive(Clone, ParityEncode, ParityDecode, Serialize, Eq, PartialEq, Default)]
 pub struct CompactList {
     meta: Meta,
     digests: Vec<Vec<u8>>,
@@ -33,6 +44,16 @@ impl CompactList {
         self.size = self.encoded_size();
         Ok(())
     }
+    pub fn contains(&self, cid: &Cid) -> bool {
+        if let Ok((m, h)) = Meta::new(cid) {
+            if m != self.meta {
+                return false;
+            }
+            self.contains_digest(h.digest())
+        } else {
+            false
+        }
+    }
     pub fn include(&mut self, cid: &Cid, sz: usize) -> bool {
         if self.size == 0 {
             self.assign(cid).is_ok()
@@ -41,6 +62,9 @@ impl CompactList {
                 return false;
             }
             let digest = h.digest();
+            if self.contains_digest(digest) {
+                return true;
+            }
             let delta = digest.len() + len_len(digest.len()) + len_len(self.digests.len() + 1)
                 - len_len(self.digests.len());
             if self.size + delta <= sz {
@@ -58,11 +82,14 @@ impl CompactList {
         self.size == 0
     }
     pub fn shared_traits(&self) -> Meta {
-        self.meta.clone()
+        self.meta
+    }
+    fn contains_digest(&self, digest: &[u8]) -> bool {
+        self.digests.iter().any(|d| d.as_slice() == digest)
     }
 }
 impl TryFrom<&Cid> for CompactList {
-    type Error = Err;
+    type Error = Error;
 
     fn try_from(value: &Cid) -> Result<Self> {
         let mut result = CompactList::default();
@@ -71,10 +98,28 @@ impl TryFrom<&Cid> for CompactList {
     }
 }
 impl TryFrom<Cid> for CompactList {
-    type Error = Err;
+    type Error = Error;
 
     fn try_from(value: Cid) -> Result<Self> {
         Self::try_from(&value)
+    }
+}
+impl Debug for CompactList {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Ok(cdc) = Codec::try_from(self.meta.codec) {
+            write!(f, "CIDs({:?} ", cdc)?;
+        }
+        if let Ok(alg) = cid::multihash::Code::try_from(self.meta.algo) {
+            if alg != cid::multihash::Code::Sha2_256 {
+                write!(f, "{alg:?} ")?;
+            }
+        }
+        if let Some(c) = self.into_iter().next() {
+            let l = self.digests.len();
+            write!(f, "{};[N={l}])", c)
+        } else {
+            write!(f, "EMPTY!)")
+        }
     }
 }
 
@@ -99,14 +144,14 @@ impl Meta {
 }
 
 impl TryFrom<&Cid> for Meta {
-    type Error = Err;
+    type Error = Error;
 
     fn try_from(value: &Cid) -> Result<Self> {
         Self::new(value).map(|x| x.0)
     }
 }
 impl TryFrom<Cid> for Meta {
-    type Error = Err;
+    type Error = Error;
 
     fn try_from(value: Cid) -> Result<Self> {
         Self::try_from(&value)
@@ -122,6 +167,7 @@ impl<'a> IntoIterator for &'a CompactList {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct CompactListIter<'a> {
     l: &'a CompactList,
     i: usize,

@@ -14,16 +14,23 @@ use log::{debug, error, info};
 pub struct Storage {
     provider: ProviderHandle,
     block_size: u32,
+    degree: usize,
 }
 
 impl Storage {
     pub fn new(provider: ProviderHandle, block_size: u32) -> Self {
+        let degree = ((block_size as usize - 8) / 50).clamp(
+            //A stem in a tree must be allowed at least 2 links for it to be a tree
+            2,
+            //the default degree is also the spec-defined max
+            ipfs_unixfs::balanced_tree::DEFAULT_DEGREE,
+        );
         Storage {
             provider,
             block_size,
+            degree,
         }
     }
-
     pub fn import_path(&mut self, path: &Path) -> Result<String> {
         debug!("import_path({:?})", &path);
         let rt = tokio::runtime::Runtime::new()?;
@@ -31,12 +38,16 @@ impl Storage {
             let file: File = FileBuilder::new()
                 .path(path)
                 .fixed_chunker(self.block_size.try_into()?)
+                .degree(self.degree)
                 .build()
                 .await?;
             let blocks: Vec<_> = file.encode().await?.try_collect().await?;
             Ok(blocks)
         });
         let blocks = blocks?;
+        for block in &blocks {
+            assert!(block.data().len() <= self.block_size as usize);
+        }
         let mut root_cid: Option<String> = None;
 
         blocks.iter().for_each(|b| {
@@ -97,6 +108,10 @@ impl Storage {
         }
         // Fetch all blocks tied to links under given cid
         let child_blocks = self.get_all_dag_blocks(cid)?;
+        debug!(
+            "Planning to export {} child_blocks to {path:?}",
+            child_blocks.len()
+        );
         // Open up file path for writing
         let mut output_file = FsFile::create(path)?;
         // Walk the StoredBlocks and write out to path
@@ -187,6 +202,14 @@ impl Storage {
 
     pub fn get_provider(&self) -> ProviderHandle {
         Arc::clone(&self.provider)
+    }
+
+    pub fn set_name(&self, cid: &str, name: &str) {
+        if let Ok(prov) = self.provider.lock() {
+            if let Err(e) = prov.name_dag(cid, name) {
+                error!("Error: {e:?}");
+            }
+        }
     }
 }
 

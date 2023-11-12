@@ -16,7 +16,9 @@ impl StorageProvider for NullStorageProvider {
     fn get_available_cids(&self) -> anyhow::Result<Vec<String>> {
         bail!("NullStorageProvider does not implement anything")
     }
-
+    fn get_name(&self, _cid: &str) -> anyhow::Result<String> {
+        bail!("nope")
+    }
     fn get_block_by_cid(&self, _cid: &str) -> anyhow::Result<StoredBlock> {
         bail!("NullStorageProvider does not implement anything")
     }

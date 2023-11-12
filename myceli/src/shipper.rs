@@ -500,7 +500,7 @@ mod tests {
             let listen_addr = format!("127.0.0.1:{port_num}");
             let mut listen_transport = UdpTransport::new(&listen_addr, 60, None).unwrap();
             listen_transport
-                .set_read_timeout(Some(Duration::from_millis(10)))
+                .set_read_timeout(Some(Duration::from_millis(11)))
                 .unwrap();
             listen_transport.set_max_read_attempts(Some(1));
             let listen_transport = Arc::new(listen_transport);
@@ -536,7 +536,7 @@ mod tests {
             }
         }
 
-        pub fn recv_msg(&mut self) -> Result<Message> {
+        pub fn recv_msg(&mut self) -> transports::Result<Message> {
             let (msg, _) = self.listen_transport.receive()?;
             Ok(msg)
         }
@@ -619,15 +619,22 @@ mod tests {
                 "127.0.0.1:0",
             )
             .unwrap();
-
-        // receive pump
-        while let Ok(Message::DataProtocol(msg)) = receiver.recv_msg() {
-            receiver
-                .shipper
-                .process_msg(msg, &transmitter.listen_addr)
-                .unwrap();
+        let mut messages_received = 0;
+        loop {
+            match receiver.recv_msg() {
+                Ok(Message::DataProtocol(msg)) => {
+                    receiver
+                        .shipper
+                        .process_msg(msg, &transmitter.listen_addr)
+                        .unwrap();
+                    messages_received += 1;
+                }
+                Err(transports::TransportError::TimedOut) => break,
+                Ok(msg) => panic!("Unexpected message {msg:?}"),
+                Err(err) => panic!("Unexpected error {err:?}"),
+            }
         }
-
+        assert_eq!(messages_received, 2);
         // Verify all blocks made it across
         receiver
             .shipper

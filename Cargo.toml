@@ -28,7 +28,7 @@ async-recursion = "1.0.4"
 async-stream = "0.3.3"
 blake2 = { version = "0.10.6", default-features = false }
 bytes = "1.1"
-cid = { version = "0.9", default-features = false }
+cid = { version = "0.9", default-features = false, features = ["scale-codec"] }
 clap = { version = "4.0.15", features = ["derive"] }
 derive-error = "0.0.5"
 env_logger = "0.10.0"

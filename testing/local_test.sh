@@ -185,7 +185,7 @@ controller() {
   port=${1}
   shift
   set -x
-  timeout 9 ./ctl/controller -l 127.0.0.1:${port} "${@}" 2>&1 | tee ctl/controller.log
+  timeout 99 ./ctl/controller --listen-mode 127.0.0.1:${port} "${@}" 2>ctl/controller.log | tee ctl/output.log
   set +x
 }
 cid_present() {
@@ -200,30 +200,56 @@ cid_present() {
     false
   fi
 }
+other_side() {
+  if [ $1 = gnd ]
+  then
+    echo -n sat
+  elif [ $1 = sat ]
+  then
+    echo -n gnd
+  else
+    echo "fail ${0} ${*}"
+    echo "fail ${0} ${*}" >&2
+    exit 3
+  fi
+}
 transmit() {
   cid_present ${3} ${cid}
-  ! cid_present ${4} ${cid}
+  b=`other_side ${3}`
+  ! cid_present ${b} ${cid}
   timeout 9 cargo run --bin controller -- 127.0.0.1:${1} transmit-dag "${cid}" 127.0.0.1:${2} 9 2>&1 | tee ctl/controller.log
   for i in {0..9}
   do
     grep -n "${cid}" */*.log || true
-    if cid_present ${4} ${cid}
+    if cid_present ${b} ${cid}
     then
       return 0
     else
       sleep ${i}
     fi
   done
-  echo "${cid} never showed up on ${4}"
+  echo "${cid} never showed up on ${b}"
   exit 3
+}
+port_for() {
+  if [ $1 = gnd ]
+  then
+    echo -n 8765
+  elif [ $1 = sat ]
+  then
+    echo -n 8764
+  else
+    echo "wrong params: ${0} ${*}"
+    exit 4
+  fi
 }
 g2s() {
   echo "Transmit ${cid} from ground to satellite..."
-  transmit 8765 8764 gnd sat
+  transmit 8765 8764 gnd
 }
 s2g() {
   echo "Transmit ${cid} from satellite to ground..."
-  transmit 8764 8765 sat gnd
+  transmit 8764 8765 sat
 }
 ls -lrth */storage.db || date
 
@@ -249,7 +275,7 @@ check_log FileImported ctl
 
 echo ' ...with the CID obtained from the FileImported response... '
 set -x
-export cid=`grep FileImported ctl/controller.log | tail -n 1 | cut -d '"' -f 4`
+export cid=`grep 'Received:.*FileImported' ctl/controller.log | tail -n 1 | cut -d '"' -f 4`
 echo ' ...and with the network address of the ground-to-space radio link... '
 echo 'send the TransmitDag command to the myceli ground instance'
 g2s
@@ -273,7 +299,8 @@ controller 8765 import-file "${o}/imported2"
 echo 'This step passes if an FileImported response with CID is received. Any other response / no response is a failure. ...'
 check_log Received.*FileImported.*cid ctl
 
-export cid=`grep FileImported ctl/controller.log | tail -n 1 | cut -d '"' -f 4`
+export cid=`grep Received.*FileImported ctl/controller.log | tail -n 1 | cut -d '"' -f 4`
+echo "cid=${cid}"
 
 echo 'Using the controller software, send the TransmitDag command to the myceli ground instance with the CID obtained from the FileImported response and with the network address of the ground-to-space radio link.'
 g2s
@@ -330,13 +357,30 @@ export RUST_LOG=debug
 start watcher gnd config.toml
 start watcher sat config.toml
 sleep 5
-for d in gnd sat
-do
-  check_log "Discovered.*${d}.prexisting.txt"    ${d} watcher
-  check_log "Imported.path.*${d}.prexisting.txt" ${d} myceli
-  check_log "ransmit.*Sync.*Push"                ${d} myceli
-done
-
+wait_for_sync() {
+  for d in gnd sat
+  do
+    check_log "Discovered.*${d}${1}"    ${d} watcher
+    check_log "Imported.path.*${d}${1}" ${d} myceli
+    check_log "ransmit.*Sync.*Push"                ${d} myceli
+    b=`other_side ${d}`
+    check_log "Sync::handle.*PushMsg" ${b} myceli
+    check_log "Sync::handle(Push(PushMsg(${d}${1}" ${b} myceli
+    check_log "Sync::handle.*Block" ${b} myceli
+    p=`port_for ${b}`
+    for i in {0..9}
+    do
+      sleep $i
+      controller ${p} --output-format json list-files  | grep --color=always "${d}${1}" && break
+    done
+    jq '.ApplicationAPI.AvailableDags.dags[].filename' < ctl/output.log
+    jq '.ApplicationAPI.AvailableDags.dags[].filename' < ctl/output.log | grep --color=always "${d}${1}"
+    cid=`jq -r ".ApplicationAPI.AvailableDags.dags[] | select( .filename == \"gnd.prexisting.txt\" ).cid"  ctl/output.log`
+    controller ${p} export-dag ${cid} `pwd`/${b}/synced.${d}${1}
+    diff ${b}/synced.${d}${1} ${d}/watched/${d}${1}
+  done
+}
+wait_for_sync .prexisting.txt
 echo -e '\n\n\t###\t###\t PASSED \t###\t###\n'
 kill_all
 echo -e '\n\t###\t###\t DONE \t###\t###\n\n'

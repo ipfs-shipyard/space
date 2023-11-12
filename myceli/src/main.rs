@@ -1,6 +1,5 @@
 use anyhow::Result;
 use config::Config;
-use log::info;
 use myceli::listener::Listener;
 use std::{net::ToSocketAddrs, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use transports::UdpTransport;
@@ -13,10 +12,10 @@ fn main() -> Result<()> {
     env_logger::init();
     #[cfg(feature = "small_log")]
     smalog::init();
-
     let config_path = std::env::args()
+        .skip(1)
         .filter(|a| PathBuf::from_str(a).map(|p| p.is_file()).unwrap_or(false))
-        .nth(1);
+        .next();
     let cfg = Config::parse(config_path).expect("Failed to parse config");
     if std::env::args().any(|a| a == "--show-config") {
         println!("{}", toml::to_string(&cfg).unwrap());
@@ -46,20 +45,24 @@ fn main() -> Result<()> {
     udp_transport
         .set_read_timeout(timeout)
         .expect("Failed to set timeout");
-    info!("Listening on {}", &resolved_listen_addr);
     println!("pid={}", std::process::id());
     let mut listener = Listener::new(
         &resolved_listen_addr,
         &db_path,
         Arc::new(udp_transport),
-        cfg.block_size,
+        cfg.block_size
+            .expect("Block size default should've been calculated."),
         cfg.radio_address,
         disk_bytes,
         cfg.mtu,
     )
     .expect("Listener creation failed");
     listener
-        .start(cfg.retry_timeout_duration, cfg.window_size, cfg.block_size,cfg.shipper_throttle_packet_delay_ms)
+        .start(
+            cfg.retry_timeout_duration,
+            cfg.window_size,
+            cfg.block_size.unwrap(),
+        )
         .expect("Error encountered in listener operation");
     Ok(())
 }

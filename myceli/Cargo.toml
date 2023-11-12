@@ -13,6 +13,7 @@ config.workspace = true
 env_logger = { workspace = true, optional = true }
 figment.workspace = true
 ipfs-unixfs.workspace = true
+libipld.workspace = true
 local-storage = { path = "../local-storage", default-features = false }
 log.workspace = true
 messages.workspace = true

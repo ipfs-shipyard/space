@@ -57,6 +57,10 @@ impl Cli {
         } else {
             let cfg = config::Config::parse(None)
                 .expect("Please specify instance addr, as I can't read myceli.toml");
+            info!(
+                "Address not specified, using the one found in config: {}",
+                &cfg.listen_address
+            );
             cfg.listen_address
         };
         transport.send(command, &instance_addr)?;

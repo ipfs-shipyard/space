@@ -1,5 +1,5 @@
 use crate::error::Result;
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, trace, warn};
 use messages::Message;
 use parity_scale_codec::{Decode, Encode};
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
@@ -28,7 +28,7 @@ impl Chunk {
     fn get_message_id(&self) -> u16 {
         self.as_simple_chunk().map(|c| c.message_id).unwrap_or(0)
     }
-    fn get_sequence_number(&self) -> u16 {
+    fn get_sequence_number(&self) -> u64 {
         self.as_simple_chunk()
             .map(|c| c.sequence_number)
             .unwrap_or(0)
@@ -43,8 +43,7 @@ impl Chunk {
 }
 
 // This const is derived from the size of the above struct when encoded with SCALE
-// and verified using a test below. It appears to consistently be seven,
-// except when data is fairly small
+// and verified using a test below.
 const CHUNK_OVERHEAD: u16 = 7;
 
 pub struct SimpleChunker {
@@ -52,7 +51,7 @@ pub struct SimpleChunker {
     mtu: u16,
     // Map of message IDs to maps of sequence numbers and message chunks
     // { message_id: { sequence_id: data }}
-    recv_buffer: BTreeMap<u16, BTreeMap<u16, Chunk>>,
+    recv_buffer: BTreeMap<u16, BTreeMap<u64, Chunk>>,
     // Last received message_id to optimize reassembly searching
     last_recv_msg_id: u16,
     pending: Vec<u16>,
@@ -63,10 +62,10 @@ impl SimpleChunker {
     pub fn new(mtu: u16) -> Self {
         Self {
             mtu,
-            recv_buffer: BTreeMap::<u16, BTreeMap<u16, Chunk>>::new(),
+            recv_buffer: BTreeMap::<u16, BTreeMap<u64, Chunk>>::new(),
             last_recv_msg_id: 0,
             pending: Vec::new(),
-            next_outgoing_msg_id: 0,
+            next_outgoing_msg_id: 1,
         }
     }
 
@@ -75,7 +74,7 @@ impl SimpleChunker {
         if let Some(msg_map) = self.recv_buffer.get_mut(&self.last_recv_msg_id) {
             msg_map.insert(chunk.get_sequence_number(), chunk);
         } else {
-            let mut msg_map: BTreeMap<u16, Chunk> = BTreeMap::new();
+            let mut msg_map: BTreeMap<u64, Chunk> = BTreeMap::new();
             msg_map.insert(chunk.get_sequence_number(), chunk);
             self.recv_buffer.insert(self.last_recv_msg_id, msg_map);
         }
@@ -104,18 +103,20 @@ impl SimpleChunker {
         Ok(None)
     }
     fn attempt_assemble(&mut self, msg_id: u16) -> Result<Option<Message>> {
+        trace!("attempt_assemble({msg_id:?})");
         let mut result = None;
-        if let Some(msg_map) = self.recv_buffer.get(&self.last_recv_msg_id) {
+        if let Some(msg_map) = self.recv_buffer.get(&msg_id) {
             // The BTreeMap docs tell us that into_values will be an iter sorted by key
             // In this case the key is the sequence_number, so in a complete set of chunks
             // that means the last item in the iter (or now vec) should be the "final chunk"
             let last_chunk = msg_map.iter().last();
+            debug!("attempt_assemble({msg_id:?}): {msg_map:?}->{last_chunk:?}");
             // So to verify we have all message chunks...First grab the last chunk in the list
             match last_chunk {
                 // Second, check if the last chunk has final_chunk set
                 Some((last_seq, Chunk::Final(_))) => {
                     // Lastly, check if the final chunk's sequence number matches the number of chunks
-                    if usize::from(*last_seq) == (msg_map.len() - 1) {
+                    if msg_map.len() == usize::try_from(*last_seq)? {
                         let chunks = msg_map.values().flat_map(Chunk::as_simple_chunk);
                         // If all those checks pass, then we *should* have all the chunks in order
                         // Now we attempt to assemble the message
@@ -123,8 +124,12 @@ impl SimpleChunker {
                     }
                 }
                 Some((_, Chunk::Single(v))) => {
-                    let data = v.clone();
-                    result = Some(Message::decode(&mut data.as_slice())?);
+                    trace!("Decode message from single-chunk packet: {v:?}");
+                    if let Ok(cont) = MessageContainer::from_bytes(&mut v.clone().as_slice()) {
+                        result = Some(cont.message);
+                    } else {
+                        result = Some(Message::decode(&mut v.clone().as_slice())?);
+                    }
                 }
                 _ => {}
             }
@@ -132,6 +137,7 @@ impl SimpleChunker {
         if result.is_some() {
             self.drop_pending(msg_id);
         }
+        debug!("Message assembled: {result:?}");
         Ok(result)
     }
     fn drop_pending(&mut self, msg_id: u16) {
@@ -148,25 +154,27 @@ impl SimpleChunker {
 
     pub fn chunk(&mut self, message: Message) -> Result<Vec<Vec<u8>>> {
         let msg_id = self.next_outgoing_msg_id;
-        if let Some(nxt_id) = self.next_outgoing_msg_id.checked_add(1u16) {
-            self.next_outgoing_msg_id = nxt_id;
-        } else {
-            self.next_outgoing_msg_id = 0;
-        }
+        self.next_outgoing_msg_id =
+            if let Some(nxt_id) = self.next_outgoing_msg_id.checked_add(1u16) {
+                nxt_id
+            } else {
+                1
+            };
         trace!("Message ID# {msg_id}={message:?}");
         let mut seq_num = 0;
-        let message_bytes = if message.needs_envelope() {
+        let (message_bytes, expect_single) = if message.needs_envelope() {
             // Create container around message
             let container = MessageContainer::new(message);
             // Convert container into raw bytes
-            container.to_bytes()
+            (container.to_bytes(), false)
         } else {
-            message.to_bytes()
+            (message.to_bytes(), true)
         };
         if message_bytes.encoded_size() < self.mtu.into() {
-            info!("Message {msg_id} fits in a single packet.");
+            debug!("Message {msg_id} fits in a single packet: {message_bytes:?}");
             return Ok(vec![Chunk::Single(message_bytes).encode()]);
         }
+        debug_assert!(!expect_single);
         // Break bytes up into mtu-sized simple chunks
         let mut chunks = message_bytes
             .chunks(usize::from(self.mtu - CHUNK_OVERHEAD))
@@ -191,6 +199,7 @@ impl SimpleChunker {
     pub fn unchunk(&mut self, data: &[u8]) -> Result<Option<Message>> {
         let mut databuf = &data[..data.len()];
         let chunk = Chunk::decode(&mut databuf)?;
+        trace!("unchunk({chunk:?})");
         self.recv_chunk(chunk)?;
         self.attempt_msg_assembly()
     }
@@ -199,8 +208,10 @@ impl SimpleChunker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::iter;
 
     use messages::ApplicationAPI;
+    use parity_scale_codec::{Compact, CompactLen, Encode};
     use rand::seq::SliceRandom;
     use rand::thread_rng;
 
@@ -208,11 +219,11 @@ mod tests {
     pub fn test_chunk_overhead_against_const() {
         let data_sizes = [600, 2500, 5000, 10240];
         for size in data_sizes {
-            let chunk = SimpleChunk {
+            let chunk = Chunk::Final(SimpleChunk {
                 message_id: size,
-                sequence_number: size,
+                sequence_number: size.into(),
                 data: vec![80; usize::from(size)],
-            };
+            });
             let chunk_encoded_size = chunk.encoded_size();
             assert_eq!(
                 chunk_encoded_size - usize::from(size),
@@ -453,5 +464,21 @@ mod tests {
         }
         let unchunked_msg = chunker.unchunk(&last_chunk);
         assert!(unchunked_msg.is_err());
+    }
+
+    #[test]
+    pub fn overhead_check() {
+        for j in [0, 62, 0xFD, 0xFFD, 0xFFFD, 0xFFFFD] {
+            for i in j..(j + 9) {
+                let dyn_ovr = Compact::<u64>::compact_len(&i.try_into().unwrap());
+                let data: Vec<u8> = iter::repeat(0x41).take(i).collect();
+                assert_eq!(data.encoded_size(), i + dyn_ovr);
+                let msg = Message::block(data);
+                assert_eq!(msg.encoded_size(), i + dyn_ovr + 2);
+                let dyn2 = Compact::<u64>::compact_len(&msg.encoded_size().try_into().unwrap());
+                let chunk = Chunk::Single(msg.encode());
+                assert_eq!(chunk.encoded_size(), i + dyn_ovr + 3 + dyn2);
+            }
+        }
     }
 }

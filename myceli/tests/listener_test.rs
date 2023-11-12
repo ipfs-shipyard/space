@@ -7,6 +7,7 @@ use utils::{TestController, TestListener};
 
 #[test]
 pub fn test_verify_listener_alive() {
+    // env_logger::init();
     let listener = TestListener::new();
     listener.start().unwrap();
 

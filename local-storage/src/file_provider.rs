@@ -33,6 +33,7 @@ impl FileStorageProvider {
         create_dir_all(me.cids())?;
         create_dir_all(me.names())?;
         me.count_blocks();
+        me.prune_names()?;
         Ok(me)
     }
     fn blocks(&self) -> PathBuf {
@@ -43,11 +44,6 @@ impl FileStorageProvider {
     }
     fn names(&self) -> PathBuf {
         self.dir.join("names")
-    }
-    fn get_name(&self, cid: &str) -> Result<String> {
-        let mut result = String::default();
-        File::open(self.names().join(cid))?.read_to_string(&mut result)?;
-        Ok(result)
     }
     fn block_path(&self, cid: &Cid) -> PathBuf {
         let mh = cid.hash().to_bytes();
@@ -120,6 +116,7 @@ impl FileStorageProvider {
             self.old_blocks = rd
                 .flat_map(|r| r.ok())
                 .flat_map(OnDiskBlock::from)
+                .take(99)
                 .collect();
             self.old_blocks.sort_by(|a, b| b.cmp(a));
             self.usage = self.old_blocks.iter().map(|b| b.size).sum();
@@ -142,6 +139,22 @@ impl FileStorageProvider {
                         }
                     }
                 }
+            }
+        }
+        Ok(())
+    }
+    fn prune_names(&self) -> Result<()> {
+        let rd = fs::read_dir(self.blocks())?;
+        for p in rd.filter_map(|r| r.map(|e| e.path()).ok()) {
+            let filename = p
+                .file_name()
+                .unwrap_or_default()
+                .to_str()
+                .unwrap_or_default();
+            let c = Cid::try_from(filename);
+            let good = c.map(|c| self.has_cid(&c));
+            if !good.unwrap_or(false) {
+                fs::remove_file(p)?;
             }
         }
         Ok(())
@@ -216,6 +229,12 @@ impl StorageProvider for FileStorageProvider {
         Ok(())
     }
 
+    fn get_name(&self, cid: &str) -> Result<String> {
+        let mut result = String::default();
+        File::open(self.names().join(cid))?.read_to_string(&mut result)?;
+        Ok(result)
+    }
+
     fn get_missing_cid_blocks(&self, cid: &str) -> anyhow::Result<Vec<String>> {
         let mut result = Vec::new();
         self.get_missing(&mut result, cid);
@@ -256,7 +275,7 @@ impl StorageProvider for FileStorageProvider {
 
     fn incremental_gc(&mut self) -> bool {
         if self.usage < self.high {
-            debug!("No need to GC: usage={} < high={}", &self.usage, self.high);
+            trace!("No need to GC: usage={} < high={}", &self.usage, self.high);
             false
         } else if let Some(odb) = self.old_blocks.pop() {
             match fs::remove_file(&odb.path) {
@@ -278,7 +297,7 @@ impl StorageProvider for FileStorageProvider {
         } else {
             self.count_blocks();
             debug!("There are {} files in blocks/", &self.old_blocks.len());
-            true
+            !self.old_blocks.is_empty()
         }
     }
 

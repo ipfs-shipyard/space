@@ -2,7 +2,10 @@ use crate::{
     api::ApplicationAPI, cid_list, protocol::DataProtocol, sync::SyncMessage, TransmissionBlock,
 };
 
-use crate::sync::PushMessage;
+use crate::{
+    err::{Error, Result},
+    sync::PushMessage,
+};
 use parity_scale_codec::Encode;
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
 use serde::Serialize;
@@ -101,8 +104,12 @@ impl Message {
         Message::ApplicationAPI(ApplicationAPI::RequestVersion)
     }
 
-    pub fn push(cids: cid_list::CompactList, name: String) -> Self {
-        Self::Sync(SyncMessage::Push(PushMessage::new(cids, name)))
+    pub fn push(cids: cid_list::CompactList, name: String) -> Result<Self> {
+        if cids.is_empty() {
+            Err(Error::EmptyCidList)
+        } else {
+            Ok(Self::Sync(SyncMessage::Push(PushMessage::new(cids, name))))
+        }
     }
     pub fn pull(cids: cid_list::CompactList) -> Self {
         Self::Sync(SyncMessage::Pull(cids))
@@ -113,5 +120,28 @@ impl Message {
 
     pub fn needs_envelope(&self) -> bool {
         !matches!(self, Self::Sync(_))
+    }
+
+    pub fn fit_size(within: u16) -> u16 {
+        let mut v = vec![0u8; within as usize - crate::PUSH_OVERHEAD];
+        loop {
+            if Self::block(v.clone()).encoded_size() < within.into() {
+                if let Ok(result) = v.len().try_into() {
+                    return result;
+                } else {
+                    v.pop();
+                }
+            } else {
+                v.pop();
+            }
+        }
+    }
+    pub fn name(&self) -> &'static str {
+        match &self {
+            Self::DataProtocol(_) => "Data",
+            Self::ApplicationAPI(_) => "API",
+            Self::Error(_) => "Error",
+            Self::Sync(m) => m.name(),
+        }
     }
 }
