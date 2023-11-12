@@ -45,8 +45,9 @@ impl Handler {
         };
         let m = ApplicationAPI::ImportFile { path };
         let m = Message::ApplicationAPI(m);
-        if let Err(e) = self.trx.send(m, &self.target_addr) {
-            error!("Error sending: {:?}", &e);
+        match self.trx.send(m, &self.target_addr) {
+            Ok(()) => debug!("Sent message to {}", &self.target_addr),
+            Err(e) => error!("Error sending: {:?}", &e),
         }
     }
     fn wait_for_modification_to_stop(&self, p: &Path) -> std::io::Result<()> {

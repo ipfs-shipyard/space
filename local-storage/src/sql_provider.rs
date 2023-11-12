@@ -72,56 +72,24 @@ impl SqliteStorageProvider {
         Ok(())
     }
 
-    fn get_blocks_recursive_query(
+    fn get_blocks_recursive(
         &self,
         cid: &str,
         offset: Option<u32>,
         window_size: Option<u32>,
     ) -> Result<Vec<StoredBlock>> {
-        let mut base_query = "
-        WITH RECURSIVE cids(x,y,z) AS (
-            SELECT cid,data,filename FROM blocks WHERE cid = (?1)
-            UNION
-            SELECT cid,data,filename 
-                FROM blocks b 
-                INNER JOIN (SELECT * FROM links ORDER BY sequence) ON b.cid == block_cid 
-                INNER JOIN cids ON (root_cid=x)
-        )
-        SELECT x,y,z FROM cids
-        "
-        .to_string();
-        let mut params = vec![cid.to_string()];
-
-        if let Some(offset) = offset {
-            if let Some(window_size) = window_size {
-                base_query.push_str(" LIMIT (?2) OFFSET (?3);");
-                params.push(format!("{window_size}"));
-                params.push(format!("{offset}"));
+        let mut blocks = vec![self.get_block_by_cid(cid)?];
+        let mut i = 0;
+        while i < blocks.len() {
+            let links = blocks[i].links.clone();
+            for link in links {
+                blocks.push(self.get_block_by_cid(&link)?);
             }
+            i += 1;
         }
-        let params = params_from_iter(params.into_iter());
-        let blocks = self
-            .conn
-            .prepare(&base_query)?
-            .query_map(params, |row| {
-                let cid_str: String = row.get(0)?;
-                let data: Vec<u8> = row.get(1)?;
-                let filename: Option<String> = row.get(2).ok();
-                let links = match self.get_links_by_cid(&cid_str) {
-                    Ok(links) => links,
-                    Err(_) => vec![],
-                };
-                Ok(StoredBlock {
-                    cid: cid_str,
-                    data,
-                    links,
-                    filename,
-                })
-            })?
-            .filter_map(|b| b.ok())
-            .collect();
-
-        Ok(blocks)
+        let off = offset.unwrap_or(0).try_into()?;
+        let siz = window_size.map(|n| n as usize).unwrap_or(blocks.len());
+        Ok(blocks.into_iter().skip(off).take(siz).collect())
     }
 }
 
@@ -295,7 +263,7 @@ impl StorageProvider for SqliteStorageProvider {
         offset: u32,
         window_size: u32,
     ) -> Result<Vec<StoredBlock>> {
-        let blocks = self.get_blocks_recursive_query(cid, Some(offset), Some(window_size))?;
+        let blocks = self.get_blocks_recursive(cid, Some(offset), Some(window_size))?;
 
         Ok(blocks)
     }
@@ -338,7 +306,7 @@ impl StorageProvider for SqliteStorageProvider {
     }
 
     fn get_all_dag_blocks(&self, cid: &str) -> Result<Vec<StoredBlock>> {
-        self.get_blocks_recursive_query(cid, None, None)
+        self.get_blocks_recursive(cid, None, None)
     }
 
     fn incremental_gc(&mut self) -> bool {

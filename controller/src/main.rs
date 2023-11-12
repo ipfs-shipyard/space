@@ -1,7 +1,8 @@
 use anyhow::{bail, Result};
 use clap::{arg, Parser, ValueEnum};
-use log::info;
+use log::{debug, error, info, trace};
 use messages::{ApplicationAPI, Message};
+use std::time::Duration;
 use transports::{Transport, UdpTransport, MAX_MTU};
 
 #[derive(Parser, Debug, Clone)]
@@ -45,9 +46,11 @@ pub struct Cli {
 
 impl Cli {
     pub async fn run(&self) -> Result<()> {
-        let transport =
+        let mut transport =
             UdpTransport::new(&self.bind_address, self.mtu, self.chunk_transmit_throttle)?;
-
+        transport
+            .set_read_timeout(Some(Duration::from_secs(120)))
+            .expect("Failed to set timeout");
         let command = Message::ApplicationAPI(self.command.clone());
         let cmd_str = serde_json::to_string(&command)?;
         info!("Transmitting: {}", &cmd_str);
@@ -65,18 +68,31 @@ impl Cli {
         };
         transport.send(command, &instance_addr)?;
         if self.listen_mode {
-            match transport.receive() {
-                Ok((msg, _)) => {
-                    let json = serde_json::to_string(&msg).unwrap();
-                    info!("Received: {msg:?} \nJSON: {json}");
-                    match self.output_format {
-                        Format::Json => println!("{json}"),
-                        Format::Debug => println!("{msg:?}"),
-                    }
+            for i in 0..9 {
+                trace!("Listening for response, attempt {i}");
+                match transport.receive() {
+                    Ok((Message::ApplicationAPI(msg), _)) => {
+                        let json = serde_json::to_string(&msg).unwrap();
+                        info!("Received response: {msg:?} \nJSON: {json}");
+                        match self.output_format {
+                            Format::Json => println!("{json}"),
+                            Format::Debug => println!("{msg:?}"),
+                        }
 
-                    return Ok(());
+                        return Ok(());
+                    }
+                    Ok((Message::Error(msg), _)) => {
+                        error!("Received error message: {msg}");
+                        bail!("Server: {msg}");
+                    }
+                    Err(e) => bail!("{e:?}"),
+                    Ok((Message::DataProtocol(msg), _)) => {
+                        debug!("Ignoring shipper data protocol message {msg:?}");
+                    }
+                    Ok((Message::Sync(msg), _)) => {
+                        debug!("Ignoring sync message {msg:?}");
+                    }
                 }
-                Err(e) => bail!("{e:?}"),
             }
         }
 
@@ -88,12 +104,16 @@ impl Cli {
 async fn main() -> Result<()> {
     env_logger::init();
 
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
 
     if cli.mtu > MAX_MTU {
         bail!("Configured MTU is too large, cannot exceed {MAX_MTU}",);
     }
-
+    if matches!(cli.command, ApplicationAPI::RequestVersion { label: None }) {
+        cli.command = ApplicationAPI::RequestVersion {
+            label: Some("Requested by controller".to_owned()),
+        };
+    }
     cli.run().await
 }
 

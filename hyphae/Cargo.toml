@@ -15,7 +15,7 @@ env_logger.workspace = true
 figment.workspace = true
 ipfs-unixfs.workspace = true
 log.workspace = true
-messages.workspace = true
+messages = { workspace = true, features = ["proto_all"] }
 reqwest = { workspace = true, features = ["blocking", "json", "multipart"] }
 serde.workspace = true
 serde_json.workspace = true

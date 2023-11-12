@@ -4,6 +4,8 @@ target/
 build/
 storage.db
 sat/
+sat.sync/
+sat.ship/
 gnd/
 ctl
 log

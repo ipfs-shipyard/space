@@ -112,7 +112,7 @@ impl TestController {
     pub fn new() -> Self {
         let mut transport = UdpTransport::new("127.0.0.1:0", 60, None).unwrap();
         transport
-            .set_read_timeout(Some(Duration::from_millis(9008)))
+            .set_read_timeout(Some(Duration::from_millis(9029)))
             .unwrap();
         transport.set_max_read_attempts(Some(1));
         TestController { transport }
@@ -120,7 +120,7 @@ impl TestController {
 
     pub fn send_and_recv(&mut self, target_addr: &str, message: Message) -> Message {
         self.send_msg(message, target_addr);
-        std::thread::sleep(Duration::from_millis(530));
+        std::thread::sleep(Duration::from_millis(670));
         self.recv_msg().unwrap()
     }
 

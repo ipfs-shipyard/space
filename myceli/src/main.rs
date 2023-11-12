@@ -1,5 +1,6 @@
 use anyhow::Result;
 use config::Config;
+use log::warn;
 use myceli::listener::Listener;
 use std::{net::ToSocketAddrs, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use transports::UdpTransport;
@@ -58,5 +59,7 @@ fn main() -> Result<()> {
     listener
         .start(cfg.retry_timeout_duration, cfg.window_size)
         .expect("Error encountered in listener operation");
+    println!("Exiting");
+    warn!("Exiting");
     Ok(())
 }

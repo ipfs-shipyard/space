@@ -46,10 +46,10 @@ impl MyceliApi {
 
     pub fn check_alive(&self) -> bool {
         match self
-            .send_msg(Message::request_version())
+            .send_msg(Message::request_version(self.address.clone()))
             .and_then(|_| self.recv_msg())
         {
-            Ok(Message::ApplicationAPI(ApplicationAPI::Version { version })) => {
+            Ok(Message::ApplicationAPI(ApplicationAPI::Version { version, .. })) => {
                 debug!("Found myceli version {version}");
                 true
             }

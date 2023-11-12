@@ -4,3 +4,4 @@ pub mod listener;
 pub mod shipper;
 #[cfg(feature = "proto_sync")]
 mod sync;
+mod version_info;

@@ -348,6 +348,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "built"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1462f4ab147e1378c64dacd28f03a56d4771d93eab6c325265a35355ce47213d"
+
+[[package]]
 name = "bumpalo"
 version = "3.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -391,17 +397,16 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chrono"
-version = "0.4.26"
+version = "0.4.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec837a71355b28f6556dbd569b37b3f363091c0bd4b2e735674521b4c5fd9bc5"
+checksum = "7f2c685bad3eb3d45a01354cedb7d5faa66194d1d58ba6e267a8de788f79db38"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
  "js-sys",
  "num-traits",
- "time",
  "wasm-bindgen",
- "winapi",
+ "windows-targets 0.48.0",
 ]
 
 [[package]]
@@ -487,7 +492,7 @@ checksum = "21a53c0a4d288377e7415b53dcfc3c04da5cdc2cc95c8d5ac178b58f0b861ad6"
 
 [[package]]
 name = "controller"
-version = "0.6.7"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -916,7 +921,7 @@ checksum = "be4136b2a15dd319360be1c07d9933517ccf0be8f16bf62a3bee4f0d618df427"
 dependencies = [
  "cfg-if",
  "libc",
- "wasi 0.11.0+wasi-snapshot-preview1",
+ "wasi",
 ]
 
 [[package]]
@@ -1080,7 +1085,7 @@ dependencies = [
 
 [[package]]
 name = "hyphae"
-version = "0.6.7"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1222,7 +1227,7 @@ dependencies = [
 
 [[package]]
 name = "ipfs-unixfs"
-version = "0.6.7"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "async-recursion",
@@ -1425,7 +1430,7 @@ checksum = "ef53942eb7bf7ff43a617b3e2c1c4a5ecf5944a7c1bc12d7ee39bbb15e5c1519"
 
 [[package]]
 name = "local-storage"
-version = "0.6.7"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "assert_fs",
@@ -1440,7 +1445,6 @@ dependencies = [
  "smalog",
  "thiserror",
  "tokio",
- "tokio-util",
 ]
 
 [[package]]
@@ -1493,7 +1497,7 @@ dependencies = [
 
 [[package]]
 name = "messages"
-version = "0.6.7"
+version = "0.7.0"
 dependencies = [
  "cid",
  "clap",
@@ -1538,7 +1542,7 @@ checksum = "927a765cd3fc26206e66b296465fa9d3e5ab003e651c1b3c060e7956d96b19d2"
 dependencies = [
  "libc",
  "log",
- "wasi 0.11.0+wasi-snapshot-preview1",
+ "wasi",
  "windows-sys 0.48.0",
 ]
 
@@ -1623,11 +1627,12 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "myceli"
-version = "0.6.7"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "assert_fs",
  "blake2",
+ "built",
  "cid",
  "config",
  "env_logger",
@@ -2325,6 +2330,7 @@ checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 name = "smalog"
 version = "0.0.1"
 dependencies = [
+ "chrono",
  "log",
 ]
 
@@ -2476,17 +2482,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "time"
-version = "0.1.45"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b797afad3f312d1c66a56d11d0316f916356d11bd158fbc6ca6389ff6bf805a"
-dependencies = [
- "libc",
- "wasi 0.10.0+wasi-snapshot-preview1",
- "winapi",
-]
-
-[[package]]
 name = "tinyvec"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2627,7 +2622,7 @@ dependencies = [
 
 [[package]]
 name = "transports"
-version = "0.6.7"
+version = "0.7.0"
 dependencies = [
  "cid",
  "derive-error",
@@ -2773,12 +2768,6 @@ checksum = "bfa7760aed19e106de2c7c0b581b509f2f25d3dacaf737cb82ac61bc6d760b0e"
 dependencies = [
  "try-lock",
 ]
-
-[[package]]
-name = "wasi"
-version = "0.10.0+wasi-snapshot-preview1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a143597ca7c7793eff794def352d41792a93c481eb1042423ff7ff72ba2c31f"
 
 [[package]]
 name = "wasi"

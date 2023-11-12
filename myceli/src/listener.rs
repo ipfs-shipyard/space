@@ -5,15 +5,20 @@ use crate::shipper::Shipper;
 use crate::sync::Syncer;
 use anyhow::Result;
 use local_storage::{provider::default_storage_provider, storage::Storage};
-use log::{debug, error, info, trace};
-use messages::{ApplicationAPI, DataProtocol, Message, SyncMessage};
+use log::{debug, error, info, trace, warn};
+#[cfg(feature = "proto_ship")]
+use messages::DataProtocol;
+use messages::{ApplicationAPI, Message, SyncMessage};
 use std::collections::BTreeSet;
 #[cfg(feature = "proto_ship")]
-use std::thread::spawn;
+use std::{
+    iter,
+    sync::mpsc::{self, Sender},
+    thread::spawn,
+};
 use std::{
     net::SocketAddr,
     path::PathBuf,
-    sync::mpsc::{self, Sender},
     sync::{Arc, Mutex},
 };
 use transports::{Transport, TransportError};
@@ -23,7 +28,8 @@ pub struct Listener<T> {
     transport: Arc<T>,
     connected: Arc<Mutex<bool>>,
     radio_address: Option<String>,
-    addrs: BTreeSet<String>,
+    ship_target_addrs: BTreeSet<String>,
+    sync_target_addrs: BTreeSet<String>,
     sync_counts: [u64; 3],
     _block_size: u32,
     #[cfg(feature = "proto_sync")]
@@ -43,11 +49,6 @@ impl<T: Transport + Send + 'static> Listener<T> {
         let provider = default_storage_provider(storage_path, high_disk_usage)?;
         let storage = Storage::new(provider, block_size);
         info!("Listening on {listen_address}");
-        let addrs = if let Some(a) = &radio_address {
-            BTreeSet::from([a.clone()])
-        } else {
-            BTreeSet::default()
-        };
         #[cfg(feature = "proto_sync")]
         let sync = create_syncer(&storage, _mtu)?;
         Ok(Listener {
@@ -55,7 +56,8 @@ impl<T: Transport + Send + 'static> Listener<T> {
             transport,
             connected: Arc::new(Mutex::new(true)),
             radio_address,
-            addrs,
+            sync_target_addrs: BTreeSet::default(),
+            ship_target_addrs: BTreeSet::default(),
             sync_counts: [0; 3],
             _block_size: block_size,
             #[cfg(feature = "proto_sync")]
@@ -69,6 +71,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
         _shipper_window_size: u32,
         _shipper_packet_delay_ms: u32,
     ) -> Result<()> {
+        #[cfg(feature = "proto_ship")]
         let (shipper_sender, _shipper_receiver) = mpsc::channel();
         #[cfg(feature = "proto_ship")]
         {
@@ -99,15 +102,28 @@ impl<T: Transport + Send + 'static> Listener<T> {
         loop {
             match self.transport.receive() {
                 Ok((message, sender_addr)) => {
-                    if self.addrs.insert(sender_addr.clone()) {
+                    if matches!(&message, Message::Sync(_))
+                        && self.sync_target_addrs.insert(sender_addr.clone())
+                    {
                         info!("Will sync to {sender_addr}");
                     }
-                    let target_addr = if let Some(radio_address) = &self.radio_address {
-                        radio_address.to_owned()
-                    } else {
-                        sender_addr.to_owned()
-                    };
-                    match self.handle_message(message, &target_addr, shipper_sender.clone()) {
+                    if let Some(target_addr) = message.target_addr() {
+                        if self.ship_target_addrs.insert(target_addr.clone()) {
+                            info!("Will send to {target_addr} with shipper.");
+                        }
+                    }
+                    match {
+                        #[cfg(feature = "proto_ship")]
+                        {
+                            self.handle_message(
+                                message,
+                                &sender_addr.to_owned(),
+                                shipper_sender.clone(),
+                            )
+                        }
+                        #[cfg(not(feature = "proto_ship"))]
+                        self.handle_message(message, &sender_addr)
+                    } {
                         Ok(Some(resp)) => {
                             if let Err(_e) = self.transmit_response(resp, &sender_addr) {
                                 error!("TransmitResponse error: {_e}");
@@ -139,32 +155,48 @@ impl<T: Transport + Send + 'static> Listener<T> {
     fn handle_message(
         &mut self,
         message: Message,
-        target: &str,
-        shipper_sender: Sender<(DataProtocol, String)>,
+        sender: &str,
+        #[cfg(feature = "proto_ship")] shipper_sender: Sender<(DataProtocol, String)>,
     ) -> Result<Option<Message>> {
-        trace!("Handling {message:?}");
+        trace!("Handling {message:?} from {sender}");
+        #[cfg(feature = "proto_ship")]
+        let ship = |this: &Self, m: DataProtocol| {
+            for t in this
+                .ship_target_addrs
+                .iter()
+                .map(|s| s.as_str())
+                .chain(iter::once(sender))
+            {
+                if let Err(e) = shipper_sender.send((m.clone(), t.to_string())) {
+                    error!("Error sending message to shipper for {t}: {e:?} msg={m:?}");
+                }
+            }
+        };
         let resp: Option<Message> = match message {
             Message::ApplicationAPI(ApplicationAPI::TransmitDag {
                 cid,
                 target_addr,
-                retries,
+                retries: _retries,
             }) => {
                 self.transmit_dag(&cid, &target_addr)?;
-                shipper_sender.send((
+                #[cfg(feature = "proto_ship")]
+                ship(
+                    self,
                     DataProtocol::RequestTransmitDag {
                         cid: cid.clone(),
                         target_addr,
-                        retries,
+                        retries: _retries,
                     },
-                    target.to_string(),
-                ))?;
+                );
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::TransmitBlock { cid, target_addr }) => {
-                shipper_sender.send((
+                self.transmit_dag(&cid, &target_addr)?;
+                #[cfg(feature = "proto_ship")]
+                ship(
+                    self,
                     DataProtocol::RequestTransmitBlock { cid, target_addr },
-                    target.to_string(),
-                ))?;
+                );
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::ImportFile { path }) => {
@@ -203,21 +235,62 @@ impl<T: Transport + Send + 'static> Listener<T> {
             Message::ApplicationAPI(ApplicationAPI::ValidateDag { cid }) => {
                 Some(handlers::validate_dag(&cid, &self.storage)?)
             }
-            Message::DataProtocol(data_msg) => {
-                shipper_sender.send((data_msg, target.to_string()))?;
+            Message::DataProtocol(_data_msg) => {
+                self.ship_target_addrs.insert(sender.to_string());
+                #[cfg(feature = "proto_ship")]
+                ship(self, _data_msg);
                 None
             }
-            Message::ApplicationAPI(ApplicationAPI::RequestVersion) => {
-                Some(Message::ApplicationAPI(ApplicationAPI::Version {
-                    version: env!("CARGO_PKG_VERSION").to_string(),
-                }))
+            Message::ApplicationAPI(ApplicationAPI::RequestVersion { label }) => {
+                info!("Remote {sender} requested version info labelled with {label:?}");
+                Some(Message::ApplicationAPI(crate::version_info::get(label)))
+            }
+            Message::ApplicationAPI(ApplicationAPI::Version {
+                version,
+                features,
+                profile,
+                target,
+                rust,
+                remote_label,
+            }) => {
+                info!("Remote {sender} aka {remote_label:?}: myceli {version} built by rust {rust} for {target} on profile {profile} using these features: {features:?}");
+                let their_version = version;
+                if let ApplicationAPI::Version { version, .. } = crate::version_info::get(None) {
+                    let my_version = version;
+                    if let Some(mismatch_component) = my_version
+                        .split('.')
+                        .zip(their_version.split('.'))
+                        .position(|(a, b)| a != b)
+                    {
+                        if mismatch_component < 2 {
+                            if let Some(radio) = &self.radio_address {
+                                if sender == radio {
+                                    panic!("Versions are TOO different, can't expect backward compatibility that far. mine={my_version} theirs(configured as radio_address={sender})={their_version}");
+                                }
+                            }
+                            error!("Versions are TOO different, can't expect backward compatibility that far. mine={my_version} theirs({sender})={their_version}");
+                        }
+                    }
+                    let remote = remote_label.unwrap_or(sender.to_owned());
+                    if features.iter().any(|f| f == "PROTO_SYNC")
+                        && self.sync_target_addrs.insert(remote.clone())
+                    {
+                        info!("Remote {remote} reported that it supports sync protocol, so adding it to addresses to target with that.");
+                    }
+                    if features.iter().any(|f| f == "PROTO_SHIP")
+                        && self.ship_target_addrs.insert(remote.clone())
+                    {
+                        info!("Remote {remote} reported that it supports ship protocol, so adding it to addresses to target with that.");
+                    }
+                }
+                None
             }
             Message::ApplicationAPI(ApplicationAPI::SetConnected { connected }) => {
                 let prev_connected = *self.connected.lock().unwrap();
                 *self.connected.lock().unwrap() = connected;
                 if !prev_connected && connected {
-                    shipper_sender
-                        .send((DataProtocol::ResumeTransmitAllDags, target.to_string()))?;
+                    #[cfg(feature = "proto_ship")]
+                    ship(self, DataProtocol::ResumeTransmitAllDags);
                 }
                 None
             }
@@ -227,22 +300,22 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 }))
             }
             Message::ApplicationAPI(ApplicationAPI::ResumeTransmitDag { cid }) => {
-                shipper_sender
-                    .send((DataProtocol::ResumeTransmitDag { cid }, target.to_string()))?;
+                self.transmit_dag(&cid, sender)?;
+                #[cfg(feature = "proto_ship")]
+                ship(self, DataProtocol::ResumeTransmitDag { cid });
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::ResumeTransmitAllDags) => {
-                shipper_sender.send((DataProtocol::ResumeTransmitAllDags, target.to_string()))?;
+                #[cfg(feature = "proto_ship")]
+                ship(self, DataProtocol::ResumeTransmitAllDags);
                 None
             }
-            #[allow(unused_variables)]
             Message::ApplicationAPI(ApplicationAPI::ValidateDagResponse { cid, result }) => {
-                info!("Received ValidateDagResponse from {target} for {cid}: {result}");
+                info!("Received ValidateDagResponse from {sender} for {cid}: {result}");
                 None
             }
-            #[allow(unused_variables)]
             Message::ApplicationAPI(ApplicationAPI::FileImported { path, cid }) => {
-                info!("Received FileImported from {target}: {path} -> {cid}");
+                info!("Received FileImported from {sender}: {path} -> {cid}");
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::DagTransmissionComplete { cid }) => {
@@ -291,9 +364,13 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     )))
                 }
             }
-            // Default case for valid messages which don't have handling code implemented yet
-            message => {
-                info!("Received message: {:?}", message);
+            Message::Error(err_msg) => {
+                error!("Received an error message from remote: {err_msg}");
+                None
+            }
+            Message::ApplicationAPI(api_msg) => {
+                //Catch-all for API messages that have no handling code - typically responses
+                warn!("Received unsupported API message: {api_msg:?}");
                 None
             }
         };
@@ -325,22 +402,43 @@ impl<T: Transport + Send + 'static> Listener<T> {
     }
 
     fn bg_tasks(&mut self) -> Result<()> {
+        if let Some(radio) = &self.radio_address {
+            if self.sync_target_addrs.contains(radio) {
+                trace!("Configured radio {radio} is a sync target");
+            } else if self.sync_target_addrs.contains(radio) {
+                trace!("Configured radio {radio} is a sync target");
+            } else {
+                debug!("Requesting version info & supported protocols from {radio} since it doesn't appear in ship {:?} OR sync {:?}", &self.ship_target_addrs, &self.sync_target_addrs);
+                self.transport.send(
+                    Message::ApplicationAPI(crate::version_info::get(None)),
+                    radio,
+                )?;
+                self.transport
+                    .send(Message::request_version(radio.clone()), radio)?;
+                return Ok(());
+            }
+        } else {
+            trace!("No configured radio address - will assume they'll contact me to let me know protocols.");
+        }
+        trace!("sync_target_addrs={:?}", self.sync_target_addrs);
         #[cfg(feature = "proto_sync")]
-        if !self.addrs.is_empty() {
-            trace!("Addrs to sync with: {:?}", &self.addrs);
+        if !self.sync_target_addrs.is_empty() {
+            trace!("Addrs to sync with: {:?}", &self.sync_target_addrs);
             if let Some(msg) = self.sync.pop_pending_msg() {
                 if matches!(&msg, Message::Sync(SyncMessage::Push(_))) {
                     self.sync_counts[0] += 1;
                 }
                 info!(
                     "Sending {msg:?} to {:?}, balance is now {:?}",
-                    &self.addrs, self.sync_counts
+                    &self.sync_target_addrs, self.sync_counts
                 );
                 //Sending a delayed Sync message, so bump that count
-                for addr in &self.addrs {
+                for addr in &self.sync_target_addrs {
                     self.transport.send(msg.clone(), addr)?;
                 }
                 return Ok(());
+            } else {
+                trace!("No already-pending Sync messages ready to send.");
             }
         }
         if self.storage.incremental_gc() {
@@ -352,9 +450,12 @@ impl<T: Transport + Send + 'static> Listener<T> {
             );
             self.sync_counts[2] += 1;
         } else {
+            trace!("Will try to build a new Sync message");
             self.sync_counts[2] = 0;
             #[cfg(feature = "proto_sync")]
-            self.sync.build_msg()?;
+            if let Err(e) = self.sync.build_msg() {
+                error!("Error while building a new Sync message to send: {e:?}");
+            }
         }
         Ok(())
     }
@@ -368,5 +469,5 @@ fn create_syncer(storage: &Storage, mtu: u16) -> Result<Syncer> {
         let c = cid::Cid::try_from(c.as_str())?;
         Ok::<_, cid::Error>((c, n.clone()))
     });
-    Ok(Syncer::new(mtu.into(), present_blocks, missing_blocks)?)
+    Syncer::new(mtu.into(), present_blocks, missing_blocks)
 }

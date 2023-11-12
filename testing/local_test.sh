@@ -18,13 +18,12 @@ stop() {
   fi
 }
 kill_all() {
-  set +x
   for p in myceli controller hyphae watcher
   do
     stop ${p}
     killall ${p} 2>/dev/null || true # echo "${p} is stopped"
   done
-  for f in {gnd,sat,ctl}/*
+  for f in {gnd,sat{,.sync,.ship},ctl}/*
   do
     fuser "${f}" 2>/dev/null | xargs kill 2>/dev/null || true
   done
@@ -37,7 +36,7 @@ kill_all
 if [ "${1}" = 'die' ]
 then
   echo -n "$$" > "${o}/tl.killer.pid"
-  sleep 1000
+  sleep 3600
   if [ -f "${o}/tl.killer.pid" ]
   then
     if [ -f "${o}/tl.tokill.pid" ] && [ -d `cat "${o}/tl.tokill.pid"` ]
@@ -68,21 +67,22 @@ check_log() {
     exit 2
   fi
   l=${2}
-  for i in {0..10}
+  for i in {0..18}
   do
     if ls ${l}/${3-*}.log >/dev/null
     then
-      grep --max-count=1 --color=always "${1}" ${l}/${3-*}.log && return
+      grep --extended-regexp --max-count=1 --color=always "${1}" ${l}/${3-*}.log && return
     else
       sleep 9
     fi
     sleep $i
   done
-  echo 'Failed to find ' "${1}" ' in these logs:'
+  echo `date` ' Failed to find ' "${1}" ' in these logs:'
   ls -lrth --color=always ${l}/${3-*}.log
   echo ' ...elsewhere... '
-  grep "${1}" */*.log
+  grep --extended-regexp --color=always "${1}" */*.log
   kill_all
+  fuser "${0}" | xargs kill 2>/dev/null
   exit 1
 }
 
@@ -122,28 +122,18 @@ start() {
   [ $# -lt 2 ] && exit 9
   stop ${1} ${2}
   sleep 1
-  ( 
+  b=${1}
+  shift
+  d="${1}"
+  shift
+  (
     (
-      cd "${2}"
-      b=${1}
-      shift
-      shift
-      ./${b} ${@}  > ${b}.log 2>&1 <&- &
+      cd "${d}"
+      "./${b}" "${@}" > "${b}.log" 2>&1 <&- &
     )  >/dev/null 2>&1 &
   ) >/dev/null 2>&1 &
+  echo "Starting (in ${d}) ./${b} ${*} > ${b}.log"
   sleep 1
-}
-start_myceli() {
-  kill_myceli "${1}"
-  export c="$1"
-  export RUST_LOG=trace
-  sleep 1
-  start myceli ${c} config.toml
-  until [ -f ${c}/myceli.log ]
-  do
-    sleep 1
-  done
-  check_log 'pid=' ${c} >/dev/null
 }
 port_open() {
   if nc -u -z -w 9 127.0.0.1 ${1} 2>/dev/null
@@ -158,10 +148,40 @@ port_open() {
     false
   fi
 }
+port_for() {
+  grep listen_address "${1}/config.toml" | sed 's/^.*:\([0-9]*\)".*$/\1/'
+}
+start_myceli() {
+  kill_myceli "${1}"
+  while port_open `port_for "${1}"`
+  do
+    sleep 9
+  done
+  export c="$1"
+#  export RUST_LOG=debug
+  export RUST_LOG=trace
+  sleep 9
+  start myceli ${c} config.toml
+  until [ -f ${c}/myceli.log ]
+  do
+    sleep 9
+  done
+  sleep 9
+  until port_open `port_for "${1}"`
+  do
+    sleep 9
+  done
+  sleep 9
+  check_log 'pid=' ${c} >/dev/null
+  sleep 9
+}
+
 ( ipfs daemon <&- >${o}/ipfs.log 2>&1 & ) >/dev/null 2>&1 &
-rm -r sat || true
-rm -r gnd || true
-mkdir -p sat gnd ctl
+for d in gnd sat{,.sync,.ship}
+do
+  rm -r ${d} || true
+done
+mkdir -p sat{,.ship,.sync} gnd ctl
 configure() {
   cat > sat/config.toml <<SATCFG
   listen_address = "127.0.0.1:8764"
@@ -170,8 +190,12 @@ configure() {
   watched_directory = "watched"
   chatter_ms = ${1}
 SATCFG
+  cp -v {sat,sat.sync}/config.toml
+  cp -v {sat,sat.ship}/config.toml
+#  sed 's/8764/8763/' sat.sync/config.toml
+#  sed 's/8764/8762/' sat.ship/config.toml
   cat > gnd/config.toml <<GNDCFG
-  radio_address  = "0.0.0.0:8764"
+  radio_address  = "localhost:8764"
   listen_address = "0.0.0.0:8765"
   storage_path = "."
   watched_directory = "watched"
@@ -184,6 +208,8 @@ HYPHCFG
 }
 configure 9876543
 bld() {
+  mkdir -p "${1}"
+  cargo clean
   cargo build --bin ${2} --features ${3} --no-default-features --profile "${4}"
   bin=`cargo metadata --format-version 1 | jq -r .target_directory`/${4}/${2}
   cp -v "${bin}" "${1}"
@@ -192,11 +218,36 @@ bld gnd myceli big release
 bld gnd watcher big release
 bld gnd hyphae big release
 bld ctl controller big release
-bld sat myceli small small
-bld sat watcher small small
+bld sat myceli small,proto_all small
+bld sat watcher small,proto_all small
+for p in sync ship
+do
+  bld sat.${p} myceli small,proto_${p} small
+  cp -v sat/watcher sat.${p}/
+done
+for m in sat*/myceli
+do
+  xz -9 --keep --extreme "${m}"
+done
+if [ `stat --format=%s "sat/myceli.xz"` -gt 1000000 ]
+then
+  echo -e "\n\t###\t PROBLEM: \t###\t proto_all is over 1MB \t###\n"
+  exit 99
+fi
+if [ `stat --format=%s "sat.sync/myceli.xz"` -gt 900000 ]
+then
+  echo -e "\n\t###\t PROBLEM: \t###\t proto_sync is too big \t###\n"
+  exit 99
+fi
+if [ `stat --format=%s "sat.ship/myceli.xz"` -gt 900000 ]
+then
+  echo -e "\n\t###\t PROBLEM: \t###\t proto_ship is too big \t###\n"
+  exit 99
+fi
+
 start_myceli sat
 start_myceli gnd
-for i in 1{9..0}
+for i in {9..0}1
 do
   sleep $i
   for p in 5001 876{5,4}
@@ -209,18 +260,23 @@ do
 done
 for p in 5001 876{5,4}
 do
-  port_open ${p}
+  if port_open ${p}
+  then
+    sleep 1
+  else
+    echo "Why did port ${p} never open - did a program not start?"
+  fi
 done
 controller() {
-  #echo "controller(${@})"
+#  echo "controller(${@})"
   port=${1}
   shift
   sleep 1
   if ! timeout 99 ./ctl/controller --listen-mode 127.0.0.1:${port} "${@}" 2> ctl/controller.log > ctl/output.log
   then
-    echo -e "\n\t ### \t Controller command failed: \t ### \t ${*} \t ###"
-    grep -n . ctl/controller.log
-    grep -n . ctl/output.log
+    echo -e "\n\t ### \t Controller command failed: \t ### \t ./ctl/controller --listen-mode 127.0.0.1:${port} ${*} \t ###"
+#    grep -n . ctl/controller.log
+#    grep -n . ctl/output.log
     false
   fi
 }
@@ -244,16 +300,14 @@ cid_present() {
   fi
 }
 other_side() {
-  if [ $1 = gnd ]
-  then
-    echo -n sat
-  elif [ $1 = sat ]
+  if grep -q sat <<< "${1}"
   then
     echo -n gnd
+  elif [ "${sd}" = '' ]
+  then
+    echo -n sat
   else
-    echo "fail ${0} ${*}"
-    echo "fail ${0} ${*}" >&2
-    exit 3
+    echo -n "${sd}"
   fi
 }
 transmit() {
@@ -274,18 +328,6 @@ transmit() {
   echo "${cid} never showed up on ${b}"
   exit 8
 }
-port_for() {
-  if [ $1 = gnd ]
-  then
-    echo -n 8765
-  elif [ $1 = sat ]
-  then
-    echo -n 8764
-  else
-    echo "wrong params: ${0} ${*}"
-    exit 4
-  fi
-}
 g2s() {
   echo "Transmit ${cid} from ground to satellite..."
   transmit 8765 8764 gnd
@@ -294,7 +336,12 @@ s2g() {
   echo "Transmit ${cid} from satellite to ground..."
   transmit 8764 8765 sat
 }
-#ls -lrth */storage.db || date
+
+echo -e '\n\n# Test Case 0: Print Version Info\n'
+controller `port_for gnd` --output-format=json request-version
+jq . ctl/output.log
+controller `port_for sat` --output-format=json request-version
+jq . ctl/output.log
 
 echo -e '\n# Test Case - Verify Myceli Instances Alive'
 
@@ -317,7 +364,7 @@ echo 'This step passes if an FileImported response with CID is received. Any oth
 check_log FileImported ctl
 
 echo ' ...with the CID obtained from the FileImported response... '
-export cid=`grep 'Received:.*FileImported' ctl/controller.log | tail -n 1 | cut -d '"' -f 4`
+export cid=`grep 'Received.response:.*FileImported' ctl/controller.log | tail -n 1 | cut -d '"' -f 4`
 echo "... cid=${cid} ...and with the network address of the ground-to-space radio link... "
 echo 'send the TransmitDag command to the myceli ground instance'
 g2s
@@ -388,28 +435,29 @@ done
 ipfs block get ${cid}
 ipfs dag get ${cid} | jq .
 
-kill_all
-
 wait_for_sync() {
   d=${2}
-  check_log "${3}.*${d}${1}"          ${d} watcher
-#  check_log "Imported.path.*${d}${1}" ${d} myceli
-  check_log "ransmit.*Sync.*Push"     ${d} myceli
   b=`other_side ${d}`
-  check_log "Sync::handle(Push(PushMsg(${d}${1}" ${b} myceli
-#  check_log "Sync::handle.*Block" ${b} myceli
+  sleep 1
+  check_log "${3}.*${d}${1}" ${d} watcher || check_log "${3}.*${d}${1}" ${d} watcher
+  check_log "Imported.path.*${d}${1}" ${d} myceli
+  check_log "Remote.(127.0.0.1|localhost):87...reported.*supports.sync" ${d} myceli
+  check_log "Remote.(127.0.0.1|localhost):87...reported.*supports.sync" ${b} myceli
+  check_log "Sending.Sync.Push" ${d} myceli
+  sleep 5
+  check_log "Sync.:handle.Push.PushMsg.${d}${1}" ${b} myceli
   p=`port_for ${b}`
   touch ${o}/notfound
   for i in {0..9}1
   do
     sleep $i
     controller ${p} --output-format json list-files
-    if jq ".ApplicationAPI.AvailableDags.dags[]" ctl/output.log 2>/dev/null | grep -F --color=always "${d}${1}"
+    if jq ".AvailableDags.dags[]" ctl/output.log 2>/dev/null | grep -F --color=always "${d}${1}"
     then
       break
     fi
   done
-  export cid=`jq -r ".ApplicationAPI.AvailableDags.dags[] | select( .filename == \"${d}${1}\" ).cid"  ctl/output.log`
+  export cid=`jq -r ".AvailableDags.dags[] | select( .filename == \"${d}${1}\" ).cid"  ctl/output.log`
   echo "filename=${d}${1};CID=${cid}"
   if [ "${cid}" = '' ]
   then
@@ -419,7 +467,7 @@ wait_for_sync() {
   for i in {0..9}1
   do
     controller ${p} --output-format json validate-dag ${cid}
-    if jq .ApplicationAPI.ValidateDagResponse.result ctl/output.log 2>/dev/null | grep -F --color=always 'Dag is valid'
+    if jq .ValidateDagResponse.result ctl/output.log 2>/dev/null | grep -F --color=always 'Dag is valid'
     then
       cat ctl/output.log
       rm ${o}/notfound
@@ -433,61 +481,91 @@ wait_for_sync() {
     exit 5
   fi
   e=`pwd`/${b}/synced.${d}${1}
-  controller ${p} export-dag ${cid} ${e}
-  for i in {0..9}
+  echo "${p} Exporting ${cid} to ${e}"
+  for i in {0..99}
+  do
+    if controller ${p} export-dag ${cid} ${e}
+    then
+      break
+    else
+      echo "Trouble exporting... could be temporary."
+      sleep $i
+    fi
+  done
+  for i in {1..99}
   do
     sleep $i
     if [ ! -f ${e} ]
     then
       sleep $i
+      echo "Waiting for ${e} to be exported."
       continue
     fi
-    #ls -lh ${e}
-    #stat --format=%Y ${e}
-    #date -d '1 second ago' +%s
-    if [ `stat --format=%Y ${e}` -lt `date -d '1 second ago' +%s` ]
+    if fuser "${e}" || [ `stat --format=%Y ${e}` -lt `date -d '1 second ago' +%s` ]
     then
+      echo "Waiting for writing to finish on ${e}"
       break
     fi
   done
+  set -x
   diff ${b}/synced.${d}${1} ${d}/watched/${d}${1}
+  set +x
 }
 
-echo -e '\n\n# Test suite: watcher'
-
-mkdir gnd/watched sat/watched/
-date > gnd/watched/gnd.prexisting.txt
-date -d 'next second' > sat/watched/sat.prexisting.txt
-configure 9
-start_myceli sat
-start_myceli gnd
-start watcher gnd config.toml
-start watcher sat config.toml
-sleep 5
-echo -e '\n  ## Test: watcher discovers pre-existing file\n'
-wait_for_sync .prexisting.txt gnd 'Discovered path in'
-wait_for_sync .prexisting.txt sat 'Discovered path in'
-
-echo -e '\n  ## Test: watcher picks up moved-in file\n'
-for s in gnd sat
+for sd in sat{,.sync}
 do
-  echo 'begin' > ${o}/${s}.big.txt
-  yes $s `date` | head -c 2048 >> ${o}/${s}.big.txt
-  echo -e '\nend' >> ${o}/${s}.big.txt
-  mv ${o}/${s}.big.txt ${s}/watched/
-  sleep 1
-done
-wait_for_sync .big.txt sat 'File modified, import:'
-wait_for_sync .big.txt gnd 'File modified, import:'
+  export sd
 
-echo -e '\n  ## Test: watcher picks up file written in-situ\n'
-for s in gnd sat
-do
-  yes $s `date` | head -c 2048 >> ${s}/watched/${s}.written.txt
+  echo -e "\n\n# Test suite: watcher ${sd}"
+
+  kill_all
+  rm */*.log
+  for rd in {gnd,sat{,.sync,.ship}}/{watched,storage.db,blocks,cids,names}
+  do
+    (
+      rm -r "${rd}" 2>/dev/null || true
+    )
+  done
+
+
+  mkdir -p gnd/watched ${sd}/watched/
+  date > gnd/watched/gnd.prexisting.txt
+  date -d 'next second' > ${sd}/watched/${sd}.prexisting.txt
+  configure 7
+  start_myceli ${sd}
+  start_myceli gnd
+  export RUST_LOG=debug
+  start watcher gnd config.toml
+  start watcher ${sd} config.toml
+  sleep 9
+  echo -e "\n  ## Test: watcher discovers pre-existing file ${sd}\n"
+  wait_for_sync .prexisting.txt gnd 'Discovered path in'
   sleep 1
+  wait_for_sync .prexisting.txt ${sd} 'Discovered.path in'
+
+  echo -e '\n  ## Test: watcher picks up moved-in file\n'
+  for s in gnd ${sd}
+  do
+    echo 'begin' > ${o}/${s}.big.txt
+    yes $s `date` | head -c 2048 >> ${o}/${s}.big.txt
+    echo -e '\nend' >> ${o}/${s}.big.txt
+    mv ${o}/${s}.big.txt ${s}/watched/
+    sleep 1
+  done
+  wait_for_sync .big.txt ${sd} 'File modified, import:'
+  wait_for_sync .big.txt gnd 'File modified, import:'
+
+  echo -e '\n  ## Test: watcher picks up file written in-situ\n'
+  for s in gnd ${sd}
+  do
+    yes $s `date` | head -c 2048 >> ${s}/watched/${s}.written.txt
+    sleep 1
+  done
+  echo "   ### From ${sd} to ground ###"
+  wait_for_sync .written.txt ${sd} 'File modified, import:'
+  echo "   ### From ground to ${sd} ###"
+  wait_for_sync .written.txt gnd "File modified, import:"
 done
-wait_for_sync .written.txt sat 'File modified, import:'
-wait_for_sync .written.txt gnd 'File modified, import:'
 
 echo -e '\n\n\t###\t###\t PASSED \t###\t###\n'
 kill_all

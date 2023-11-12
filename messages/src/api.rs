@@ -112,11 +112,18 @@ pub enum ApplicationAPI {
         blocks: Vec<String>,
     },
     /// Requests current version of myceli
-    RequestVersion,
+    RequestVersion {
+        label: Option<String>,
+    },
     /// Provides current version of myceli
     #[command(skip)]
     Version {
         version: String,
+        rust: String,
+        target: String,
+        profile: String,
+        features: Vec<String>,
+        remote_label: Option<String>,
     },
     /// Request ALL available DAGs
     RequestAvailableDags,

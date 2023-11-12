@@ -1,20 +1,27 @@
 use crate::{
-    api::ApplicationAPI, cid_list, protocol::DataProtocol, sync::SyncMessage, TransmissionBlock,
-};
-
-use crate::{
+    api::ApplicationAPI,
+    cid_list,
     err::{Error, Result},
-    sync::PushMessage,
+    sync::{PushMessage, SyncMessage},
 };
+#[cfg(feature = "proto_ship")]
+use crate::{protocol::DataProtocol, TransmissionBlock};
 use parity_scale_codec::Encode;
 use parity_scale_codec_derive::{Decode as ParityDecode, Encode as ParityEncode};
 use serde::Serialize;
 
 #[derive(Clone, Debug, ParityEncode, ParityDecode, Serialize, Eq, PartialEq)]
+pub struct Unsupported {}
+#[derive(Clone, Debug, ParityEncode, ParityDecode, Serialize, Eq, PartialEq)]
 pub enum Message {
+    #[cfg(feature = "proto_ship")]
     DataProtocol(DataProtocol),
+    #[cfg(not(feature = "proto_ship"))]
+    DataProtocol(Unsupported),
+
     ApplicationAPI(ApplicationAPI),
     Error(String),
+
     Sync(SyncMessage),
 }
 
@@ -76,16 +83,19 @@ impl Message {
         })
     }
 
+    #[cfg(feature = "proto_ship")]
     pub fn data_block(block: TransmissionBlock) -> Self {
         Message::DataProtocol(DataProtocol::Block(block))
     }
 
+    #[cfg(feature = "proto_ship")]
     pub fn request_missing_dag_blocks(cid: &str) -> Self {
         Message::DataProtocol(DataProtocol::RequestMissingDagBlocks {
             cid: cid.to_owned(),
         })
     }
 
+    #[cfg(feature = "proto_ship")]
     pub fn request_missing_dag_window_blocks(cid: &str, blocks: Vec<String>) -> Self {
         Message::DataProtocol(DataProtocol::RequestMissingDagWindowBlocks {
             cid: cid.to_owned(),
@@ -93,6 +103,7 @@ impl Message {
         })
     }
 
+    #[cfg(feature = "proto_ship")]
     pub fn missing_dag_blocks(cid: &str, blocks: Vec<String>) -> Self {
         Message::DataProtocol(DataProtocol::MissingDagBlocks {
             cid: cid.to_owned(),
@@ -100,8 +111,10 @@ impl Message {
         })
     }
 
-    pub fn request_version() -> Self {
-        Message::ApplicationAPI(ApplicationAPI::RequestVersion)
+    pub fn request_version(resp_label: String) -> Self {
+        Message::ApplicationAPI(ApplicationAPI::RequestVersion {
+            label: Some(resp_label),
+        })
     }
 
     pub fn push(cids: cid_list::CompactList, name: String) -> Result<Self> {
@@ -111,9 +124,12 @@ impl Message {
             Ok(Self::Sync(SyncMessage::Push(PushMessage::new(cids, name))))
         }
     }
+
+    #[cfg(feature = "proto_sync")]
     pub fn pull(cids: cid_list::CompactList) -> Self {
         Self::Sync(SyncMessage::Pull(cids))
     }
+
     pub fn block(block_bytes: Vec<u8>) -> Self {
         Self::Sync(SyncMessage::Block(block_bytes))
     }
@@ -141,7 +157,26 @@ impl Message {
             Self::DataProtocol(_) => "Data",
             Self::ApplicationAPI(_) => "API",
             Self::Error(_) => "Error",
-            Self::Sync(m) => m.name(),
+            Self::Sync(_m) => {
+                #[cfg(feature = "proto_sync")]
+                {
+                    _m.name()
+                }
+                #[cfg(not(feature = "proto_sync"))]
+                "UnsupportedSyncMessage"
+            }
+        }
+    }
+
+    pub fn target_addr(&self) -> Option<String> {
+        match &self {
+            Self::ApplicationAPI(ApplicationAPI::TransmitBlock { target_addr, .. }) => {
+                Some(target_addr.clone())
+            }
+            Self::ApplicationAPI(ApplicationAPI::TransmitDag { target_addr, .. }) => {
+                Some(target_addr.clone())
+            }
+            _ => None,
         }
     }
 }

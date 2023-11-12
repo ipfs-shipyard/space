@@ -1,6 +1,8 @@
 use anyhow::Result;
 use local_storage::storage::Storage;
-use messages::{ApplicationAPI, DagInfo, DataProtocol, Message};
+#[cfg(feature = "proto_ship")]
+use messages::DataProtocol;
+use messages::{ApplicationAPI, DagInfo, Message};
 use std::path::PathBuf;
 
 pub fn import_file(path: &str, storage: &mut Storage) -> Result<Message> {
@@ -44,7 +46,7 @@ pub fn get_missing_dag_blocks(cid: &str, storage: &Storage) -> Result<Message> {
     }))
 }
 
-#[allow(dead_code)]
+#[cfg(feature = "proto_ship")]
 pub fn get_missing_dag_blocks_window_protocol(
     cid: &str,
     blocks: Vec<String>,
@@ -56,7 +58,6 @@ pub fn get_missing_dag_blocks_window_protocol(
             missing_blocks.push(block);
         }
     }
-
     Ok(Message::DataProtocol(DataProtocol::MissingDagBlocks {
         cid: cid.to_string(),
         blocks: missing_blocks,
@@ -113,6 +114,7 @@ pub mod tests {
     struct TestHarness {
         storage: Storage,
         db_dir: TempDir,
+        block_size: u32,
     }
 
     impl TestHarness {
@@ -125,7 +127,11 @@ pub mod tests {
             let provider = SqliteStorageProvider::new(db_path.path().to_str().unwrap()).unwrap();
             provider.setup().unwrap();
             let storage = Storage::new(Arc::new(Mutex::new(provider)), block_sz);
-            TestHarness { storage, db_dir }
+            TestHarness {
+                block_size: block_sz,
+                storage,
+                db_dir,
+            }
         }
 
         pub fn generate_file(&self) -> Result<String> {
@@ -140,9 +146,9 @@ pub mod tests {
             Ok(tmp_file.path().to_str().unwrap().to_owned())
         }
 
-        pub fn zero_file(&self) -> Result<String> {
+        pub fn zero_file(&self, chunk_count: usize) -> Result<String> {
             let mut data = Vec::<u8>::new();
-            data.resize(1024 * 600, 0);
+            data.resize(self.block_size as usize * chunk_count, 0);
             let tmp_file = self.db_dir.child("zero.file");
             tmp_file.write_binary(&data)?;
             Ok(tmp_file.path().to_str().unwrap().to_owned())
@@ -298,8 +304,29 @@ pub mod tests {
     pub fn test_import_zero_file() {
         let mut harness = TestHarness::new();
 
-        // let test_file_path = harness.generate_file().unwrap();
-        let test_file_path = harness.zero_file().unwrap();
+        let test_file_path = harness.zero_file(200).unwrap();
+
+        let imported_file_cid = match import_file(&test_file_path, &mut harness.storage) {
+            Ok(Message::ApplicationAPI(ApplicationAPI::FileImported { cid, .. })) => cid,
+            other => panic!("ImportFile returned wrong response {other:?}"),
+        };
+
+        let (validated_cid, result) = match validate_dag(&imported_file_cid, &harness.storage) {
+            Ok(Message::ApplicationAPI(ApplicationAPI::ValidateDagResponse { cid, result })) => {
+                (cid, result)
+            }
+            other => panic!("ValidateDag returned wrong response {other:?}"),
+        };
+
+        assert_eq!(imported_file_cid, validated_cid);
+        assert_eq!(result, "Dag is valid");
+    }
+
+    #[test]
+    pub fn test_import_small_zero_file() {
+        let mut harness = TestHarness::with_block_size(190);
+
+        let test_file_path = harness.zero_file(3).unwrap();
 
         let imported_file_cid = match import_file(&test_file_path, &mut harness.storage) {
             Ok(Message::ApplicationAPI(ApplicationAPI::FileImported { cid, .. })) => cid,

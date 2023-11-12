@@ -17,3 +17,8 @@ log.workspace = true
 parity-scale-codec.workspace = true
 parity-scale-codec-derive.workspace = true
 serde.workspace = true
+
+[features]
+proto_all = ["proto_ship", "proto_sync"]
+proto_ship = []
+proto_sync = []
