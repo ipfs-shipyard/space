@@ -44,6 +44,7 @@ pub fn get_missing_dag_blocks(cid: &str, storage: &Storage) -> Result<Message> {
     }))
 }
 
+#[allow(dead_code)]
 pub fn get_missing_dag_blocks_window_protocol(
     cid: &str,
     blocks: Vec<String>,

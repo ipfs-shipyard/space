@@ -7,6 +7,9 @@ use transports::UdpTransport;
 #[cfg(all(not(feature = "sqlite"), not(feature = "files")))]
 compile_error! {"Myceli built without a local storage implementation will not function. Select a feature, recommended: either big or small"}
 
+#[cfg(all(not(feature = "proto_ship"), not(feature = "proto_sync")))]
+compile_error! {"Select a protocol feature, e.g. proto_all, proto_sync, or proto_ship"}
+
 fn main() -> Result<()> {
     #[cfg(feature = "good_log")]
     env_logger::init();
@@ -53,11 +56,7 @@ fn main() -> Result<()> {
     )
     .expect("Listener creation failed");
     listener
-        .start(
-            cfg.retry_timeout_duration,
-            cfg.window_size,
-            cfg.block_size.unwrap(),
-        )
+        .start(cfg.retry_timeout_duration, cfg.window_size)
         .expect("Error encountered in listener operation");
     Ok(())
 }

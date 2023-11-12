@@ -1,16 +1,20 @@
-use crate::{handlers, shipper::Shipper, sync::Syncer};
+use crate::handlers;
+#[cfg(feature = "proto_ship")]
+use crate::shipper::Shipper;
+#[cfg(feature = "proto_sync")]
+use crate::sync::Syncer;
 use anyhow::Result;
-use cid::Cid;
 use local_storage::{provider::default_storage_provider, storage::Storage};
 use log::{debug, error, info, trace};
 use messages::{ApplicationAPI, DataProtocol, Message, SyncMessage};
 use std::collections::BTreeSet;
+#[cfg(feature = "proto_ship")]
+use std::thread::spawn;
 use std::{
     net::SocketAddr,
     path::PathBuf,
     sync::mpsc::{self, Sender},
     sync::{Arc, Mutex},
-    thread::spawn,
 };
 use transports::{Transport, TransportError};
 
@@ -19,9 +23,11 @@ pub struct Listener<T> {
     transport: Arc<T>,
     connected: Arc<Mutex<bool>>,
     radio_address: Option<String>,
-    sync: Syncer,
     addrs: BTreeSet<String>,
     sync_counts: [u64; 3],
+    _block_size: u32,
+    #[cfg(feature = "proto_sync")]
+    sync: Syncer,
 }
 
 impl<T: Transport + Send + 'static> Listener<T> {
@@ -32,64 +38,64 @@ impl<T: Transport + Send + 'static> Listener<T> {
         block_size: u32,
         radio_address: Option<String>,
         high_disk_usage: u64,
-        mtu: u16,
+        _mtu: u16,
     ) -> Result<Listener<T>> {
         let provider = default_storage_provider(storage_path, high_disk_usage)?;
-        let missing_blocks = provider.lock().unwrap().get_dangling_cids()?;
         let storage = Storage::new(provider, block_size);
-        let present_blocks = storage.list_available_dags()?;
-        let present_blocks = present_blocks.iter().flat_map(|(c, n)| {
-            let c = Cid::try_from(c.as_str())?;
-            Ok::<_, cid::Error>((c, n.clone()))
-        });
-        let sync = Syncer::new(mtu.into(), present_blocks, missing_blocks)?;
         info!("Listening on {listen_address}");
         let addrs = if let Some(a) = &radio_address {
             BTreeSet::from([a.clone()])
         } else {
             BTreeSet::default()
         };
+        #[cfg(feature = "proto_sync")]
+        let sync = create_syncer(&storage, _mtu)?;
         Ok(Listener {
             storage,
             transport,
             connected: Arc::new(Mutex::new(true)),
             radio_address,
-            sync,
             addrs,
             sync_counts: [0; 3],
+            _block_size: block_size,
+            #[cfg(feature = "proto_sync")]
+            sync,
         })
     }
 
     pub fn start(
         &mut self,
-        shipper_timeout_duration: u64,
-        shipper_window_size: u32,
-        block_size: u32,
-        shipper_packet_delay_ms: u32,
+        _shipper_timeout_duration: u64,
+        _shipper_window_size: u32,
+        _shipper_packet_delay_ms: u32,
     ) -> Result<()> {
-        // First setup the shipper and its pieces
-        let (shipper_sender, shipper_receiver) = mpsc::channel();
-        let shipper_sender_clone = shipper_sender.clone();
-        let shipper_transport = Arc::clone(&self.transport);
-        let initial_connected = Arc::clone(&self.connected);
-        let shipper_radio = self.radio_address.clone();
-        let shipper_storage_provider = self.storage.get_provider();
-        spawn(move || {
-            let mut shipper = Shipper::new(
-                shipper_storage_provider,
-                shipper_receiver,
-                shipper_sender_clone,
-                shipper_timeout_duration,
-                shipper_window_size,
-                shipper_transport,
-                initial_connected,
-                block_size,
-                shipper_radio,
-                shipper_packet_delay_ms
-            )
-            .expect("Shipper creation failed");
-            shipper.receive_msg_loop();
-        });
+        let (shipper_sender, _shipper_receiver) = mpsc::channel();
+        #[cfg(feature = "proto_ship")]
+        {
+            let initial_connected = Arc::clone(&self.connected);
+            // First setup the shipper and its pieces
+            let shipper_transport = Arc::clone(&self.transport);
+            let shipper_radio = self.radio_address.clone();
+            let shipper_storage_provider = self.storage.get_provider();
+            let shipper_sender_clone = shipper_sender.clone();
+            let block_size = self._block_size;
+            spawn(move || {
+                let mut shipper = Shipper::new(
+                    shipper_storage_provider,
+                    _shipper_receiver,
+                    shipper_sender_clone,
+                    _shipper_timeout_duration,
+                    _shipper_window_size,
+                    shipper_transport,
+                    initial_connected,
+                    block_size,
+                    shipper_radio,
+                    _shipper_packet_delay_ms,
+                )
+                .expect("Shipper creation failed");
+                shipper.receive_msg_loop();
+            });
+        }
         loop {
             match self.transport.receive() {
                 Ok((message, sender_addr)) => {
@@ -259,14 +265,32 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 Some(handlers::get_named_dags(&self.storage)?)
             }
             Message::Sync(SyncMessage::Push(pm)) => {
-                self.sync_counts[1] += 1;
-                info!(
-                    "Received a sync push, balance is now {:?}: {pm:?}",
-                    self.sync_counts
-                );
-                self.sync.handle(SyncMessage::Push(pm), &mut self.storage)?
+                #[cfg(feature = "proto_sync")]
+                {
+                    self.sync_counts[1] += 1;
+                    info!(
+                        "Received a sync push, balance is now {:?}: {pm:?}",
+                        self.sync_counts
+                    );
+                    self.sync.handle(SyncMessage::Push(pm), &mut self.storage)?
+                }
+                #[cfg(not(feature = "proto_sync"))]
+                Some(Message::Error(format!(
+                    "Sync protocol not implemented here. Received: {pm:?}"
+                )))
             }
-            Message::Sync(sm) => self.sync.handle(sm, &mut self.storage)?,
+            Message::Sync(sm) => {
+                #[cfg(feature = "proto_sync")]
+                {
+                    self.sync.handle(sm, &mut self.storage)?
+                }
+                #[cfg(not(feature = "proto_sync"))]
+                {
+                    Some(Message::Error(format!(
+                        "Sync protocol not implemented here. Received: {sm:?}"
+                    )))
+                }
+            }
             // Default case for valid messages which don't have handling code implemented yet
             message => {
                 info!("Received message: {:?}", message);
@@ -281,22 +305,29 @@ impl<T: Transport + Send + 'static> Listener<T> {
         Ok(())
     }
 
-    fn upon_import(&mut self, root_cid_str: &str) -> Result<()> {
-        let root = self.storage.get_block_by_cid(root_cid_str)?;
-        self.sync.push_dag(&root, false)?;
+    fn upon_import(&mut self, _root_cid_str: &str) -> Result<()> {
+        #[cfg(feature = "proto_sync")]
+        {
+            let root = self.storage.get_block_by_cid(_root_cid_str)?;
+            self.sync.push_dag(&root, false)?;
+        }
         Ok(())
     }
-    fn transmit_dag(&mut self, root_cid_str: &str, target: &str) -> Result<()> {
-        let root = self.storage.get_block_by_cid(root_cid_str)?;
-        if let Some(immediate_msg) = self.sync.push_dag(&root, true)? {
-            self.transmit_response(immediate_msg, target)?;
+    fn transmit_dag(&mut self, _root_cid_str: &str, _target: &str) -> Result<()> {
+        #[cfg(feature = "proto_sync")]
+        {
+            let root = self.storage.get_block_by_cid(_root_cid_str)?;
+            if let Some(immediate_msg) = self.sync.push_dag(&root, true)? {
+                self.transmit_response(immediate_msg, _target)?;
+            }
         }
         Ok(())
     }
 
     fn bg_tasks(&mut self) -> Result<()> {
-        trace!("Addrs to sync with: {:?}", &self.addrs);
+        #[cfg(feature = "proto_sync")]
         if !self.addrs.is_empty() {
+            trace!("Addrs to sync with: {:?}", &self.addrs);
             if let Some(msg) = self.sync.pop_pending_msg() {
                 if matches!(&msg, Message::Sync(SyncMessage::Push(_))) {
                     self.sync_counts[0] += 1;
@@ -322,8 +353,20 @@ impl<T: Transport + Send + 'static> Listener<T> {
             self.sync_counts[2] += 1;
         } else {
             self.sync_counts[2] = 0;
+            #[cfg(feature = "proto_sync")]
             self.sync.build_msg()?;
         }
         Ok(())
     }
+}
+
+#[cfg(feature = "proto_sync")]
+fn create_syncer(storage: &Storage, mtu: u16) -> Result<Syncer> {
+    let missing_blocks = storage.get_provider().lock().unwrap().get_dangling_cids()?;
+    let present_blocks = storage.list_available_dags()?;
+    let present_blocks = present_blocks.iter().flat_map(|(c, n)| {
+        let c = cid::Cid::try_from(c.as_str())?;
+        Ok::<_, cid::Error>((c, n.clone()))
+    });
+    Ok(Syncer::new(mtu.into(), present_blocks, missing_blocks)?)
 }
