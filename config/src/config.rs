@@ -33,10 +33,12 @@ pub struct Config {
     pub watched_directory: Option<String>,
     //How much storage space should Local Storage use? Measured in kiB. Default is 1 GiB
     pub disk_usage: u64,
-    //Minimum amount of time (milliseconds) to elapse between disk-storage-cleanup passes.
-    //0 = OFF (don't run GC)
-    //Default is 10000 (10 seconds)
-    pub gc_period_ms: u32,
+    //Minimum amount of time (milliseconds) to elapse between background tasks
+    //Note: some background tasks can send a packet on the network depending on circumstance.
+    //Default is 10000 (10 seconds).
+    //Minimum is 10 (10ms)
+    //Maximum is 3600000 (1 hour)
+    pub chatter_ms: u32,
     pub shipper_throttle_packet_delay_ms: u32,
 }
 
@@ -62,7 +64,7 @@ impl Default for Config {
             radio_address: None,
             watched_directory: None,
             disk_usage: 1024 * 1024,
-            gc_period_ms: 10_000,
+            chatter_ms: 10_000,
             shipper_throttle_packet_delay_ms: 0,
         }
     }

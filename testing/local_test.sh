@@ -1,13 +1,13 @@
 #!/bin/bash -e
 
-if ! ( uname | grep Linux )
+if ! ( uname | grep -q Linux )
 then
   echo "This script only works on linux."
   exit 6
 fi
 
 stop() {
-  tty >/dev/null && echo stop "${@}"
+  #tty >/dev/null && echo stop "${@}"
   find ${2-*}/ -name "*${1}*" -type f -exec fuser '{}' \; 2>/dev/null | while read p
   do
     kill ${p}
@@ -72,7 +72,7 @@ check_log() {
   do
     if ls ${l}/${3-*}.log >/dev/null
     then
-      grep --color=always "${1}" ${l}/${3-*}.log && return
+      grep --max-count=1 --color=always "${1}" ${l}/${3-*}.log && return
     else
       sleep 9
     fi
@@ -91,7 +91,7 @@ kill_pid() {
   do
     if [ -d /proc/${1}/ ]
     then
-      kill ${1}
+      kill ${1} || true
       sleep ${i}
     else
       return 0
@@ -102,7 +102,7 @@ kill_pid() {
 }
 kill_myceli() {
   export c="$1"
-  if grep pid= ${c}/myceli.log
+  if grep -q pid= ${c}/myceli.log 2>/dev/null
   then
     kill_pid `grep pid= ${c}/myceli.log | cut -d = -f 2`
   fi
@@ -118,7 +118,7 @@ kill_myceli() {
   stop myceli ${c}
 }
 start() {
-  echo start "${@}"
+  #echo start "${@}"
   [ $# -lt 2 ] && exit 9
   stop ${1} ${2}
   sleep 1
@@ -139,34 +139,50 @@ start_myceli() {
   export RUST_LOG=trace
   sleep 1
   start myceli ${c} config.toml
-  check_log 'pid=' ${c}
+  until [ -f ${c}/myceli.log ]
+  do
+    sleep 1
+  done
+  check_log 'pid=' ${c} >/dev/null
 }
 port_open() {
-  if echo > /dev/tcp/127.0.0.1/${1}
+  if nc -u -z -w 9 127.0.0.1 ${1} 2>/dev/null
   then
+    return 0
+  elif nc  -z -w 9 127.0.0.1 ${1} 2>/dev/null
+  then
+   #echo "Port ${1} is TCP"
     return 0
   else
     echo "port ${1} not yet open"
+    false
   fi
 }
 ( ipfs daemon <&- >${o}/ipfs.log 2>&1 & ) >/dev/null 2>&1 &
-rm -rv sat || true
-rm -rv gnd || true
+rm -r sat || true
+rm -r gnd || true
 mkdir -p sat gnd ctl
-cat > sat/config.toml <<SATCFG
-listen_address = "0.0.0.0:8764"
-storage_path = "."
-watched_directory = "watched"
+configure() {
+  cat > sat/config.toml <<SATCFG
+  listen_address = "127.0.0.1:8764"
+  radio_address  = "127.0.0.1:8765"
+  storage_path = "."
+  watched_directory = "watched"
+  chatter_ms = ${1}
 SATCFG
-cat > gnd/config.toml <<GNDCFG
-listen_address = "0.0.0.0:8765"
-storage_path = "."
-watched_directory = "watched"
+  cat > gnd/config.toml <<GNDCFG
+  radio_address  = "0.0.0.0:8764"
+  listen_address = "0.0.0.0:8765"
+  storage_path = "."
+  watched_directory = "watched"
+  chatter_ms = ${1}
 GNDCFG
-cat > gnd/hyphae.toml <<HYPHCFG
-myceli_address= "127.0.0.1:8765"
-kubo_address  = "127.0.0.1:5001"
+  cat > gnd/hyphae.toml <<HYPHCFG
+  myceli_address= "127.0.0.1:8765"
+  kubo_address  = "127.0.0.1:5001"
 HYPHCFG
+}
+configure 9876543
 bld() {
   cargo build --bin ${2} --features ${3} --no-default-features --profile "${4}"
   bin=`cargo metadata --format-version 1 | jq -r .target_directory`/${4}/${2}
@@ -180,28 +196,35 @@ bld sat myceli small small
 bld sat watcher small small
 start_myceli sat
 start_myceli gnd
-for p in 5001 8765
+for i in 1{9..0}
 do
-  if ! port_open ${p}
-  then
-    sleep 9
-  fi
+  sleep $i
+  for p in 5001 876{5,4}
+  do
+    if ! port_open ${p}
+    then
+      sleep $i
+    fi
+  done
 done
 for p in 5001 876{5,4}
 do
-  sleep 1
   port_open ${p}
 done
-
 controller() {
-  echo "controller(${@})"
+  #echo "controller(${@})"
   port=${1}
   shift
   sleep 1
-  timeout 99 ./ctl/controller --listen-mode 127.0.0.1:${port} "${@}" 2>ctl/controller.log | tee ctl/output.log
+  if ! timeout 99 ./ctl/controller --listen-mode 127.0.0.1:${port} "${@}" 2> ctl/controller.log > ctl/output.log
+  then
+    echo -e "\n\t ### \t Controller command failed: \t ### \t ${*} \t ###"
+    grep -n . ctl/controller.log
+    grep -n . ctl/output.log
+    false
+  fi
 }
 cid_present() {
-  ls -lrth */storage.db || echo obviously the CID is not present
   if [ -f ${1}/cids/${2} ]
   then
     true
@@ -237,10 +260,10 @@ transmit() {
   cid_present ${3} ${cid}
   b=`other_side ${3}`
   ! cid_present ${b} ${cid}
-  timeout 9 cargo run --bin controller -- 127.0.0.1:${1} transmit-dag "${cid}" 127.0.0.1:${2} 9 2>&1 | tee ctl/controller.log
+  echo "transmit: ./ctl/controller 127.0.0.1:${1} transmit-dag \"${cid}\" 127.0.0.1:${2} 9"
+  timeout 9 ./ctl/controller 127.0.0.1:${1} transmit-dag "${cid}" 127.0.0.1:${2} 9 > ctl/controller.log 2>&1
   for i in {0..9}
   do
-    grep -n "${cid}" */*.log || true
     if cid_present ${b} ${cid}
     then
       return 0
@@ -271,7 +294,7 @@ s2g() {
   echo "Transmit ${cid} from satellite to ground..."
   transmit 8764 8765 sat
 }
-ls -lrth */storage.db || date
+#ls -lrth */storage.db || date
 
 echo -e '\n# Test Case - Verify Myceli Instances Alive'
 
@@ -295,7 +318,7 @@ check_log FileImported ctl
 
 echo ' ...with the CID obtained from the FileImported response... '
 export cid=`grep 'Received:.*FileImported' ctl/controller.log | tail -n 1 | cut -d '"' -f 4`
-echo ' ...and with the network address of the ground-to-space radio link... '
+echo "... cid=${cid} ...and with the network address of the ground-to-space radio link... "
 echo 'send the TransmitDag command to the myceli ground instance'
 g2s
 
@@ -331,7 +354,7 @@ echo 'Shutdown the myceli ground instance'
 kill_myceli gnd
 
 echo ', delete the storage database'
-rm -v gnd/storage.db
+rm gnd/storage.db
 
 echo ', and start the myceli ground instance again.'
 start_myceli gnd
@@ -364,41 +387,41 @@ do
 done
 ipfs block get ${cid}
 ipfs dag get ${cid} | jq .
-set +x
-stop hyphae
 
-echo -e '\n# Test suite: watcher'
+kill_all
 
-mkdir gnd/watched sat/watched/
-date > gnd/watched/gnd.prexisting.txt
-date -d 'next second' > sat/watched/sat.prexisting.txt
-export RUST_LOG=debug
-start watcher gnd config.toml
-start watcher sat config.toml
-sleep 5
 wait_for_sync() {
   d=${2}
   check_log "${3}.*${d}${1}"          ${d} watcher
-  check_log "Imported.path.*${d}${1}" ${d} myceli
+#  check_log "Imported.path.*${d}${1}" ${d} myceli
   check_log "ransmit.*Sync.*Push"     ${d} myceli
   b=`other_side ${d}`
   check_log "Sync::handle(Push(PushMsg(${d}${1}" ${b} myceli
-  check_log "Sync::handle.*Block" ${b} myceli
+#  check_log "Sync::handle.*Block" ${b} myceli
   p=`port_for ${b}`
   touch ${o}/notfound
-  for i in 1{0..9}
+  for i in {0..9}1
   do
     sleep $i
     controller ${p} --output-format json list-files
-    if ! grep --color=always "${d}${1}" ctl/output.log
+    if jq ".ApplicationAPI.AvailableDags.dags[]" ctl/output.log 2>/dev/null | grep -F --color=always "${d}${1}"
     then
-      sleep $i
-      continue
+      break
     fi
-    export cid=`jq -r ".ApplicationAPI.AvailableDags.dags[] | select( .filename == \"${d}${1}\" ).cid"  ctl/output.log`
+  done
+  export cid=`jq -r ".ApplicationAPI.AvailableDags.dags[] | select( .filename == \"${d}${1}\" ).cid"  ctl/output.log`
+  echo "filename=${d}${1};CID=${cid}"
+  if [ "${cid}" = '' ]
+  then
+    jq . ctl/output.log
+    exit 32
+  fi
+  for i in {0..9}1
+  do
     controller ${p} --output-format json validate-dag ${cid}
-    if grep -F --color=always 'Dag is valid' ctl/output.log
+    if jq .ApplicationAPI.ValidateDagResponse.result ctl/output.log 2>/dev/null | grep -F --color=always 'Dag is valid'
     then
+      cat ctl/output.log
       rm ${o}/notfound
       break
     fi
@@ -406,6 +429,7 @@ wait_for_sync() {
   if [ -f ${o}/notfound ]
   then
     echo "DAG for ${d}${1} never finished syncing."
+    kill_all
     exit 5
   fi
   e=`pwd`/${b}/synced.${d}${1}
@@ -418,9 +442,9 @@ wait_for_sync() {
       sleep $i
       continue
     fi
-    ls -lh ${e}
-    stat --format=%Y ${e}
-    date -d '1 second ago' +%s
+    #ls -lh ${e}
+    #stat --format=%Y ${e}
+    #date -d '1 second ago' +%s
     if [ `stat --format=%Y ${e}` -lt `date -d '1 second ago' +%s` ]
     then
       break
@@ -428,19 +452,42 @@ wait_for_sync() {
   done
   diff ${b}/synced.${d}${1} ${d}/watched/${d}${1}
 }
+
+echo -e '\n\n# Test suite: watcher'
+
+mkdir gnd/watched sat/watched/
+date > gnd/watched/gnd.prexisting.txt
+date -d 'next second' > sat/watched/sat.prexisting.txt
+configure 9
+start_myceli sat
+start_myceli gnd
+start watcher gnd config.toml
+start watcher sat config.toml
+sleep 5
+echo -e '\n  ## Test: watcher discovers pre-existing file\n'
 wait_for_sync .prexisting.txt gnd 'Discovered path in'
 wait_for_sync .prexisting.txt sat 'Discovered path in'
+
+echo -e '\n  ## Test: watcher picks up moved-in file\n'
 for s in gnd sat
 do
   echo 'begin' > ${o}/${s}.big.txt
   yes $s `date` | head -c 2048 >> ${o}/${s}.big.txt
   echo -e '\nend' >> ${o}/${s}.big.txt
-  mv -v ${o}/${s}.big.txt ${s}/watched/
+  mv ${o}/${s}.big.txt ${s}/watched/
   sleep 1
 done
 wait_for_sync .big.txt sat 'File modified, import:'
 wait_for_sync .big.txt gnd 'File modified, import:'
 
+echo -e '\n  ## Test: watcher picks up file written in-situ\n'
+for s in gnd sat
+do
+  yes $s `date` | head -c 2048 >> ${s}/watched/${s}.written.txt
+  sleep 1
+done
+wait_for_sync .written.txt sat 'File modified, import:'
+wait_for_sync .written.txt gnd 'File modified, import:'
 
 echo -e '\n\n\t###\t###\t PASSED \t###\t###\n'
 kill_all

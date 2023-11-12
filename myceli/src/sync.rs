@@ -22,7 +22,8 @@ pub(crate) struct Syncer {
     push: ByMeta,
     mtu: usize,
     ready: VecDeque<Message>,
-    named_pushes: Vec<(Cid, String)>,
+    pending_names: Vec<(Cid, String)>,
+    names: HashMap<Cid, String>,
 }
 
 #[derive(Clone, Copy)]
@@ -42,12 +43,14 @@ impl Syncer {
             push: ByMeta::default(),
             mtu,
             ready: VecDeque::default(),
-            named_pushes: Vec::default(),
+            pending_names: Vec::default(),
+            names: HashMap::default(),
         };
         for (cid, name) in known_knowns {
             result.will_push(&cid)?;
             if !name.is_empty() {
-                result.named_pushes.push((cid, name));
+                result.names.insert(cid, name.clone());
+                result.pending_names.push((cid, name));
             }
         }
         for cid in known_unknowns {
@@ -55,32 +58,37 @@ impl Syncer {
         }
         Ok(result)
     }
-    pub fn push_dag(
-        &mut self,
-        filename: String,
-        root: Cid,
-        mut other_blocks: Vec<Cid>,
-        later: bool,
-    ) -> Result<()> {
-        self.will_push(&root)?;
-        for cid in &other_blocks {
-            self.will_push(cid)?;
+    pub fn push_dag(&mut self, root: &StoredBlock, later: bool) -> Result<Option<Message>> {
+        debug!("push_dag({root:?},later={later}");
+        let root_cid = Cid::try_from(root.cid.as_str())?;
+        self.will_push(&root_cid)?;
+        let mut linked_cids = Vec::default();
+        for link in &root.links {
+            let link_cid = Cid::try_from(link.as_str())?;
+            self.will_push(&link_cid)?;
+            linked_cids.push(link_cid)
         }
-        self.named_pushes.push((root, filename.clone()));
-        if later {
-            return Ok(());
+        let mut root_push = None;
+        if let Some(name) = &root.filename {
+            self.pending_names.push((root_cid, name.clone()));
+            self.names.insert(root_cid, name.clone());
+            let mut list = CompactList::try_from(&root_cid)?;
+            let size = self.mtu - messages::PUSH_OVERHEAD - root.filename.encoded_size();
+            linked_cids.retain(|cid| !list.include(cid, size));
+            let root_msg = Message::push(list, name.clone())?;
+            if later {
+                self.ready.push_front(root_msg);
+            } else {
+                root_push = Some(root_msg)
+            }
+        } else {
+            linked_cids.push(root_cid);
         }
-        let mut list = CompactList::try_from(&root)?;
-        other_blocks.push(root);
-        let size = self.mtu - messages::PUSH_OVERHEAD - filename.encoded_size();
-        other_blocks.retain(|cid| !list.include(cid, size));
-        let root_msg = Message::push(list, filename)?;
-        self.ready.push_front(root_msg);
-        let other_msgs = self.push_now(other_blocks)?;
+        let other_msgs = self.push_now(linked_cids)?;
         for msg in other_msgs {
             self.ready.push_back(msg);
         }
-        Ok(())
+        Ok(root_push)
     }
     pub fn push_now(&mut self, cids: Vec<Cid>) -> anyhow::Result<Vec<Message>> {
         for cid in &cids {
@@ -118,7 +126,7 @@ impl Syncer {
         self.ready.pop_front()
     }
     pub fn build_msg(&mut self) -> Result<()> {
-        if let Some((cid, name)) = self.named_pushes.pop() {
+        if let Some((cid, name)) = self.pending_names.pop() {
             let mut list = cid_list::CompactList::try_from(&cid)?;
             self.fill(
                 &mut list,
@@ -308,10 +316,11 @@ impl Syncer {
                 result = self.handle_push("", links.iter().cloned(), store);
             }
             let links = links.iter().map(|c| c.to_string()).collect();
-            debug!("Hit CID ({cid}) I was waiting on, importing it with links {links:?}");
+            let filename = self.names.get(&cid).cloned();
+            debug!("Hit CID ({cid}) I was waiting on, importing it named {filename:?} with links {links:?}");
             store.import_block(&StoredBlock {
                 cid: cid.to_string(),
-                filename: None,
+                filename,
                 data: bytes,
                 links,
             })?;

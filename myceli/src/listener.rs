@@ -5,7 +5,6 @@ use local_storage::{provider::default_storage_provider, storage::Storage};
 use log::{debug, error, info, trace};
 use messages::{ApplicationAPI, DataProtocol, Message, SyncMessage};
 use std::collections::BTreeSet;
-use std::path::Path;
 use std::{
     net::SocketAddr,
     path::PathBuf,
@@ -144,6 +143,7 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 target_addr,
                 retries,
             }) => {
+                self.transmit_dag(&cid, &target_addr)?;
                 shipper_sender.send((
                     DataProtocol::RequestTransmitDag {
                         cid: cid.clone(),
@@ -152,11 +152,6 @@ impl<T: Transport + Send + 'static> Listener<T> {
                     },
                     target.to_string(),
                 ))?;
-                if let Ok(prov) = self.storage.get_provider().lock() {
-                    let name = prov.get_name(&cid)?;
-                    self.sync
-                        .push_dag(name, Cid::try_from(cid.as_str())?, Vec::new(), false)?;
-                }
                 None
             }
             Message::ApplicationAPI(ApplicationAPI::TransmitBlock { cid, target_addr }) => {
@@ -170,24 +165,12 @@ impl<T: Transport + Send + 'static> Listener<T> {
                 let result = handlers::import_file(&path, &mut self.storage)?;
                 match &result {
                     Message::ApplicationAPI(ApplicationAPI::FileImported { path, cid }) => {
-                        let links = self.storage.get_all_dag_cids(cid, None, None)?;
-                        let links = links
-                            .iter()
-                            .flat_map(|s| Cid::try_from(s.as_str()).ok())
-                            .collect();
-                        let filename = Path::new(&path)
-                            .file_name()
-                            .iter()
-                            .flat_map(|o| o.to_str())
-                            .map(|s| s.to_owned())
-                            .next()
-                            .unwrap_or_default();
-                        self.sync
-                            .push_dag(filename, cid.as_str().try_into()?, links, true)
-                            .ok();
+                        if let Err(e) = self.upon_import(cid) {
+                            error!("Error creating pushes corresponding to recent import of path {path:?}: {e:?}");
+                        }
                     }
                     _ => error!(
-                        "Unexpected and weird response to an import-file API request: {result:?}"
+                        "Unexpected and weird response to an import-file API request: {result:?} for path {path:?}"
                     ),
                 }
                 Some(result)
@@ -295,6 +278,19 @@ impl<T: Transport + Send + 'static> Listener<T> {
 
     fn transmit_response(&self, message: Message, target_addr: &str) -> Result<()> {
         self.transport.send(message, target_addr)?;
+        Ok(())
+    }
+
+    fn upon_import(&mut self, root_cid_str: &str) -> Result<()> {
+        let root = self.storage.get_block_by_cid(root_cid_str)?;
+        self.sync.push_dag(&root, false)?;
+        Ok(())
+    }
+    fn transmit_dag(&mut self, root_cid_str: &str, target: &str) -> Result<()> {
+        let root = self.storage.get_block_by_cid(root_cid_str)?;
+        if let Some(immediate_msg) = self.sync.push_dag(&root, true)? {
+            self.transmit_response(immediate_msg, target)?;
+        }
         Ok(())
     }
 

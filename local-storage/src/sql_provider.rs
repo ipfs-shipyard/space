@@ -1,7 +1,7 @@
 use crate::{block::StoredBlock, error::StorageError, provider::StorageProvider};
 use anyhow::{bail, Result};
 use cid::Cid;
-use log::trace;
+use log::{debug, info, trace};
 use rusqlite::{params_from_iter, Connection};
 use std::{path::PathBuf, str::FromStr};
 
@@ -127,10 +127,12 @@ impl SqliteStorageProvider {
 
 impl StorageProvider for SqliteStorageProvider {
     fn import_block(&mut self, block: &StoredBlock) -> Result<()> {
-        self.conn.execute(
+        if 1 == self.conn.execute(
             "INSERT OR IGNORE INTO blocks (cid, data, filename) VALUES (?1, ?2, ?3)",
             (&block.cid, &block.data, &block.filename),
-        )?;
+        )? {
+            debug!("Inserted block {block:?}");
+        }
         // TODO: Should we have another indicator for root blocks that isn't just the number of links?
         // TODO: This logic should probably get pulled up and split into two parts:
         // 1. import_block - Handles importing block into block store
@@ -236,10 +238,14 @@ impl StorageProvider for SqliteStorageProvider {
     }
 
     fn name_dag(&self, cid: &str, file_name: &str) -> Result<()> {
-        self.conn.execute(
+        let updated_count = self.conn.execute(
             "UPDATE blocks SET filename = ?1 WHERE cid = ?2",
             (file_name, cid),
         )?;
+        if updated_count != 1 {
+            bail!("When naming DAG {cid} {file_name}, expected it to hit exactly 1 row, not {updated_count}");
+        }
+        info!("Named {cid} {file_name}");
         Ok(())
     }
 

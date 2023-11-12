@@ -33,16 +33,12 @@ fn main() -> Result<()> {
 
     let db_path = cfg.storage_path.clone();
     let disk_bytes = cfg.disk_usage * 1024;
-    let timeout = if cfg.gc_period_ms > 0 {
-        Some(Duration::from_millis(cfg.gc_period_ms.into()))
-    } else {
-        None
-    };
+    let timeout = Duration::from_millis(cfg.chatter_ms.clamp(10, 60 * 60 * 1000).into());
     let mut udp_transport =
         UdpTransport::new(&cfg.listen_address, cfg.mtu, cfg.chunk_transmit_throttle)
             .expect("Failed to create udp transport");
     udp_transport
-        .set_read_timeout(timeout)
+        .set_read_timeout(Some(timeout))
         .expect("Failed to set timeout");
     println!("pid={}", std::process::id());
     let mut listener = Listener::new(

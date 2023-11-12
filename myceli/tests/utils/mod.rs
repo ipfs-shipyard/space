@@ -112,7 +112,7 @@ impl TestController {
     pub fn new() -> Self {
         let mut transport = UdpTransport::new("127.0.0.1:0", 60, None).unwrap();
         transport
-            .set_read_timeout(Some(Duration::from_millis(9006)))
+            .set_read_timeout(Some(Duration::from_millis(9008)))
             .unwrap();
         transport.set_max_read_attempts(Some(1));
         TestController { transport }

@@ -6,8 +6,8 @@ use ipfs_unixfs::{
     builder::{File, FileBuilder},
     Block,
 };
-use std::sync::Arc;
-use std::{fs::File as FsFile, io::Write, path::Path};
+use log::warn;
+use std::{fs::File as FsFile, io::Write, path::Path, sync::Arc};
 
 use log::{debug, error, info, trace};
 
@@ -83,7 +83,6 @@ impl Storage {
                 let lck = self.provider.lock().unwrap();
                 lck.name_dag(&root_cid, filename)?;
             }
-
             info!(
                 "Imported path {} to {} in {} blocks",
                 path.display(),
@@ -210,10 +209,16 @@ impl Storage {
     }
 
     pub fn set_name(&self, cid: &str, name: &str) {
+        if name.is_empty() {
+            warn!("Asked to name {cid} to the empty string, being ignored.");
+            return;
+        }
         if let Ok(prov) = self.provider.lock() {
             if let Err(e) = prov.name_dag(cid, name) {
                 error!("Error: {e:?}");
             }
+        } else {
+            error!("Failed to lock storage provider while naming {cid} {name}");
         }
     }
 }
