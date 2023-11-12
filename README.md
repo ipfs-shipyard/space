@@ -111,7 +111,7 @@ These are assumptions we are establishing to 1) limit scope and 2) establish rea
 ```mermaid
 flowchart TD
     subgraph Vehicle
-        A[Watcher] -- ApplicationAPI/UDP --> B[Myceli]
+        A[Application (e.g. Watcher)] -- ApplicationAPI/UDP --> B[Myceli]
         B <-- CommsAPI/UDP --> C[Comms]
     end
 
@@ -120,7 +120,7 @@ flowchart TD
     end
 
     subgraph Ground
-        F[Controller] -- ApplicationAPI/UDP --> E[Myceli]
+        F[Service (e.g. Controller)] -- ApplicationAPI/UDP --> E[Myceli]
         E <-- CommsAPI/UDP --> G[Comms]
     end
 
@@ -128,12 +128,9 @@ flowchart TD
     G <--> Z
 ```
 
-This is an overview of the different pieces of software which will be built and which are assumed to exist in the target
-environments:
-
 * Interfaces
     * Application API - An API provided by the IPFS processes to allow it to be commanded by local processes either
-      onboard spacecraft or in a ground station. This will be a network API using UDP packets sent either over the local
+      onboard spacecraft or in a ground station. This is a network API using UDP packets sent either over the local
       network or the communications link.
     * Communications API - An API provided by the IPFS process for integration with communications links either onboard
       spacecraft or in a ground station. The IPFS side of this API will be a network API using UDP packets. The system
@@ -144,7 +141,7 @@ environments:
 * Spacecraft
     * IPFS - A modified IPFS instance tailored for the spacecraft environment with the functionality required to
       facilitate content-addressable data exchanges.
-    * Application - Each spacecraft is expected to have onboard applications or services which will interact with the
+    * Application - Each spacecraft may have onboard applications or services which will interact with the
       IPFS process via the `Application API` to perform functions such as _"store a file in IPFS"_ or _"transmit a CID
       to ground"_.
     * Comms - Each spacecraft is expected to have a communications link with an existing interface, which IPFS will

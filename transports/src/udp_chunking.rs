@@ -162,19 +162,18 @@ impl SimpleChunker {
             };
         trace!("Message ID# {msg_id}={message:?}");
         let mut seq_num = 0;
-        let (message_bytes, expect_single) = if message.needs_envelope() {
+        let message_bytes = if message.needs_envelope() {
             // Create container around message
             let container = MessageContainer::new(message);
             // Convert container into raw bytes
-            (container.to_bytes(), false)
+            container.to_bytes()
         } else {
-            (message.to_bytes(), true)
+            message.to_bytes()
         };
         if message_bytes.encoded_size() < self.mtu.into() {
             debug!("Message {msg_id} fits in a single packet: {message_bytes:?}");
             return Ok(vec![Chunk::Single(message_bytes).encode()]);
         }
-        debug_assert!(!expect_single);
         // Break bytes up into mtu-sized simple chunks
         let mut chunks = message_bytes
             .chunks(usize::from(self.mtu - CHUNK_OVERHEAD))

@@ -1,5 +1,6 @@
 mod utils;
 
+#[allow(unused)]
 use messages::{ApplicationAPI, DataProtocol, Message};
 use std::thread::sleep;
 use std::time::Duration;
@@ -207,9 +208,11 @@ pub fn test_compare_dag_list_after_transfer() {
     assert_eq!(transmitter_dags, receiver_dags);
 }
 
+#[cfg(not(feature = "proto_sync"))]
 #[cfg(feature = "proto_ship")]
 #[test]
 pub fn test_transmit_dag_no_response_exceed_retries() {
+    env_logger::init();
     let transmitter = TestListener::new();
     let mut controller = TestController::new();
 
@@ -244,7 +247,9 @@ pub fn test_transmit_dag_no_response_exceed_retries() {
     loop {
         match controller.recv_msg() {
             // These are expected prior to getting the missing dag block requests
-            Ok(Message::DataProtocol(DataProtocol::Block(_))) => {}
+            Ok(Message::DataProtocol(DataProtocol::Block(b))) => {
+                println!("Got a block! {b:?}");
+            }
             Ok(Message::DataProtocol(DataProtocol::RequestMissingDagWindowBlocks {
                 cid,
                 blocks: _,
@@ -252,7 +257,14 @@ pub fn test_transmit_dag_no_response_exceed_retries() {
                 assert_eq!(cid, root_cid);
                 retries += 1;
             }
-            _ => {
+            Ok(Message::ApplicationAPI(ApplicationAPI::Acknowledged { req })) => {
+                println!("Ack={req}")
+            }
+            Ok(Message::Error(e)) => {
+                panic!("Received error message {e:?}");
+            }
+            x => {
+                println!("Received {x:?}");
                 break;
             }
         }

@@ -20,14 +20,15 @@ pub fn wait_receiving_done(receiver: &TestListener, controller: &mut TestControl
     let mut num_retries = 0;
 
     loop {
-        let current_blocks =
-            if let Message::ApplicationAPI(messages::ApplicationAPI::AvailableBlocks { cids }) =
-                controller.send_and_recv(&receiver.listen_addr, Message::request_available_blocks())
-            {
-                cids
-            } else {
-                panic!("Failed to get correct response to blocks request");
-            };
+        while controller.recv_msg().ok().is_some() {
+            sleep(Duration::from_millis(1));
+        }
+        let current_blocks = match controller
+            .send_and_recv(&receiver.listen_addr, Message::request_available_blocks())
+        {
+            Message::ApplicationAPI(messages::ApplicationAPI::AvailableBlocks { cids }) => cids,
+            x => panic!("Failed to get ApplicationAPI::AvailableBlocks response to blocks request; got {x:?}"),
+        };
         let current_num_blocks = current_blocks.len();
         if current_num_blocks > prev_num_blocks {
             prev_num_blocks = current_num_blocks;
@@ -100,7 +101,7 @@ fn start_listener_thread(listen_addr: SocketAddr, db_path: ChildPath) {
     let mut listener =
         Listener::new(&listen_addr, db_path, transport, BLOCK_SIZE, None, 9, 512).unwrap();
     listener
-        .start(10, 2, BLOCK_SIZE, 0)
+        .start(10, 2, 1)
         .expect("Error encountered in listener");
 }
 
@@ -112,7 +113,7 @@ impl TestController {
     pub fn new() -> Self {
         let mut transport = UdpTransport::new("127.0.0.1:0", 60, None).unwrap();
         transport
-            .set_read_timeout(Some(Duration::from_millis(9031)))
+            .set_read_timeout(Some(Duration::from_millis(9032)))
             .unwrap();
         transport.set_max_read_attempts(Some(1));
         TestController { transport }
@@ -120,7 +121,7 @@ impl TestController {
 
     pub fn send_and_recv(&mut self, target_addr: &str, message: Message) -> Message {
         self.send_msg(message, target_addr);
-        std::thread::sleep(Duration::from_millis(690));
+        std::thread::sleep(Duration::from_millis(700));
         self.recv_msg().unwrap()
     }
 
