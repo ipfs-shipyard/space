@@ -63,7 +63,11 @@ fn main() -> Result<()> {
     )
     .expect("Listener creation failed");
     listener
-        .start(cfg.retry_timeout_duration, cfg.window_size)
+        .start(
+            cfg.retry_timeout_duration,
+            cfg.window_size,
+            cfg.shipper_throttle_packet_delay_ms,
+        )
         .expect("Error encountered in listener operation");
     println!("Exiting");
     warn!("Exiting");
