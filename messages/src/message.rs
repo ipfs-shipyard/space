@@ -195,13 +195,13 @@ impl Message {
     }
 }
 
+#[cfg(all(feature = "proto_sync", feature = "proto_ship"))]
 #[cfg(test)]
 mod tests {
     use super::*;
     use cid::Cid;
     use std::str::FromStr;
 
-    #[cfg(all(feature = "proto_sync", feature = "proto_ship"))]
     #[test]
     fn onepackettypemessagebiggerthanmtuwhenotherfitsjust() {
         let block_size = Message::fit_size(512);

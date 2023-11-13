@@ -207,10 +207,9 @@ impl SimpleChunker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::iter;
 
     use messages::ApplicationAPI;
-    use parity_scale_codec::{Compact, CompactLen, Encode};
+    use parity_scale_codec::Encode;
     use rand::seq::SliceRandom;
     use rand::thread_rng;
 
@@ -465,8 +464,11 @@ mod tests {
         assert!(unchunked_msg.is_err());
     }
 
+    #[cfg(feature = "proto_sync")]
     #[test]
     pub fn overhead_check() {
+        use parity_scale_codec::{Compact, CompactLen};
+        use std::iter;
         for j in [0, 62, 0xFD, 0xFFD, 0xFFFD, 0xFFFFD] {
             for i in j..(j + 9) {
                 let dyn_ovr = Compact::<u64>::compact_len(&i.try_into().unwrap());

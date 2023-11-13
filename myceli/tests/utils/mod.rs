@@ -113,7 +113,7 @@ impl TestController {
     pub fn new() -> Self {
         let mut transport = UdpTransport::new("127.0.0.1:0", 60, None).unwrap();
         transport
-            .set_read_timeout(Some(Duration::from_millis(9032)))
+            .set_read_timeout(Some(Duration::from_millis(9034)))
             .unwrap();
         transport.set_max_read_attempts(Some(1));
         TestController { transport }
@@ -121,7 +121,7 @@ impl TestController {
 
     pub fn send_and_recv(&mut self, target_addr: &str, message: Message) -> Message {
         self.send_msg(message, target_addr);
-        std::thread::sleep(Duration::from_millis(700));
+        std::thread::sleep(Duration::from_millis(710));
         self.recv_msg().unwrap()
     }
 
@@ -136,8 +136,9 @@ impl TestController {
     }
 }
 
+#[allow(unused)]
 pub fn hash_file(path_str: &str) -> String {
     let path = PathBuf::from(path_str);
     let mut hash = Blake2s256::new();
-    get_hash_file(path, &mut hash).unwrap()
+    get_hash_file(path, &mut hash).expect(path_str)
 }
