@@ -148,9 +148,9 @@ sequenceDiagram
 |------------|
 | Chunk Type |
 
-* 0 = Leading = more chunks after this needed to piece the message together
-* 1 = Final = last chunk in message.
-* 2 = Single = Special case, whoe message fits in a configured MTU
+- 0 = Leading = more chunks after this needed to piece the message together
+- 1 = Final = last chunk in message.
+- 2 = Single = Special case, whoe message fits in a configured MTU
 
 ### Myceli message chunk
 
@@ -158,8 +158,8 @@ sequenceDiagram
 |------------|-------------------------------|----------------------------------------------------------------|
 | 2 = Single | Length of the bytes to follow | Data: deserialize this payload as a Message (see next section) |
 
-* Special case when the whole message can fit this way
-* Avoids message ID & sequence ID overhead
+- Special case when the whole message can fit this way
+- Avoids message ID & sequence ID overhead
 
 ### Myceli message chunk
 
@@ -167,7 +167,7 @@ sequenceDiagram
 |---------------------|-------------------------------|
 | 1/2 = Leading/Final | Integer Message ID; max=65535 |
 
-* Keep all chunks with the same Message ID together
+- Keep all chunks with the same Message ID together
 
 ### Myceli message chunk
 
@@ -175,19 +175,19 @@ sequenceDiagram
 |---------------------|-------------------------------|----------------------|
 | 1/2 = Leading/Final | Integer Message ID; max=65535 | Sequence Number      |
 
-* If the Chunk Type is Final, then Sequence Number = N
-* For a given Message ID, need chunks with sequence #'s 0, 1, 2, ... N
+- If the Chunk Type is Final, then Sequence Number = N
+- For a given Message ID, need chunks with sequence #'s 0, 1, 2, ... N
 
 ### Myceli message chunk
 
-| 1 byte              | Variable (1-4 bytes)          | Variable (1-6 bytes) | Variable (1-6 bytes) | Variable (previous field bytes) |
-|---------------------|-------------------------------|----------------------|----------------------|---------------------------------|
-| 1/2 = Leading/Final | Integer Message ID; max=65535 | Sequence Number      | Length of next field | Data                            |
+| 1 byte              | (1-4 bytes)                   | (1-6 bytes)     | (1-6 bytes) | N Bytes |
+|---------------------|-------------------------------|-----------------|-------------|---------|
+| 1/2 = Leading/Final | Integer Message ID; max=65535 | Sequence Number | Length      | Data    |
 
 Once all (0..Final) sequence numbered chunks of a message are received
 
-* Concatenate Data fields in sequence # order
-* Deserialize the result as a Message Container...
+- Concatenate Data fields in sequence # order
+- Deserialize the result as a Message Container...
 
 ### Message Container
 
@@ -195,14 +195,16 @@ Once all (0..Final) sequence numbered chunks of a message are received
 |-------------------------------|----------------|---------|
 | Hash of data in message chunk | length of data | data    |
 
-* Verify the hash of data. Ask for re-send if it doesn't match.
-* Deserialize data as a Message...
+- Verify the hash of data. Ask for re-send if it doesn't match.
+- Deserialize data as a Message...
 
 ### Myceli messages
 
 | 1 byte       |
 |--------------|
 | Message Type |
+
+Determines which fields follow
 
 - 0 = Shipper protocol (explicit transmitting between Mycelis)
 - 1 = Application API (communicating with external services, e.g. controller)
@@ -211,36 +213,46 @@ Once all (0..Final) sequence numbered chunks of a message are received
 
 ### Myceli messages
 
-Shipper: Myceli sending/requesting data to/from peers
+| 1 byte  | 1 byte           |
+|---------|------------------|
+| 1 = API | Specific Message |
 
-| 1 byte      | 1 byte           |
-|-------------|------------------|
-| 0 = Shipper | Specific Message |
+Determines which fields follow
 
-- 0 = Block
-- 1 = RequestTransmitBlock
-- 2 = RetryDagSession
+- 0 = ImportFile (request)
+- 1 = FileImported (response)
+- 10 = TransmitDag (request)
 - ...
-- 8 = MissingDagBlocks
+- 27 = Acknowledge (general response)
 
 ### Myceli messages
 
-Message to request list of blocks missing from list of CIDs sent
+Request Myceli send a DAG to another Myceli
 
-| 1 byte      | 1 byte                            | 1 byte    | N bytes  | 1 byte         | 
-|-------------|-----------------------------------|-----------|----------|----------------|
-| 0 = Shipper | 6 = RequestMissingDagWindowBlocks | CIDLength | Root CID | Length of List |
-| 1 byte      | N bytes                           |           |          |                | 
-| CID Length  | Child CID in list                 |           |          |                |
-| CID Length  | Child CID in list                 |           |          |                |
-| ...         |                                   |           |          |                |
+| 1 byte  | 1 byte           | 1 byte | N bytes | 1 byte | N bytes | 1 byte  |
+|---------|------------------|--------|---------|--------|---------|---------|
+| 1 = API | 10 = TransmitDag | Length | CID     | Length | Target  | Retries |
 
-### Myceli messages
+- CID = root CID of DAG
+- target = UDP endpoint to send to
+- Retries = Number of automatic retries before giving up (max 255)
 
-API: Interact with Myceli
+## Some Optimizations
 
-| 1 byte      | 1 byte           |
-|-------------|------------------|
-| 0 = Shipper | Specific Message |
+* Reduced Block Size
+* Implementing on necessary CID/block types
+* Separate build for smaller binary
 
+### Myceli Mini
 
+* Fewer dependencies
+    - Logger that does not involve regex
+    - Storage that does not involve SQL
+* Without any debugging info
+* Stripped of Symbols
+* Compiler optimization turned to size, not speed
+* Assertions & overflow checks off
+* Artifact compressed to highest level
+
+Largest version: 128 MB (debug, local dev build)  
+Smallest: 562 KB (arm small build, xz compression)
