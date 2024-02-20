@@ -3,10 +3,12 @@ use figment::{
     providers::{Format, Serialized, Toml},
     Figment, Provider,
 };
-use log::debug;
-use serde::{Deserialize, Serialize};
+use log::{debug, info, trace};
+use serde_derive::{Deserialize, Serialize};
 use std::path::PathBuf;
-use transports::MAX_MTU;
+
+//Duplicated in transport
+const MAX_MTU: u16 = 3 * 1024;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
@@ -21,21 +23,24 @@ pub struct Config {
     // The number of blocks to send in each window of a DAG transfer.
     pub window_size: u32,
     // The size (in bytes) of the blocks that a file is broken up into when imported.
-    pub block_size: u32,
+    pub block_size: Option<u32>,
     // The number of milliseconds to wait between sending chunks of a DAG transfer, optional.
     pub chunk_transmit_throttle: Option<u32>,
     // The network address of the radio that myceli should respond to by default, if not set then
     // myceli will respond to the sending address (or address set in relevant request).
     pub radio_address: Option<String>,
     // A path to a directory which where files that appear should be auto-imported.
-    // Absence implies no such directory exists
+    // Absence implies no such directory exists.
+    // This value only relevant if using the `watcher` command.
     pub watched_directory: Option<String>,
     //How much storage space should Local Storage use? Measured in kiB. Default is 1 GiB
     pub disk_usage: u64,
-    //Minimum amount of time (milliseconds) to elapse between disk-storage-cleanup passes.
-    //0 = OFF (don't run GC)
-    //Default is 10000 (10 seconds)
-    pub gc_period_ms: u32,
+    //Minimum amount of time (milliseconds) to elapse between background tasks
+    //Note: some background tasks can send a packet on the network depending on circumstance.
+    //Default is 10000 (10 seconds).
+    //Minimum is 10 (10ms)
+    //Maximum is 3600000 (1 hour)
+    pub chatter_ms: u32,
     pub shipper_throttle_packet_delay_ms: u32,
 }
 
@@ -53,15 +58,15 @@ impl Default for Config {
             mtu: 512,
             // Default to sending five blocks at a time
             window_size: 5,
-            // Default to 3 kilobyte blocks
-            block_size: 1024 * 3,
+            // Default to slightly smaller than mtu
+            block_size: None,
             // Default to no throttling of chunks
             chunk_transmit_throttle: None,
             // Default to no set radio address
             radio_address: None,
             watched_directory: None,
             disk_usage: 1024 * 1024,
-            gc_period_ms: 10_000,
+            chatter_ms: 10_000,
             shipper_throttle_packet_delay_ms: 0,
         }
     }
@@ -86,16 +91,25 @@ fn default_config_path() -> Option<String> {
     None
 }
 impl Config {
-    pub fn parse(path: Option<String>) -> Result<Self> {
+    pub fn parse(path: Option<String>, mtu2block_size: &dyn Fn(u16) -> u16) -> Result<Self> {
+        trace!("Config::parse({path:?})");
         let mut config = Figment::from(Serialized::defaults(Config::default()));
         if let Some(path) = path.or(default_config_path()) {
             let toml_values = Toml::file(&path);
             debug!("Config values in file {}: {:?}", &path, toml_values.data());
             config = config.merge(toml_values);
         }
-        let config: Self = config.extract()?;
+        let mut config: Self = config.extract()?;
         if config.mtu > MAX_MTU {
             bail!("Configured MTU is too large, cannot exceed {MAX_MTU}",);
+        }
+        if config.block_size.is_none() {
+            let sz = mtu2block_size(config.mtu).into();
+            info!("Used a mtu {} to deduce block_size {}", config.mtu, sz);
+            config.block_size = Some(sz);
+        }
+        if config.block_size.unwrap() < 128 {
+            bail!("block_size too small");
         }
         Ok(config)
     }

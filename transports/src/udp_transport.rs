@@ -54,8 +54,10 @@ impl Transport for UdpTransport {
         let mut timeouts = 0;
         loop {
             loop {
+                trace!("Receiving...");
                 match self.socket.recv_from(&mut buf) {
                     Ok((len, sender)) => {
+                        debug!("Received {len} bytes from {sender}");
                         if len > 0 {
                             read_len = len;
                             sender_addr = sender;
@@ -87,7 +89,7 @@ impl Transport for UdpTransport {
                 .iter()
                 .map(|b| format!("{b:02X}"))
                 .collect::<String>();
-            debug!("Received possible chunk of hex {hex_str}");
+            trace!("Received possible chunk of hex {hex_str}");
 
             match self
                 .chunker

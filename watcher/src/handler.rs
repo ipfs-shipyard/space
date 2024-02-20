@@ -2,7 +2,7 @@ use log::{debug, error, info, trace};
 use messages::{ApplicationAPI, Message};
 use notify::{event::ModifyKind, Event, EventKind};
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use transports::{Transport, UdpTransport};
 
 pub(crate) struct Handler {
@@ -25,10 +25,10 @@ impl Handler {
             }
             Ok(ev) => match ev.kind {
                 EventKind::Modify(ModifyKind::Data(_)) => {
-                    //Some of these events can occur while the file is still being modified
-                    std::thread::sleep(Duration::from_millis(100));
-                    info!("File modified, import: {:?}", &ev);
                     for p in ev.paths {
+                        //Some of these events can occur while the file is still being modified
+                        self.wait_for_modification_to_stop(&p).ok();
+                        info!("File modified, import: {:?}", &p);
                         self.send(&p);
                     }
                 }
@@ -45,8 +45,22 @@ impl Handler {
         };
         let m = ApplicationAPI::ImportFile { path };
         let m = Message::ApplicationAPI(m);
-        if let Err(e) = self.trx.send(m, &self.target_addr) {
-            error!("Error sending: {:?}", &e);
+        match self.trx.send(m, &self.target_addr) {
+            Ok(()) => debug!("Sent message to {}", &self.target_addr),
+            Err(e) => error!("Error sending: {:?}", &e),
+        }
+    }
+    fn wait_for_modification_to_stop(&self, p: &Path) -> std::io::Result<()> {
+        const MIN_AGE: Duration = Duration::from_secs(1);
+        const MAX_SLEEP: Duration = Duration::from_millis(1234);
+        loop {
+            let mdt = p.metadata()?.modified()?;
+            let now = SystemTime::now();
+            if mdt + MIN_AGE < now {
+                return Ok(());
+            }
+            let elapsed = now.duration_since(mdt).unwrap_or_default();
+            std::thread::sleep(MAX_SLEEP - elapsed);
         }
     }
 }

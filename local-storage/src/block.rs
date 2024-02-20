@@ -68,14 +68,15 @@ mod tests {
     use cid::multihash::MultihashDigest;
     use futures::TryStreamExt;
     use ipfs_unixfs::builder::{File, FileBuilder};
-    use rand::{thread_rng, RngCore};
+    use rand::{rngs::StdRng, RngCore, SeedableRng};
 
     fn generate_stored_blocks(num_blocks: u8) -> Result<Vec<StoredBlock>> {
         const CHUNK_SIZE: u8 = 20;
         let data_size = CHUNK_SIZE * num_blocks;
         let mut data = Vec::<u8>::new();
         data.resize(data_size.into(), 1);
-        thread_rng().fill_bytes(&mut data);
+        let mut rng = StdRng::seed_from_u64(2);
+        rng.fill_bytes(&mut data);
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let blocks = rt.block_on(async {
@@ -163,8 +164,12 @@ mod tests {
     #[test]
     pub fn test_valid_dag_multi_blocks() {
         let blocks = generate_stored_blocks(10).unwrap();
-
-        assert!(validate_dag(&blocks).is_ok());
+        for block in &blocks {
+            println!("{block:?} -> {:?}", &block.links);
+        }
+        let result = validate_dag(&blocks);
+        assert_eq!("Ok(())", format!("{result:?}"));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -188,7 +193,7 @@ mod tests {
 
         assert_eq!(
             validate_dag(&blocks).unwrap_err().to_string(),
-            "Links do not match blocks"
+            "Missing block: bafkreihs52ijhwefrtbb3y5aeegpkwy4a6ayzhirixi35juliqaeybfoba"
         );
     }
 
@@ -223,7 +228,7 @@ mod tests {
 
         assert_eq!(
             validate_dag(&blocks).unwrap_err().to_string(),
-            "No root found"
+            "Multiple roots! bafkreia7xafbg2phzidyqzx3hg5zn2vzuras7ewmrcxofzirb3nqyqyfni bafybeidsdkejazzc3uc4gx5og4kp3yvicvkzml3gnj3x6ru6rq43cynaga"
         );
     }
 
@@ -245,7 +250,7 @@ mod tests {
 
         assert_eq!(
             validate_dag(&blocks).unwrap_err().to_string(),
-            "Links do not match blocks"
+            "Missing block: bafkreihs52ijhwefrtbb3y5aeegpkwy4a6ayzhirixi35juliqaeybfoba"
         );
     }
 
@@ -259,7 +264,7 @@ mod tests {
 
         assert_eq!(
             validate_dag(&blocks).unwrap_err().to_string(),
-            "No root found"
+            "Multiple roots! bafybeicgvxv3gzifiljm32doth3fzopvipqdtmwk77tvh42ngmvcx7alqq bafybeicohw7ebbxehnfvxxhpl7bbtm4mhev7pi27cqxxdjsruxsiyg5sh4"
         );
     }
 

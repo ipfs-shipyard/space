@@ -16,14 +16,16 @@ bytes.workspace = true
 cid.workspace = true
 futures.workspace = true
 libipld.workspace = true
+log.workspace = true
 multihash.workspace = true
 num_enum.workspace = true
 prost.workspace = true
-tokio = { workspace = true, features = ["fs"] }
-tokio-util = { workspace = true, features = ["io-util"] }
+tokio = { workspace = true, features = ["fs", "io-util", "rt"] }
+#tokio-util = { workspace = true, features = ["io-util"] }
 
 [dev-dependencies]
 # criterion = { workspace = true, features = ["async_tokio"] }
+cid.workspace = true
 proptest.workspace = true
 rand.workspace = true
 tempfile.workspace = true

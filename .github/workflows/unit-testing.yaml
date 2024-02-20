@@ -13,8 +13,14 @@ jobs:
         run: cargo build --release --features big
         shell: bash
       - name: Test big
-        run: cargo test --features big
+        run: cargo test --features big,proto_all
         shell: bash
       - name: Test small
-        run: cargo test --features small
+        run: cargo test --features small,proto_all
+        shell: bash
+      - name: Test small ship
+        run: cargo test --features small,proto_ship
+        shell: bash
+      - name: Test small sync
+        run: cargo test --features small,proto_sync
         shell: bash

@@ -33,6 +33,7 @@ impl FileStorageProvider {
         create_dir_all(me.cids())?;
         create_dir_all(me.names())?;
         me.count_blocks();
+        me.prune_names()?;
         Ok(me)
     }
     fn blocks(&self) -> PathBuf {
@@ -43,11 +44,6 @@ impl FileStorageProvider {
     }
     fn names(&self) -> PathBuf {
         self.dir.join("names")
-    }
-    fn get_name(&self, cid: &str) -> Result<String> {
-        let mut result = String::default();
-        File::open(self.names().join(cid))?.read_to_string(&mut result)?;
-        Ok(result)
     }
     fn block_path(&self, cid: &Cid) -> PathBuf {
         let mh = cid.hash().to_bytes();
@@ -98,11 +94,11 @@ impl FileStorageProvider {
         Ok((to_skip, to_fetch))
     }
 
-    fn rentry_to_cid_str(&self, r: std::io::Result<DirEntry>) -> Option<String> {
-        self.entry_to_cid_str(r.ok()?)
+    fn rentry_to_cid_str(&self, r: std::io::Result<DirEntry>, existent: bool) -> Option<String> {
+        self.entry_to_cid_str(r.ok()?, existent)
     }
-    fn entry_to_cid_str(&self, e: DirEntry) -> Option<String> {
-        if e.metadata().ok()?.is_file() {
+    fn entry_to_cid_str(&self, e: DirEntry, existent: bool) -> Option<String> {
+        if e.metadata().ok()?.is_file() == existent {
             let cid_str = e.file_name().to_str()?.to_owned();
             let cid = Cid::try_from(cid_str.as_str()).ok()?;
             let block_path = self.block_path(&cid);
@@ -120,6 +116,7 @@ impl FileStorageProvider {
             self.old_blocks = rd
                 .flat_map(|r| r.ok())
                 .flat_map(OnDiskBlock::from)
+                .take(99)
                 .collect();
             self.old_blocks.sort_by(|a, b| b.cmp(a));
             self.usage = self.old_blocks.iter().map(|b| b.size).sum();
@@ -142,6 +139,22 @@ impl FileStorageProvider {
                         }
                     }
                 }
+            }
+        }
+        Ok(())
+    }
+    fn prune_names(&self) -> Result<()> {
+        let rd = fs::read_dir(self.blocks())?;
+        for p in rd.filter_map(|r| r.map(|e| e.path()).ok()) {
+            let filename = p
+                .file_name()
+                .unwrap_or_default()
+                .to_str()
+                .unwrap_or_default();
+            let c = Cid::try_from(filename);
+            let good = c.map(|c| self.has_cid(&c));
+            if !good.unwrap_or(false) {
+                fs::remove_file(p)?;
             }
         }
         Ok(())
@@ -171,7 +184,7 @@ impl StorageProvider for FileStorageProvider {
 
     fn get_available_cids(&self) -> anyhow::Result<Vec<String>> {
         let mut result: Vec<String> = read_dir(self.cids())?
-            .filter_map(|f| self.rentry_to_cid_str(f))
+            .filter_map(|f| self.rentry_to_cid_str(f, true))
             .collect();
         result.sort();
         Ok(result)
@@ -216,6 +229,12 @@ impl StorageProvider for FileStorageProvider {
         Ok(())
     }
 
+    fn get_name(&self, cid: &str) -> Result<String> {
+        let mut result = String::default();
+        File::open(self.names().join(cid))?.read_to_string(&mut result)?;
+        Ok(result)
+    }
+
     fn get_missing_cid_blocks(&self, cid: &str) -> anyhow::Result<Vec<String>> {
         let mut result = Vec::new();
         self.get_missing(&mut result, cid);
@@ -254,9 +273,10 @@ impl StorageProvider for FileStorageProvider {
         Ok(result)
     }
 
-    fn incremental_gc(&mut self) {
+    fn incremental_gc(&mut self) -> bool {
         if self.usage < self.high {
-            debug!("No need to GC: usage={} < high={}", &self.usage, self.high);
+            trace!("No need to GC: usage={} < high={}", &self.usage, self.high);
+            false
         } else if let Some(odb) = self.old_blocks.pop() {
             match fs::remove_file(&odb.path) {
                 Ok(_) => {
@@ -273,10 +293,32 @@ impl StorageProvider for FileStorageProvider {
                     error!("Error removing old block {odb:?} to free up space! {e:?}");
                 }
             }
+            true
         } else {
             self.count_blocks();
             debug!("There are {} files in blocks/", &self.old_blocks.len());
+            !self.old_blocks.is_empty()
         }
+    }
+
+    fn has_cid(&self, cid: &Cid) -> bool {
+        let s = cid.to_string();
+        if !self.cids().join(s).is_file() {
+            return false;
+        }
+        self.block_path(cid).is_file()
+    }
+
+    fn ack_cid(&self, cid: &Cid) {
+        let p = self.cids().join(cid.to_string());
+        fs::OpenOptions::new().append(true).open(p).ok();
+    }
+
+    fn get_dangling_cids(&self) -> Result<Vec<Cid>> {
+        Ok(read_dir(self.cids())?
+            .filter_map(|f| self.rentry_to_cid_str(f, false))
+            .filter_map(|s| Cid::try_from(s.as_str()).ok())
+            .collect())
     }
 }
 

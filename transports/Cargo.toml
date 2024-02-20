@@ -13,7 +13,7 @@ cid.workspace = true
 derive-error.workspace = true
 env_logger = { workspace = true, optional = true }
 log.workspace = true
-messages.workspace = true
+messages = { workspace = true, features = [] }
 parity-scale-codec.workspace = true
 parity-scale-codec-derive.workspace = true
 rand.workspace = true
@@ -24,3 +24,5 @@ smalog = { workspace = true, optional = true }
 [features]
 good_log = ["dep:env_logger"]
 small_log = ["dep:smalog"]
+proto_ship = ["messages/proto_ship"]
+proto_sync = ["messages/proto_sync"]

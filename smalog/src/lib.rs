@@ -1,3 +1,4 @@
+use chrono::Utc;
 use log::{Level, Metadata, Record};
 use std::env;
 
@@ -30,7 +31,12 @@ impl log::Log for Smalog {
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            println!("{} - {}", record.level(), record.args());
+            println!(
+                "[{} {}] {}",
+                Utc::now().to_rfc3339(),
+                record.level(),
+                record.args()
+            );
         }
     }
 

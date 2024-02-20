@@ -20,14 +20,15 @@ pub fn wait_receiving_done(receiver: &TestListener, controller: &mut TestControl
     let mut num_retries = 0;
 
     loop {
-        let current_blocks =
-            if let Message::ApplicationAPI(messages::ApplicationAPI::AvailableBlocks { cids }) =
-                controller.send_and_recv(&receiver.listen_addr, Message::request_available_blocks())
-            {
-                cids
-            } else {
-                panic!("Failed to get correct response to blocks request");
-            };
+        while controller.recv_msg().ok().is_some() {
+            sleep(Duration::from_millis(1));
+        }
+        let current_blocks = match controller
+            .send_and_recv(&receiver.listen_addr, Message::request_available_blocks())
+        {
+            Message::ApplicationAPI(messages::ApplicationAPI::AvailableBlocks { cids }) => cids,
+            x => panic!("Failed to get ApplicationAPI::AvailableBlocks response to blocks request; got {x:?}"),
+        };
         let current_num_blocks = current_blocks.len();
         if current_num_blocks > prev_num_blocks {
             prev_num_blocks = current_num_blocks;
@@ -90,6 +91,7 @@ impl TestListener {
 fn start_listener_thread(listen_addr: SocketAddr, db_path: ChildPath) {
     let db_path = db_path.path().to_str().unwrap();
     let listen_addr_str = listen_addr.to_string();
+    std::thread::sleep(Duration::from_millis(1));
     let mut transport = UdpTransport::new(&listen_addr_str, 60, None).unwrap();
     transport
         .set_read_timeout(Some(Duration::from_secs(10)))
@@ -97,9 +99,9 @@ fn start_listener_thread(listen_addr: SocketAddr, db_path: ChildPath) {
     transport.set_max_read_attempts(Some(1));
     let transport = Arc::new(transport);
     let mut listener =
-        Listener::new(&listen_addr, db_path, transport, BLOCK_SIZE, None, 9).unwrap();
+        Listener::new(&listen_addr, db_path, transport, BLOCK_SIZE, None, 9, 512).unwrap();
     listener
-        .start(10, 2, BLOCK_SIZE, 0)
+        .start(10, 2, 1)
         .expect("Error encountered in listener");
 }
 
@@ -111,7 +113,7 @@ impl TestController {
     pub fn new() -> Self {
         let mut transport = UdpTransport::new("127.0.0.1:0", 60, None).unwrap();
         transport
-            .set_read_timeout(Some(Duration::from_secs(9)))
+            .set_read_timeout(Some(Duration::from_millis(9034)))
             .unwrap();
         transport.set_max_read_attempts(Some(1));
         TestController { transport }
@@ -119,7 +121,7 @@ impl TestController {
 
     pub fn send_and_recv(&mut self, target_addr: &str, message: Message) -> Message {
         self.send_msg(message, target_addr);
-        std::thread::sleep(Duration::from_millis(500));
+        std::thread::sleep(Duration::from_millis(710));
         self.recv_msg().unwrap()
     }
 
@@ -130,13 +132,13 @@ impl TestController {
     }
 
     pub fn recv_msg(&mut self) -> Result<Message> {
-        let (msg, _) = self.transport.receive()?;
-        Ok(msg)
+        Ok(self.transport.receive()?.0)
     }
 }
 
+#[allow(unused)]
 pub fn hash_file(path_str: &str) -> String {
     let path = PathBuf::from(path_str);
     let mut hash = Blake2s256::new();
-    get_hash_file(path, &mut hash).unwrap()
+    get_hash_file(path, &mut hash).expect(path_str)
 }

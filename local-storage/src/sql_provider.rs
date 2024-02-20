@@ -1,6 +1,7 @@
 use crate::{block::StoredBlock, error::StorageError, provider::StorageProvider};
 use anyhow::{bail, Result};
-use log::trace;
+use cid::Cid;
+use log::{debug, info, trace};
 use rusqlite::{params_from_iter, Connection};
 use std::{path::PathBuf, str::FromStr};
 
@@ -44,13 +45,18 @@ impl SqliteStorageProvider {
         // Create links table
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS links(
-                id INTEGER PRIMARY KEY,
+                sequence INTEGER,
                 root_cid TEXT,
                 block_cid TEXT NOT NULL,
                 block_id INTEGER,
+                PRIMARY KEY (sequence, root_cid),
                 FOREIGN KEY (block_id) REFERENCES blocks (id)
             )",
             (),
+        )?;
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS orphans(cid TEXT PRIMARY KEY)",
+            [],
         )?;
 
         // Create indices
@@ -66,64 +72,35 @@ impl SqliteStorageProvider {
         Ok(())
     }
 
-    fn get_blocks_recursive_query(
+    fn get_blocks_recursive(
         &self,
         cid: &str,
         offset: Option<u32>,
         window_size: Option<u32>,
     ) -> Result<Vec<StoredBlock>> {
-        let mut base_query = "
-        WITH RECURSIVE cids(x,y,z) AS (
-            SELECT cid,data,filename FROM blocks WHERE cid = (?1)
-            UNION
-            SELECT cid,data,filename FROM blocks b 
-                INNER JOIN links l ON b.cid==l.block_cid 
-                INNER JOIN cids ON (root_cid=x)
-        )
-        SELECT x,y,z FROM cids
-        "
-        .to_string();
-        let mut params = vec![cid.to_string()];
-
-        if let Some(offset) = offset {
-            if let Some(window_size) = window_size {
-                base_query.push_str(" LIMIT (?2) OFFSET (?3);");
-                params.push(format!("{window_size}"));
-                params.push(format!("{offset}"));
+        let mut blocks = vec![self.get_block_by_cid(cid)?];
+        let mut i = 0;
+        while i < blocks.len() {
+            let links = blocks[i].links.clone();
+            for link in links {
+                blocks.push(self.get_block_by_cid(&link)?);
             }
+            i += 1;
         }
-        let params = params_from_iter(params.into_iter());
-        let blocks = self
-            .conn
-            .prepare(&base_query)?
-            .query_map(params, |row| {
-                let cid_str: String = row.get(0)?;
-                let data: Vec<u8> = row.get(1)?;
-                let filename: Option<String> = row.get(2).ok();
-                let links = match self.get_links_by_cid(&cid_str) {
-                    Ok(links) => links,
-                    Err(_) => vec![],
-                };
-                Ok(StoredBlock {
-                    cid: cid_str,
-                    data,
-                    links,
-                    filename,
-                })
-            })?
-            .filter_map(|b| b.ok())
-            .collect();
-
-        Ok(blocks)
+        let off = offset.unwrap_or(0).try_into()?;
+        let siz = window_size.map(|n| n as usize).unwrap_or(blocks.len());
+        Ok(blocks.into_iter().skip(off).take(siz).collect())
     }
 }
 
 impl StorageProvider for SqliteStorageProvider {
     fn import_block(&mut self, block: &StoredBlock) -> Result<()> {
-        self.conn.execute(
+        if 1 == self.conn.execute(
             "INSERT OR IGNORE INTO blocks (cid, data, filename) VALUES (?1, ?2, ?3)",
             (&block.cid, &block.data, &block.filename),
-        )?;
+        )? {
+            debug!("Inserted block {block:?}");
+        }
         // TODO: Should we have another indicator for root blocks that isn't just the number of links?
         // TODO: This logic should probably get pulled up and split into two parts:
         // 1. import_block - Handles importing block into block store
@@ -132,7 +109,7 @@ impl StorageProvider for SqliteStorageProvider {
         if !block.links.is_empty() {
             self.conn
                 .execute("DELETE FROM links WHERE root_cid = ?1", [&block.cid])?;
-            for link_cid in &block.links {
+            for (link_sequence, link_cid) in block.links.iter().enumerate() {
                 let mut maybe_block_id = None;
                 if let Ok(block_id) = self.conn.query_row(
                     "SELECT id FROM blocks b
@@ -147,8 +124,8 @@ impl StorageProvider for SqliteStorageProvider {
                 }
 
                 self.conn.execute(
-                    "INSERT OR IGNORE INTO links (root_cid, block_cid, block_id) VALUES(?1, ?2, ?3)",
-                    (&block.cid, link_cid, maybe_block_id),
+                    "INSERT OR IGNORE INTO links (sequence, root_cid, block_cid, block_id) VALUES(?1, ?2, ?3, ?4)",
+                    (link_sequence, &block.cid, link_cid, maybe_block_id),
                 )?;
             }
         } else {
@@ -158,6 +135,8 @@ impl StorageProvider for SqliteStorageProvider {
                 (&block.cid, &block.cid),
             )?;
         }
+        self.conn
+            .execute("DELETE FROM orphans WHERE cid = ?1", [&block.cid])?;
         Ok(())
     }
 
@@ -175,7 +154,7 @@ impl StorageProvider for SqliteStorageProvider {
     fn get_links_by_cid(&self, cid: &str) -> Result<Vec<String>> {
         let links: Vec<String> = self
             .conn
-            .prepare("SELECT block_cid FROM links WHERE root_cid == (?1)")?
+            .prepare("SELECT block_cid FROM links WHERE root_cid == (?1) ORDER BY sequence")?
             .query_map([cid], |row| {
                 let cid_str: String = row.get(0)?;
                 Ok(cid_str)
@@ -227,10 +206,14 @@ impl StorageProvider for SqliteStorageProvider {
     }
 
     fn name_dag(&self, cid: &str, file_name: &str) -> Result<()> {
-        self.conn.execute(
+        let updated_count = self.conn.execute(
             "UPDATE blocks SET filename = ?1 WHERE cid = ?2",
             (file_name, cid),
         )?;
+        if updated_count != 1 {
+            bail!("When naming DAG {cid} {file_name}, expected it to hit exactly 1 row, not {updated_count}");
+        }
+        info!("Named {cid} {file_name}");
         Ok(())
     }
 
@@ -243,7 +226,7 @@ impl StorageProvider for SqliteStorageProvider {
                 WITH RECURSIVE cids(x,y) AS (
                     SELECT cid, id FROM blocks WHERE cid = (?1)
                     UNION
-                    SELECT block_cid, block_id FROM links JOIN cids ON root_cid=x
+                    SELECT block_cid, block_id FROM links l JOIN cids ON root_cid=x  
                 )
                 SELECT x,y FROM cids;
             ",
@@ -280,7 +263,7 @@ impl StorageProvider for SqliteStorageProvider {
         offset: u32,
         window_size: u32,
     ) -> Result<Vec<StoredBlock>> {
-        let blocks = self.get_blocks_recursive_query(cid, Some(offset), Some(window_size))?;
+        let blocks = self.get_blocks_recursive(cid, Some(offset), Some(window_size))?;
 
         Ok(blocks)
     }
@@ -292,10 +275,10 @@ impl StorageProvider for SqliteStorageProvider {
         window_size: Option<u32>,
     ) -> Result<Vec<String>> {
         let mut base_query = "
-                WITH RECURSIVE cids(x) AS (
-                    VALUES(?1)
+                WITH RECURSIVE cids(x,ignore) AS (
+                    VALUES( ?1 , 0)
                     UNION
-                    SELECT block_cid FROM links JOIN cids ON root_cid=x
+                    SELECT block_cid , l.sequence FROM links l JOIN cids ON root_cid=x ORDER BY l.sequence
                 )
                 SELECT x FROM cids
             "
@@ -323,11 +306,54 @@ impl StorageProvider for SqliteStorageProvider {
     }
 
     fn get_all_dag_blocks(&self, cid: &str) -> Result<Vec<StoredBlock>> {
-        self.get_blocks_recursive_query(cid, None, None)
+        self.get_blocks_recursive(cid, None, None)
     }
 
-    fn incremental_gc(&mut self) {
+    fn incremental_gc(&mut self) -> bool {
         trace!("TODO incremental_gc");
+        false
+    }
+
+    fn has_cid(&self, cid: &Cid) -> bool {
+        self.conn
+            .query_row(
+                "SELECT 1 FROM blocks WHERE cid = ?1",
+                [cid.to_string()],
+                |_| Ok(()),
+            )
+            .is_ok()
+    }
+
+    fn ack_cid(&self, cid: &Cid) {
+        if !self.has_cid(cid) {
+            self.conn
+                .execute(
+                    "INSERT OR IGNORE INTO orphans ( cid ) VALUES ( ?1 )",
+                    [&cid.to_string()],
+                )
+                .ok();
+        }
+    }
+
+    fn get_dangling_cids(&self) -> Result<Vec<Cid>> {
+        let mut stmt = self.conn.prepare("SELECT DISTINCT cid FROM orphans")?;
+        let rs = stmt.query_map([], |r| r.get::<usize, String>(0))?;
+        let mut result = Vec::default();
+        for s in rs.flat_map(|rs| rs.ok()) {
+            if let Ok(cid) = Cid::try_from(s.as_str()) {
+                result.push(cid);
+            }
+        }
+        Ok(result)
+    }
+
+    fn get_name(&self, cid: &str) -> Result<String> {
+        let result = self.conn.query_row(
+            "SELECT MAX(filename) FROM blocks WHERE cid = ?1",
+            [cid],
+            |r| r.get(0),
+        )?;
+        Ok(result)
     }
 }
 

@@ -16,7 +16,9 @@ smalog = { workspace = true, optional = true }
 transports.workspace = true
 
 [features]
-big = ["good_log"]
+big = ["good_log", "proto_sync", "proto_ship"]
 small = ["small_log"]
 good_log = ["dep:env_logger"]
 small_log = ["dep:smalog"]
+proto_sync = ["messages/proto_sync"]
+proto_ship = ["messages/proto_ship"]

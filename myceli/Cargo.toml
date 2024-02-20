@@ -5,24 +5,32 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+build = "build.rs"
 
 [dependencies]
 anyhow.workspace = true
-cid = { workspace = true, features = ["scale-codec"] }
+cid = { workspace = true }
 config.workspace = true
 env_logger = { workspace = true, optional = true }
 figment.workspace = true
+ipfs-unixfs.workspace = true
+libipld.workspace = true
 local-storage = { path = "../local-storage", default-features = false }
 log.workspace = true
-messages.workspace = true
+messages = { workspace = true, features = [] }
+parity-scale-codec.workspace = true
 serde.workspace = true
 smalog = { workspace = true, optional = true }
-tokio.workspace = true
-transports.workspace = true
+tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
+toml = { workspace = true, features = ["display"] }
+transports = { workspace = true, features = [] }
 
 [features]
-big = ["sqlite", "good_log"]
+big = ["sqlite", "good_log", "proto_all"]
 small = ["files", "small_log"]
+proto_all = ["proto_ship", "proto_sync"]
+proto_ship = ["messages/proto_ship", "transports/proto_ship"]
+proto_sync = ["messages/proto_sync", "transports/proto_sync"]
 good_log = ["dep:env_logger", "local-storage/good_log"]
 small_log = ["dep:smalog", "local-storage/small_log"]
 sqlite = ["local-storage/sqlite"]
@@ -36,3 +44,6 @@ futures.workspace = true
 ipfs-unixfs.workspace = true
 rand.workspace = true
 local-storage.workspace = true
+
+[build-dependencies]
+built = "0.7.0"

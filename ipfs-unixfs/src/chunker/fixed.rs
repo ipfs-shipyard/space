@@ -43,9 +43,11 @@ impl Fixed {
                 match source.read_buf(&mut buffer).await {
                     Ok(len) => {
                         current_len += len;
+                        debug_assert!(current_len == buffer.len());
                         if current_len == chunk_size {
                             // read a full chunk
                             current_len = 0;
+                            debug_assert!(buffer.len()==chunk_size);
                             yield Ok(buffer.clone().freeze());
                         } else if current_len < chunk_size && len > 0 {
                             // not done reading, read again
@@ -54,11 +56,13 @@ impl Fixed {
                             // read more than a chunk, emit only a single chunk
                             let out = buffer.split_to(chunk_size);
                             current_len -= chunk_size;
+                            debug_assert!(out.len()==chunk_size);
                             yield Ok(out.freeze());
                         } else {
                             // finished reading
                             debug_assert!(len == 0);
                             if current_len > 0 {
+                                debug_assert!(buffer.len()<chunk_size);
                                 yield Ok(buffer.clone().freeze());
                             }
                             break;

@@ -1,28 +1,36 @@
 use crate::{block::StoredBlock, error::StorageError, provider::Handle as ProviderHandle};
 use anyhow::{bail, Result};
+use cid::Cid;
 use futures::TryStreamExt;
 use ipfs_unixfs::{
     builder::{File, FileBuilder},
     Block,
 };
-use std::sync::Arc;
-use std::{fs::File as FsFile, io::Write, path::Path};
+use log::warn;
+use std::{fs::File as FsFile, io::Write, path::Path, sync::Arc};
 
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 
 pub struct Storage {
     provider: ProviderHandle,
     block_size: u32,
+    degree: usize,
 }
 
 impl Storage {
     pub fn new(provider: ProviderHandle, block_size: u32) -> Self {
+        let degree = ((block_size as usize - 8) / 50).clamp(
+            //A stem in a tree must be allowed at least 2 links for it to be a tree
+            2,
+            //the default degree is also the spec-defined max
+            ipfs_unixfs::balanced_tree::DEFAULT_DEGREE,
+        );
         Storage {
             provider,
             block_size,
+            degree,
         }
     }
-
     pub fn import_path(&mut self, path: &Path) -> Result<String> {
         debug!("import_path({:?})", &path);
         let rt = tokio::runtime::Runtime::new()?;
@@ -30,12 +38,16 @@ impl Storage {
             let file: File = FileBuilder::new()
                 .path(path)
                 .fixed_chunker(self.block_size.try_into()?)
+                .degree(self.degree)
                 .build()
                 .await?;
             let blocks: Vec<_> = file.encode().await?.try_collect().await?;
             Ok(blocks)
         });
         let blocks = blocks?;
+        for block in &blocks {
+            assert!(block.data().len() <= self.block_size as usize);
+        }
         let mut root_cid: Option<String> = None;
 
         blocks.iter().for_each(|b| {
@@ -71,7 +83,6 @@ impl Storage {
                 let lck = self.provider.lock().unwrap();
                 lck.name_dag(&root_cid, filename)?;
             }
-
             info!(
                 "Imported path {} to {} in {} blocks",
                 path.display(),
@@ -96,6 +107,10 @@ impl Storage {
         }
         // Fetch all blocks tied to links under given cid
         let child_blocks = self.get_all_dag_blocks(cid)?;
+        debug!(
+            "Planning to export {} child_blocks to {path:?}",
+            child_blocks.len()
+        );
         // Open up file path for writing
         let mut output_file = FsFile::create(path)?;
         // Walk the StoredBlocks and write out to path
@@ -140,6 +155,11 @@ impl Storage {
 
     pub fn import_block(&mut self, block: &StoredBlock) -> Result<()> {
         info!("Importing block {:?}", block);
+        trace!(
+            "Block to be imported ({}) links to {:?}",
+            block.cid,
+            block.links
+        );
         self.provider.lock().unwrap().import_block(block)
     }
 
@@ -165,12 +185,41 @@ impl Storage {
             .get_dag_blocks_by_window(cid, offset, window_size)
     }
 
-    pub fn incremental_gc(&mut self) {
-        self.provider.lock().unwrap().incremental_gc();
+    pub fn incremental_gc(&mut self) -> bool {
+        if let Ok(mut prov) = self.provider.lock() {
+            prov.incremental_gc()
+        } else {
+            false
+        }
+    }
+    pub fn has_cid(&self, cid: &Cid) -> bool {
+        self.provider
+            .lock()
+            .map(|p| p.has_cid(cid))
+            .unwrap_or(false)
+    }
+    pub fn ack_cid(&self, cid: &Cid) {
+        if let Ok(prov) = self.provider.lock() {
+            prov.ack_cid(cid)
+        }
     }
 
     pub fn get_provider(&self) -> ProviderHandle {
         Arc::clone(&self.provider)
+    }
+
+    pub fn set_name(&self, cid: &str, name: &str) {
+        if name.is_empty() {
+            warn!("Asked to name {cid} to the empty string, being ignored.");
+            return;
+        }
+        if let Ok(prov) = self.provider.lock() {
+            if let Err(e) = prov.name_dag(cid, name) {
+                error!("Error: {e:?}");
+            }
+        } else {
+            error!("Failed to lock storage provider while naming {cid} {name}");
+        }
     }
 }
 

@@ -1,5 +1,8 @@
 use derive_error::Error;
-use std::fmt::{Display, Formatter};
+use std::{
+    fmt::{Display, Formatter},
+    num::TryFromIntError,
+};
 
 #[derive(Error, Debug)]
 pub enum TransportError {
@@ -8,6 +11,7 @@ pub enum TransportError {
     AdHoc(AdHocError),
     Scale(parity_scale_codec::Error),
     TimedOut,
+    IntegerValueOutOfBounds(TryFromIntError),
 }
 
 pub type Result<T> = std::result::Result<T, TransportError>;

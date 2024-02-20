@@ -112,11 +112,18 @@ pub enum ApplicationAPI {
         blocks: Vec<String>,
     },
     /// Requests current version of myceli
-    RequestVersion,
+    RequestVersion {
+        label: Option<String>,
+    },
     /// Provides current version of myceli
     #[command(skip)]
     Version {
         version: String,
+        rust: String,
+        target: String,
+        profile: String,
+        features: Vec<String>,
+        remote_label: Option<String>,
     },
     /// Request ALL available DAGs
     RequestAvailableDags,
@@ -127,6 +134,9 @@ pub enum ApplicationAPI {
     AvailableDags {
         dags: Vec<DagInfo>,
     },
+    Acknowledged {
+        req: String,
+    },
     // TODO: Implement later
     // Information about the next pass used for calculating
     // data transfer parameters
@@ -135,8 +145,4 @@ pub enum ApplicationAPI {
     //     send_bytes: u32,
     //     receive_bytes: u32,
     // },
-    // Request available DAGs
-    // RequestAvailableDags,
-    // Advertise available DAGs as a map of CID to filename
-    // AvailableDags { dags: BTreeMap<String, String> },
 }

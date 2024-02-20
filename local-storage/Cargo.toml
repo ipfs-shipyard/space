@@ -18,14 +18,14 @@ rusqlite = { workspace = true, optional = true }
 smalog = { workspace = true, optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
-tokio-util = { workspace = true, features = ["io-util"] }
+#tokio-util = { workspace = true, features = ["io-util"] }
 
 [features]
 big = ["sqlite", "good_log"]
 small = ["files", "small_log"]
 
-good_log = ["dep:env_logger"]
-small_log = ["dep:smalog"]
+good_log = []
+small_log = []
 sqlite = ["dep:rusqlite"]
 files = []
 
