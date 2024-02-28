@@ -10,7 +10,7 @@ jobs:
     name: build_release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Create release
         uses: ncipollo/release-action@v1
         id: create_release
@@ -35,7 +35,7 @@ jobs:
             x86_64-unknown-linux-gnu,
           ]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: install cross
         run: cargo install cross --git https://github.com/cross-rs/cross
@@ -69,7 +69,7 @@ jobs:
             aarch64-unknown-linux-gnu,
           ]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: install cross
         run: cargo install cross --git https://github.com/cross-rs/cross
@@ -96,7 +96,7 @@ jobs:
     name: build_upload_docker
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Login to Github Container Registry
         uses: docker/login-action@v2
         with:
