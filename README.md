@@ -1,5 +1,7 @@
 # Space
 
+NOTE: Project not currently active. Interested parties may inquire in the [Filecoin Slack's #space channel](https://filecoinproject.slack.com/archives/C02N7M67FKK).
+
 ## Overview
 
 This project is focusing on applying content-addressable data & tooling to satellite communications. This is one part
